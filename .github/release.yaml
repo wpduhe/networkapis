@@ -1,0 +1,27 @@
+# .github/release.yml
+# Used by the create_release workflow
+# Provides formatting guidance for the automated creation of a changelog for release notes.
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - octocat
+  categories:
+    - title: Breaking Changes
+      labels:
+        - Semver-Major
+        - breaking-change
+    - title: New Features
+      labels:
+        - Semver-Minor
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+    - title: Documentation Updates
+        - documentation
+    - title: Other Changes
+      labels:
+        - "*"
