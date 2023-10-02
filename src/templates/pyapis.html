@@ -1,0 +1,187 @@
+<html>
+<header>PyAPIs</header><br><br>
+<body>
+<button class="collapsible"><b>POST</b> apis/ordcExtendVlan</button>
+<div class="content">
+    <p><b>Description: </b>Use this to generate the APIC JSON, Nexus configurations, and ASR 9006 ORL-to-TPA-VLANS prefix-set updates that are required to extend a VLAN from the Orlando data center to the Tampa data center ACI fabric.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "APIKey": "sample_key",<br>
+    "vlans": ["xxx","yyy"]<br>
+    }</p>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/removeVmmPG</button>
+<div class="content">
+    <p><b>Description: </b>Removes VMM Domain from EPG which will remove the port group on an ACI integrated vSwitch from vCenter.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "APIKey":"sample_key",<br>
+    "AvailabilityZone": "sample_string",<br>
+    "EPGName": "epg-sample_string",<br>
+    "VmmDomain": "aci-sample_string"<br>
+    }<br>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/copyVmmPGs</button>
+<div class="content">
+    <p><b>Description: </b>Synchronizes EPGs available to an AEP with the EPGs available to a VMM distributed switch.  This is used to migrate virtual machines off of VMM integrated virtual switches.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+        "APIKey":"sample_key",<br>
+        "AvailabilityZone": "sample_string",<br>
+        "VmmDomain": "aci-sample_string",<br>
+        "AEP": "aep-sample_string",<br>
+        "notificationEmail": "email_address"<br>
+    }<br>
+</div><br>
+
+<button class="collapsible"><b>GET</b> apis/updateVlanSpreadsheets</button>
+<div class="content">
+    <p><b>Description: </b>This request updates the VLAN spreadsheets found in the \\\\Corpdpt01\\TELShare\\Network_Engineering\\Network_Design_and_Delivery\\Vlans directory for all ACI environments.</p>
+    <p><b>JSON Data: </b>None Required<br>
+    <a href="https://pyapis.app.medcity.net/apis/updateVlanSpreadsheets">https://pyapis.app.medcity.net/apis/updateVlanSpreadsheets</a><br>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/getNeigh</button>
+<div class="content">
+    <p><b>Description: </b>Use this to retrieve a list of CDP and LLDP neighbors from a list of ACI leaf nodes.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "AvailabilityZone": "sample_string",<br>
+    "nodeList": ["101","102"]<br>
+    }</p>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/getInterfaceInfo</button>
+<div class="content">
+    <p><b>Description: </b>Use this to retrieve port information from a list of ACI leaf nodes.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "AvailabilityZone": "sample_string",<br>
+    "nodeList": ["101","102"]<br>
+    }</p>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/getEpgsOnLeaf</button>
+<div class="content">
+    <p><b>Description: </b>Use this to retrieve list of VLANs/EPGs from a list of ACI leaf nodes.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "AvailabilityZone": "sample_string",<br>
+    "nodeList": ["101","102"]<br>
+    }</p>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/resetInterfaces</button>
+<div class="content">
+    <p><b>Description: </b>This request resets switchports by shutting down and bringing back up a list of interfaces on a list of leafs.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "APIKey":"sample_key",<br>
+    "AvailabilityZone": "sample_string",<br>
+    "nodeList": [{<br>
+        "Leaf": "301",<br>
+        "Interfaces": ["20","30"]<br>
+            }<br>
+        ]<br>
+    }<br>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/findSubnet</button>
+<div class="content">
+    <p><b>Description: </b>This request searches all defined ACI environments for the subnet to which the provided IP address belongs.</p>
+    <p><b>JSON Data:</b><br>
+    {<br>
+    "ip":"10.94.30.1",<br>
+    }<br>
+</div><br>
+
+<button class="collapsible"><b>POST</b> apis/vipCopy</button>
+<div class="content">
+    <p><b>Description: </b>This request retrieves F5 Configurations from the specified LTM pair for specified VIP addresses.  With the modify key set to "false", the existing configurations are returned as they exist along with a JSON summary of the VIP and pool information.  This JSON summary can be updated with new information that allows you to set the modify flag to "true" which will retrieve the configurations, update them with the provided information, and return the modified configurations.  This tool does not have the ability to copy SSL certificates, keys, or chains as part of the process.  Upon receiving the JSON summary from this tool, ensure that the reported SSL Profile information exists on the new LTMs that on which the configuration will be placed before applying the configurations.  By setting any value for collectionName, a JSON file will be generated on the S: drive that can be imported into Postman as a collection.</p>                    <p><b>JSON Data:</b><br>
+    {<br>
+    "APIKey": "<key>",<br>
+    "sourceLTMs": ["10.90.8.171", "10.90.8.172"],<br>
+    "vips": ["10.204.67.10", "10.204.67.11"],<br>
+    "collectionName": "",<<br>
+    "newLTM": ["10.90.8.131"],<br>
+    "modify": false,<br>
+    "modifyData": {}<br>
+        }<br></key>
+</div><br>
+
+<style>
+    .collapsible {
+      background-color: #eee;
+      color: #444;
+      cursor: pointer;
+      padding: 18px;
+      width: 100%;
+      border: none;
+      text-align: left;
+      outline: none;
+      /* font-size: 15px; */
+    }
+    .active, .collapsible:hover {
+      background-color: #ccc;
+    }
+    .content {
+        padding: 0 18px;
+        background-color: lightblue;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.2s ease-out;
+        width: 97.6%;
+    }
+    .collapsible:after {
+        content: "\2795"; /* Unicode character for "plus" sign (+) */
+        color: white;
+        float: right;
+        margin-left: 5px;
+    }
+
+    .active:after {
+        content: "\2796"; /* Unicode character for "minus" sign (-) */
+    }
+
+    header {
+        font-size: 80px;
+        height: 100px;
+        background-color: #ccc;
+        text-align: center;
+    }
+
+    button {
+        font-size: 25px;
+    }
+
+    div, button {
+        font-size: 25px;
+    }
+
+    html {
+        font-family: Verdana;
+        margin-left: 200px;
+        margin-right: 200px;
+    }
+</style>
+
+<script>
+var coll = document.getElementsByClassName("collapsible");
+var i;
+
+for (i = 0; i < coll.length; i++) {
+  coll[i].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var content = this.nextElementSibling;
+    if (content.style.maxHeight){
+      content.style.maxHeight = null;
+    } else {
+      content.style.maxHeight = content.scrollHeight + "px";
+    }
+  });
+}
+</script>
+</body>
+</html>

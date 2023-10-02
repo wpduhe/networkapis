@@ -1,0 +1,4 @@
+Value NUM_CLIENTS (\d+)
+
+Start
+  ^Number\sof\sClients\sin\sWLAN*\.+\s*${NUM_CLIENTS}\s*$$

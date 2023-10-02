@@ -1,0 +1,27 @@
+Value AUTH_INDEX (\d+)
+Value AUTH_ADDRESS (\d+\.\d+\.\d+\.\d+)
+Value AUTH_PORT (\d+)
+Value AUTH_STATE (\w+)
+Value AUTH_TIMEOUT (\d+)
+Value AUTH_MGMT_TIMEOUT (\d+)
+Value AUTH_COA (\w+)
+Value ACCT_INDEX (\d+)
+Value ACCT_ADDRESS (\d+\.\d+\.\d+\.\d+)
+Value ACCT_PORT (\d+)
+Value ACCT_STATE (\w+)
+Value ACCT_TIMEOUT (\d+)
+
+
+Start
+  ^Authentication\s+Servers -> Auth
+
+Auth
+  ^Idx.*
+  ^-+[\s|-]+
+  ^${AUTH_INDEX}\s+[\*|\s|M|N]+\s+${AUTH_ADDRESS}\s+${AUTH_PORT}\s+${AUTH_STATE}\s+${AUTH_TIMEOUT}\s+${AUTH_MGMT_TIMEOUT}\s+${AUTH_COA}.* -> Record
+  ^Accounting\s+Servers -> Acct
+
+Acct
+  ^Idx.*
+  ^-+[\s|-]+
+  ^${ACCT_INDEX}\s+[\*|\s|M|N]+\s+${ACCT_ADDRESS}\s+${ACCT_PORT}\s+${ACCT_STATE}\s+${ACCT_TIMEOUT}.* -> Record

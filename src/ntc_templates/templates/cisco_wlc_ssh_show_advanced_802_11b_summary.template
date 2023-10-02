@@ -1,0 +1,12 @@
+Value APNAME ([^\s]+)
+Value MACADDR ([0-9a-fA-F]{2}\:[0-9a-fA-F]{2}\:[0-9a-fA-F]{2}\:[0-9a-fA-F]{2}\:[0-9a-fA-F]{2}\:[0-9a-fA-F]{2})
+Value SLOT (\d+)
+Value ADMIN (\w+)
+Value OPER (\w+)
+Value CHANNEL ([^\s]+)
+Value TXPOWER ([^\s]+)
+Value TXPOWERDBM ((\s)?(\d+\sdBm)?(\w+)?)
+
+
+Start
+  ^${APNAME}\s+${MACADDR}(?:\s+\d)?\s+${ADMIN}\s+${OPER}\s+${CHANNEL}\s+${TXPOWER}\s\(${TXPOWERDBM}\) -> Record

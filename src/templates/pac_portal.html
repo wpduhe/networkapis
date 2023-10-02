@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PyAPIs PAC Portal</title>
+</head>
+<body>
+<h1>PyAPIs PAC File Management Portal</h1>
+
+<div style="position:absolute; right:100px; height:800px; width:1100px; overflow:auto; border-style:solid; padding: 10px 10px 10px 10px">
+    <pre>{{ display }}</pre>
+</div>
+
+<div>
+    <h3>Create a New PAC Rule</h3>
+    <form action="https://pyapis.app.medcity.net/apis/pac_file" method="post">
+        PAC File Section:
+        <select name="section">
+            <option value="">Please select a Section</option>
+            {% for section in pac %}
+                <option value="{{ section }}">{{ section }}</option>
+            {% endfor %}
+        </select><br><br>
+        URL Expression:  <input type="text" name="host_exp" required><br><br>
+        Rule Comment:  <input type="text" name="comment" required><br><br>
+        <input type="submit" value="Submit">
+    </form><br>
+</div><br><br>
+
+<div>
+    <h3>Deploy Pilot to Production:</h3>
+    <form action="https://pyapis.app.medcity.net/apis/pac_file?deploy=true" method="get">
+        <input type="button" title="Deploy" value="Deploy">
+    </form>
+</div>
+
+<!--<div>-->
+    <!--<h3>Delete an Existing PAC Rule</h3>-->
+    <!--<form action="https://pyapis.app.medcity.net/apis/pac_file" method="delete">-->
+        <!--PAC File Section:-->
+        <!--<select name="section">-->
+            <!--{% for section in pac %}-->
+                <!--<option value="{{ section }}">{{ section }}</option>-->
+            <!--{% endfor %}-->
+        <!--</select><br><br>-->
+        <!--URL Expression:  <input type="text" name="host_exp"><br><br>-->
+        <!--Proxy Directive:-->
+        <!--<select name="directive">-->
+            <!--<option value="PROXY">Proxy</option>-->
+            <!--<option value="DIRECT">Direct</option>-->
+        <!--</select><br><br>-->
+        <!--Rule Comment:  <input type="text" name="comment"><br><br>-->
+        <!--<input type="submit" value="Submit"><br>-->
+    <!--</form>-->
+<!--</div>-->
+</body>
+</html>

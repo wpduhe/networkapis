@@ -1,0 +1,261 @@
+[
+    {
+        "Network": "10.118.64.0/24",
+        "VLAN": 700,
+        "ServiceProvider": "",
+        "Description": "Tristar OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.65.0/24",
+        "VLAN": 701,
+        "ServiceProvider": "",
+        "Description": "Tristar Lumen",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.66.0/24",
+        "VLAN": 900,
+        "ServiceProvider": "",
+        "Description": "Gulf Coast OEW-VLAN 900",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.67.0/24",
+        "VLAN": 901,
+        "ServiceProvider": "",
+        "Description": "Gulf Coast Lumen-VLAN 901",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.68.0/24",
+        "VLAN": 250,
+        "ServiceProvider": "",
+        "Description": "Shared Services OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.69.0/24",
+        "VLAN": 251,
+        "ServiceProvider": "",
+        "Description": "Shared Services Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.73.0/24",
+        "VLAN": 750,
+        "ServiceProvider": "",
+        "Description": "Mid America South Division - AT&T",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.74.0/24",
+        "VLAN": 751,
+        "ServiceProvider": "",
+        "Description": "Mid America South Division - Level 3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.75.0/24",
+        "VLAN": 650,
+        "ServiceProvider": "",
+        "Description": "Mid America North - OEW - VLAN 650",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.76.0/24",
+        "VLAN": 651,
+        "ServiceProvider": "",
+        "Description": "Mid America North - Level 3 - VLAN 651",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.77.0/24",
+        "VLAN": 550,
+        "ServiceProvider": "",
+        "Description": "North Florida OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.78.0/24",
+        "VLAN": 551,
+        "ServiceProvider": "",
+        "Description": "North Florida Level 3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.79.0/24",
+        "VLAN": 200,
+        "ServiceProvider": "",
+        "Description": "Corp Campus - att",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.80.0/24",
+        "VLAN": 201,
+        "ServiceProvider": "",
+        "Description": "Corp Campus -Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.81.0/24",
+        "VLAN": 510,
+        "ServiceProvider": "",
+        "Description": "Central/West TX - OEW - VLAN 510",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.82.0/24",
+        "VLAN": 511,
+        "ServiceProvider": "",
+        "Description": "Central/West TX - Level3 - VLAN 511",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.83.0/24",
+        "VLAN": 600,
+        "ServiceProvider": "",
+        "Description": "North TX -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.84.0/24",
+        "VLAN": 601,
+        "ServiceProvider": "",
+        "Description": "North TX - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.85.0/24",
+        "VLAN": 610,
+        "ServiceProvider": "",
+        "Description": "Capital -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.86.0/24",
+        "VLAN": 611,
+        "ServiceProvider": "",
+        "Description": "Capital - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.87.0/24",
+        "VLAN": 710,
+        "ServiceProvider": "",
+        "Description": "Far West -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.88.0/24",
+        "VLAN": 711,
+        "ServiceProvider": "",
+        "Description": "Far West - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.89.0/24",
+        "VLAN": 810,
+        "ServiceProvider": "",
+        "Description": "San Antonio -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.90.0/24",
+        "VLAN": 811,
+        "ServiceProvider": "",
+        "Description": "San Antonio - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.91.0/24",
+        "VLAN": 850,
+        "ServiceProvider": "",
+        "Description": "Mountain -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.92.0/24",
+        "VLAN": 851,
+        "ServiceProvider": "",
+        "Description": "Mountain - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.93.0/24",
+        "VLAN": 910,
+        "ServiceProvider": "",
+        "Description": "Continential  -OEW",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.94.0/24",
+        "VLAN": 911,
+        "ServiceProvider": "",
+        "Description": "Continential  - Level3",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.96.0/24",
+        "VLAN": 501,
+        "ServiceProvider": "",
+        "Description": "East Florida Level3 - VLan 501",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.97.0/24",
+        "VLAN": 560,
+        "ServiceProvider": "",
+        "Description": "South Atlantic ATT OEW VL560",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.98.0/24",
+        "VLAN": 561,
+        "ServiceProvider": "",
+        "Description": "South Atlantic CL VPLS VL561",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.132.93.0/24",
+        "VLAN": 500,
+        "ServiceProvider": "",
+        "Description": "EFD - AT&T OpteWAN MAN",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.101.0/24",
+        "VLAN": 950,
+        "ServiceProvider": "",
+        "Description": "West Florida - OEW - VLAN 950",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.102.0/24",
+        "VLAN": 951,
+        "ServiceProvider": "",
+        "Description": "West Florida - L3 - VLAN 951",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.105.0/24",
+        "VLAN": 1500,
+        "ServiceProvider": "",
+        "Description": "Level 3 VPLS HCADR VRF Vlan 1500-Data Replication",
+        "Purpose": "Data Replication"
+    },
+    {
+        "Network": "10.118.110.0/24",
+        "VLAN": 660,
+        "ServiceProvider": "",
+        "Description": "North Carolina ATT OEW VL660",
+        "Purpose": "Division"
+    },
+    {
+        "Network": "10.118.111.0/24",
+        "VLAN": 661,
+        "ServiceProvider": "",
+        "Description": "North Carolina CL VPLS VL661",
+        "Purpose": "Division"
+    }
+]
