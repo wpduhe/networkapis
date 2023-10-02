@@ -18,7 +18,7 @@
 # docker.io, quay.io, registry.access.redhat.com, registry.connect.redhat.com,
 # and registry.redhat.io.
 #
-FROM REQD_SOURCE_IMAGE_URL
+FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.11:latest
 
 # The following ARG is to allow granular control of the image build.  If the image
 # being built is not a base or parent and is using a managed HCA base/parent image
@@ -38,8 +38,8 @@ ARG APP_UID=1001
 ARG APP_GROUP=appgroup
 ARG APP_GID=9001
 ARG COMPANY_NAME="HCA Healthcare"
-ARG ORGANIZATION_NAME="Public Cloud & SRE"
-ARG DEPARTMENT_NAME="Container Platform Administration"
+ARG ORGANIZATION_NAME="ITG"
+ARG DEPARTMENT_NAME="Network Services"
 
 LABEL company="${COMPANY_NAME}"
 LABEL organization="${ORGANIZATION_NAME}"
