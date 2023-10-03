@@ -129,7 +129,7 @@ waitress==2.1.2
 websockets==10.4
 Werkzeug==2.2.2
 wfastcgi==3.0.0
-wrapt==1.14.1
+wrapt==1.15.0
 yamlordereddictloader==0.4.0
 yarl==1.8.2
 zeep==4.2.1
