@@ -18,7 +18,7 @@
 # docker.io, quay.io, registry.access.redhat.com, registry.connect.redhat.com,
 # and registry.redhat.io.
 #
-FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.9:latest
+FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.8:latest
 
 # The following ARG is to allow granular control of the image build.  If the image
 # being built is not a base or parent and is using a managed HCA base/parent image
