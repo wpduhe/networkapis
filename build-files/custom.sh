@@ -14,6 +14,6 @@ fi
 #                                                                                     #
 
 # Install packages
-pip install -r requirements.txt
+pip install -r ../sr/requirements.txt
 
 # Do NOT put an exit as this file is sourced.
