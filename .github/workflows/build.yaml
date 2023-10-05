@@ -41,5 +41,5 @@ jobs:
       action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted"]'
       alternate-image-tag: "latest"
       create-release: false
-      image-name: "REQD_IMAGE_REGISTRY_BASE_PATH/pyapis"
-      registry: "<REPO>.repos.medcity.net"
+      image-name: "pyapis-prd"
+      registry: "hcanetworkservicesdocker.repos.medcity.net"
