@@ -18,14 +18,14 @@
 # docker.io, quay.io, registry.access.redhat.com, registry.connect.redhat.com,
 # and registry.redhat.io.
 #
-FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.11:latest
+FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.9:latest
 
 # The following ARG is to allow granular control of the image build.  If the image
 # being built is not a base or parent and is using a managed HCA base/parent image
 # then the necessity to update the base operating system packages in not required.
 # Setting the BASE_PARENT_IMAGE argument (flag) to a value of zero will prevent
 # update of the operating system packages.
-ARG BASE_PARENT_IMAGE=1
+ARG BASE_PARENT_IMAGE=0
 # The PROXYURL argument is set to an empty/null content on purpose to allow the build
 # scripts to behave in a particular manner.  It should not be modified here unless the
 # desired result is to have a proxy configuration made static.
@@ -48,9 +48,6 @@ LABEL department="${DEPARTMENT_NAME}"
 # GitHub Actions workflow.
 LABEL version=$IMAGE_VERSION
 
-ENV http_proxy=${PROXYURL}
-ENV https_proxy=${PROXYURL}
-
 # This is a base image which must run as root during build processing
 USER root
 
@@ -59,9 +56,12 @@ WORKDIR /build
 
 # This "template" is set up to use an installation script to assist in minimizing
 # the layers of the resulting container image.
+COPY src/requirements.txt .
 COPY --chmod=0755 ./build-files/* ./
 RUN chmod 0644 ./*.txt && ./build.sh && rm -rf /build
 
 WORKDIR /opt/app
+COPY src .
 
+#ENTRYPOINT ["gunicorn","wsgi","--bind=0.0.0.0:8080","--access-logfile=-","--config gunicorn.config.py"]
 CMD ["/bin/bash"]

@@ -13,4 +13,8 @@ fi
 ##                                                                                   ##
 #                                                                                     #
 
+# Copy the "app" directory into the image
+pip install --upgrade pip
+pip install -r requirements.txt
+
 # Do NOT put an exit as this file is sourced.

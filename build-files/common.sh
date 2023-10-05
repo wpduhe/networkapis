@@ -23,12 +23,18 @@ then
        else
          export PKGMGR="dnf"
        fi
+       export PKGMGRINSTALL="install"
+       export PKGMGRCONFIRM="--yes"
+       export PKGMGRCLEANARGS="clean all"
        export PKGMGRARGS="--nodocs --best --setopt=tsflags=nodocs --setopt=install_weak_deps=False --quiet"
        export PKGEXT="rpm"
        export PKGREPOMGR="${PKGMGR} config-manager --add-repo"
        ;;
     'debian'|'ubuntu')
        export PKGMGR="apt-get"
+       export PKGMGRINSTALL="install"
+       export PKGMGRCONFIRM="--yes"
+       export PKGMGRCLEANARGS="clean all"
        export PKGMGRARGS="--no-install-recommends --quiet"
        export PKGEXT="deb"
        export PKGREPOMGR="add-apt-repository"
@@ -36,6 +42,16 @@ then
        # Tell apt-get we're never going to be able to give manual feedback
        export DEBIAN_FRONTEND=noninteractive
        export ARCH="$(dpkg --print-architecture)"; \
+       ;;
+    'alpine')
+       export PKGMGR="apk"
+       export PKGMGRINSTALL="add"
+       export PKGMGRCONFIRM=""
+       export PKGMGRCLEANARGS="cache clean --purge"
+       export PKGMGRARGS=""
+       export PKGEXT="deb"
+       export PKGREPOMGR="add-apt-repository"
+       export PKGKEYMGR="apt-key"
        ;;
     '*')
       log.error "ERROR: Base operating system is not compatible with this build method."

@@ -19,11 +19,11 @@ case ${OS} in
   'debian'|'ubuntu')
     log.notice 'Installing support packages.'
     # Have to do the following to find the additional packages
-    ${PKGMGR} -y --quiet update
+    ${PKGMGR} --quiet update
     # Need this to add the add-apt-repository software
-    ${PKGMGR} ${PKGMGRARGS} -y --quiet install software-properties-common
+    ${PKGMGR} ${PKGMGRCONFIRM} ${PKGMGRARGS} --quiet ${PKGMGRINSTALL} software-properties-common
     # Needed to support pulling GPG keys from sources
-    ${PKGMGR} ${PKGMGRARGS} -y install curl gettext-base gnupg2 gpg-agent
+    ${PKGMGR} ${PKGMGRCONFIRM} ${PKGMGRARGS} ${PKGMGRINSTALL} curl gettext-base gnupg2 gpg-agent
 
     # Check for repository keys
     if [ $(grep -Ecv '^#' ./repokeys.txt) -ne 0 ]
@@ -51,13 +51,14 @@ case ${OS} in
         while read -r lEntry
         do
           log.notice "Adding repository: '${lEntry}'"
-          ${PKGREPOMGR} --yes "${lEntry}"
+          ${PKGREPOMGR} ${PKGMGRCONFIRM} "${lEntry}"
         done
       gUpdatePkgs=1
     fi
     ;;
   'centos'|'fedora'|'almalinux'|'rocky')
     :
+    ${PKGMGR} ${PKGMGRCONFIRM} ${PKGMGRARGS} ${PKGMGRINSTALL} gettext
     ;;
   '*')
     log.warning "Cannot determine operating system for operation."
@@ -68,7 +69,7 @@ esac
 if [ $gUpdatePkgs -gt 0 ]
 then
   log.notice 'Package list update to address new repository list additions.'
-  ${PKGMGR} -y --quiet update
+  ${PKGMGR} --quiet update
 fi
 
 # Do NOT put an "exit" call as this file is sourced.

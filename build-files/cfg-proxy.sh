@@ -29,6 +29,9 @@ __EOF__
         fi
       done
       ;;
+    'alpine')
+      :
+      ;;
     *)
       log.error 'Failed to configure proxy for package management operations'
       exit 1
@@ -37,5 +40,11 @@ __EOF__
 else
   log.notice "No proxy configuration specified to be set."
 fi
+
+log.notice "Identified proxy configuration on base image."
+log.debug "$(env | grep -i proxy | sort)"
+cat /etc/apt/apt.conf.d/00*proxy* || true
+cat /etc/docker/daemon.json || true
+cat ${HOME}/.docker/config.json || true
 
 # Do NOT put an "exit" call as this file is sourced.
