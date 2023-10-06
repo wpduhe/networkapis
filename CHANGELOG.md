@@ -7,6 +7,7 @@
 **Merged pull requests:**
 
 - pip prod\(deps\): bump typed-ast from 1.5.4 to 1.5.5 [\#5](https://github.com/HCANetworkServices/NetworkAPIs/pull/5) ([dependabot[bot]](https://github.com/apps/dependabot))
+- pip prod\(deps\): bump wrapt from 1.14.1 to 1.15.0 [\#4](https://github.com/HCANetworkServices/NetworkAPIs/pull/4) ([dependabot[bot]](https://github.com/apps/dependabot))
 - pip prod\(deps\): bump graphene from 3.2.1 to 3.3 [\#2](https://github.com/HCANetworkServices/NetworkAPIs/pull/2) ([dependabot[bot]](https://github.com/apps/dependabot))
 - pip prod\(deps\): bump tenacity from 8.2.0 to 8.2.3 [\#1](https://github.com/HCANetworkServices/NetworkAPIs/pull/1) ([dependabot[bot]](https://github.com/apps/dependabot))
 
