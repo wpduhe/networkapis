@@ -15,6 +15,6 @@ fi
 
 # Copy the "app" directory into the image
 pip install --upgrade pip
-pip install --extra-index-url https://$nexususer:$nexuspass@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
+pip install --extra-index-url https://${NEXUS_USERNAME}:${NEXUS_PASSWORD}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
 
 # Do NOT put an exit as this file is sourced.
