@@ -12,9 +12,17 @@ fi
 ### Any application specific customization processes needed should be placed below. ###
 ##                                                                                   ##
 #                                                                                     #
+if [[ -s /run/secrets/NEXUSUSER ]]
+then
+  VARIABLE_NAME="$(cat /run/secrets/NEXUSUSER)"
+fi
+if [[ -s /run/secrets/NEXUSPASS ]]
+then
+  VARIABLE_NAME="$(cat /run/secrets/NEXUSPASS)"
+fi
 
 # Copy the "app" directory into the image
 pip install --upgrade pip
-pip install --extra-index-url https://${NEXUS_USERNAME}:${NEXUS_PASSWORD}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
+pip install --extra-index-url https://${NEXUSUSER}:${NEXUSPASS}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
 
 # Do NOT put an exit as this file is sourced.

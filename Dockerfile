@@ -59,6 +59,8 @@ WORKDIR /build
 COPY src/requirements.txt .
 COPY --chmod=0755 ./build-files/* ./
 RUN chmod 0644 ./*.txt && ./build.sh && rm -rf /build
+RUN --mount=type=secret,id=NEXUSUSER --mount=type=secret,id=NEXUSPASS \
+    chmod 0644 ./*.txt && ./build.sh && rm -rf /build
 
 WORKDIR /opt/app
 COPY src .
