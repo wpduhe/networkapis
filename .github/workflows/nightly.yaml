@@ -26,6 +26,9 @@ jobs:
       registry-password: ${{ secrets.REGISTRY_PASSWORD }}
       wiz-client-id: ${{ secrets.WIZ_CLIENT_ID }}
       wiz-client-secret: ${{ secrets.WIZ_CLIENT_SECRET }}
+      docker-secrets: |
+        NEXUSUSER=${{ secrets.REGISTRY_USERNAME }}
+        NEXUSPASS=${{ secrets.REGISTRY_PASSWORD }}
     with:
       action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted"]'
       alternate-image-tag: "nightly"
