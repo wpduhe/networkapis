@@ -31,7 +31,7 @@ jobs:
   # https://github.com/HCACPA/.github/blob/main/docs/ru-container-image-build.md
   build-image:
     if: github.repository != 'HCACPA/base-container-image-build-template'
-    uses: HCACPA/.github/.github/workflows/ru-container-image-build.yml@v1.1.1
+    uses: HCACPA/.github/.github/workflows/ru-container-image-build.yml@v1.1.6
     secrets:
       registry-username: ${{ secrets.REGISTRY_USERNAME }}
       registry-password: ${{ secrets.REGISTRY_PASSWORD }}
