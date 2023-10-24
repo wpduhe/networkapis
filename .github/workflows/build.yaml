@@ -39,7 +39,7 @@ jobs:
       wiz-client-secret: ${{ secrets.WIZ_CLIENT_SECRET }}
       docker-secrets: |
         NEXUSUSER=${{ secrets.REGISTRY_USERNAME }}
-        NEXUSPASS=${{ SECRETS.REGISTRY_PASSWORD }}
+        NEXUSPASS=${{ secrets.REGISTRY_PASSWORD }}
 
     with:
       action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted"]'
