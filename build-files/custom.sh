@@ -14,11 +14,11 @@ fi
 #                                                                                     #
 if [[ -s /run/secrets/NEXUSUSER ]]
 then
-  VARIABLE_NAME="$(cat /run/secrets/NEXUSUSER)"
+  NEXUSUSER="$(cat /run/secrets/NEXUSUSER)"
 fi
 if [[ -s /run/secrets/NEXUSPASS ]]
 then
-  VARIABLE_NAME="$(cat /run/secrets/NEXUSPASS)"
+  NEXUSPASS="$(cat /run/secrets/NEXUSPASS)"
 fi
 
 # Copy the "app" directory into the image
