@@ -15,14 +15,16 @@ fi
 if [[ -s /run/secrets/NEXUSUSER ]]
 then
   NEXUSUSER="$(cat /run/secrets/NEXUSUSER)"
+  log.notice "NEXUSUSER has been set: $(cat /run/secrets/NEXUSUSER)"
 fi
 if [[ -s /run/secrets/NEXUSPASS ]]
 then
   NEXUSPASS="$(cat /run/secrets/NEXUSPASS)"
+  log.notice "NEXUSPASS has been set: $(cat /run/secrets/NEXUSPASS)"
 fi
 
 # Copy the "app" directory into the image
 pip install --upgrade pip
-pip install --extra-index-url https://${NEXUSUSER}:${NEXUSPASS}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
+pip install --extra-index-url https://$(cat /run/secrets/NEXUSUSER):$(cat /run/secrets/NEXUSPASS)@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple --trusted-host nexus.hca.corpad.net -r requirements.txt
 
 # Do NOT put an exit as this file is sourced.
