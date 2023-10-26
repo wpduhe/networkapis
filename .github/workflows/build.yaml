@@ -42,7 +42,7 @@ jobs:
         NEXUSPASS=${{ secrets.REGISTRY_PASSWORD }}
 
     with:
-      action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted"]'
+      action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted@v2.311.0"]'
       alternate-image-tag: "latest"
       create-release: false
       image-name: "pyapis-prd"
