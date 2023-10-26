@@ -42,6 +42,7 @@ jobs:
         NEXUSPASS=${{ secrets.REGISTRY_PASSWORD }}
 
     with:
+      run-build-test: false
       action-runner-list: '["onprem-k8s-arc","lnx-amd64","enterprise","dind","self-hosted"]'
       alternate-image-tag: "latest"
       create-release: false
