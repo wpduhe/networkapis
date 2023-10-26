@@ -58,12 +58,12 @@ WORKDIR /build
 # the layers of the resulting container image.
 COPY src/requirements.txt .
 COPY --chmod=0755 ./build-files/* ./
-RUN chmod 0644 ./*.txt && ./build.sh && rm -rf /build
+# RUN chmod 0644 ./*.txt && ./build.sh && rm -rf /build
 RUN --mount=type=secret,id=NEXUSUSER --mount=type=secret,id=NEXUSPASS \
     chmod 0644 ./*.txt && ./build.sh && rm -rf /build
 
 WORKDIR /opt/app
 COPY src .
 
-#ENTRYPOINT ["gunicorn","wsgi","--bind=0.0.0.0:8080","--access-logfile=-","--config gunicorn.config.py"]
+ENTRYPOINT ["gunicorn","wsgi","--bind=0.0.0.0:8080","--access-logfile=-","--config gunicorn.config.py"]
 CMD ["/bin/bash"]
