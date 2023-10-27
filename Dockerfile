@@ -66,4 +66,4 @@ WORKDIR /opt/app
 COPY src .
 
 ENTRYPOINT ["gunicorn","--bind=0.0.0.0:8080","--access-logfile=-","--config=gunicorn_config.py"]
-CMD ["/bin/bash"]
+# CMD ["/bin/bash"]
