@@ -65,5 +65,5 @@ RUN --mount=type=secret,id=NEXUSUSER --mount=type=secret,id=NEXUSPASS \
 WORKDIR /opt/app
 COPY src .
 
-ENTRYPOINT ["gunicorn","--bind=0.0.0.0:8080","--access-logfile=-","--config=gunicorn_config.py"]
+ENTRYPOINT ["gunicorn","wsgi","--bind=0.0.0.0:8080","--access-logfile=-","--config=gunicorn_config.py","main:app"]
 # CMD ["/bin/bash"]
