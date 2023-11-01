@@ -1,8 +1,8 @@
 name: Container Image Build (Nightly)
 
 on:
-  schedule:
-    - cron: "0 0 * * SUN-FRI"
+  # schedule:
+  #   - cron: "0 0 * * SUN-FRI"
   workflow_dispatch:
     description: "Logging level"
     required: true
