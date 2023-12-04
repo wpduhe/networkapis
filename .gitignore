@@ -2,3 +2,5 @@ node_modules
 *__pycache__*
 aci_automation.key
 src/venv/
+.idea/
+
