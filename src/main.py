@@ -35,6 +35,7 @@ import logging
 import functools
 import netmiko
 import requests
+import yaml
 
 
 # Set Timezone for OpenShift environment
@@ -67,8 +68,6 @@ logging.getLogger('boto3').level = logging.WARNING
 logging.getLogger('github').level = logging.WARNING
 logging.getLogger('zeep').level = logging.WARNING
 LOGGER.debug('Logging initialized.')
-
-gh = GithubAPI()
 
 
 def req_logit(func, web_request, req_data=None):
@@ -120,6 +119,9 @@ tags_metadata = [
     {
         'name': 'ACI',
         'description': 'Operations for ACI fabrics'
+    }, {
+        'name': 'AppInstance',
+        'description': 'Application Instance Repository'
     }, {
         'name': 'Aruba',
         'description': 'Operations for Aruba'
@@ -190,17 +192,8 @@ ne_key_security = APIKeyHeader(name='NE_Key')
 # Create task handler thread pool for background tasks
 task_handler = TaskHandler(name='pyapis')
 
-# Log the instantiation of application on source device
-current_time = datetime.now()
-
-fo = f'{current_time.ctime()}:  PyAPIs Started on {socket.gethostname()}'
-
-gh.prepend_to_file(file_path='pyapis/log/pyapis.log', message='PyAPIs Started', new_content=fo)
-
-del fo
-
 # Start the Job Handler if instance is the production Openshift instance
-if socket.gethostname().startswith('pyapis01-'):
+if socket.gethostname().startswith('pyapis-prd'):
     executor = ThreadPoolExecutor(max_workers=2)
     executor.submit(run_job_handler)
 
@@ -336,11 +329,24 @@ def get_nexus_environments_list(request: Request):
 
 
 @app.get('/apis/aci/environments', tags=['ACI'])
-def get_aci_environments(request: Request):
+def get_aci_environments(request: Request, environment: Optional[str]=None):
     """Returns JSON that represents all ACI environments"""
     req_logit(get_aci_environments, request)
 
     data = json.load(open('data/ACIEnvironments.json', 'r'))
+
+    if environment:
+        data = next(e for e in data['Environments'] if e['Name'].upper() == environment.upper())
+
+        accept_header = request.headers.get('Accept')
+        if accept_header:
+            if 'yaml' in accept_header.lower():
+                new_data = {}
+                for key, value in data.items():
+                    new_data[key.lower()] = value
+
+                return Response(status_code=200, content=yaml.dump(new_data), media_type='application/yaml')
+
     return data
 
 
@@ -413,6 +419,17 @@ def collect_aps(request: Request, az: str, tenant: str):
     return aps
 
 
+@app.get('/apis/aci/{az}/terraform_aps', tags=['ACI'])
+def collect_tf_aps(request: Request, az: str):
+    """Returns a list of application profiles that are supported by Terraform for the specified environment"""
+    req_logit(collect_tf_aps, request)
+
+    with apic_utils.APIC(env=az) as apic_api:
+        aps = apic_api.collect_tf_aps()
+
+    return aps
+
+
 @app.get('/apis/aci/{az}/{tenant}/{ap}/epgs', tags=['ACI'])
 def collect_epgs(request: Request, az: str, tenant: str, ap: str):
     """Returns a list of EPGs found in the specified application profile in the specified tenant in the specified
@@ -421,8 +438,9 @@ def collect_epgs(request: Request, az: str, tenant: str, ap: str):
 
     with apic_utils.APIC(env=az) as apic_api:
         epgs = apic_api.collect_epgs(tn=tenant)
+
     epgs = list((epg['fvAEPg']['attributes']['name'] for epg in epgs
-                 if ap in epg['fvAEPg']['attributes']['dn']))
+                 if f'{ap}/' in epg['fvAEPg']['attributes']['dn']))
 
     epgs.sort()
 
@@ -1077,6 +1095,44 @@ def update_static_route(request: Request, az: str, req_data: UpdateStaticRoute):
     res_logit(update_static_route, request, response)
 
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
+
+
+@app.get('/apis/appinst/applications', tags=['AppInstance'])
+def get_applications(request: Request):
+    """Returns list of all documented application profiles"""
+    req_logit(get_applications, request)
+
+    gh = GithubAPI()
+
+    apps = gh.list_dir('applications')
+    apps.sort()
+
+    return apps
+
+
+@app.get('/apis/appinst/applications/{application}', tags=['AppInstance'])
+def get_application_instances(request: Request, application: str):
+    """Returns list of all documented application profiles"""
+    req_logit(get_application_instances, request, application)
+
+    gh = GithubAPI()
+
+    apps = gh.list_dir(f'applications/{application}')
+    apps.sort()
+
+    return apps
+
+
+@app.get('/apis/appinst/{application}/{instance}', tags=['AppInstance'])
+def get_application_instance(request: Request, application: str, instance: str):
+    """Returns list of instances found within the specified application"""
+    req_logit(get_application_instance, request, application)
+
+    gh = GithubAPI()
+
+    content = json.loads(gh.get_file_content(f'applications/{application}/{instance}'))
+
+    return content
 
 
 @app.get('/apis/f5/vip_clone', tags=['F5'])
