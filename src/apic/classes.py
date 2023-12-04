@@ -84,6 +84,7 @@ class APICObject:
     attributes: Attributes
     _dn_attributes: list
     _dn_template: str
+    tf_resource: str
 
     @classmethod
     def load(cls, json_data: dict or list):
@@ -287,6 +288,7 @@ class AEP(APICObject):
 
     _dn_template = 'uni/infra/attentp-{name}'
     _dn_attributes = ['name']
+    tf_resource = 'aci_attachable_access_entity_profile'
 
     def __init__(self, **kwargs):
         self.children = []
@@ -335,6 +337,7 @@ class InfraGeneric(APICObject):
         'name': 'default',
         'status': 'created,modified'
     }
+    tf_resource = 'aci_access_generic'
 
     def __init__(self):
         self.children = []
@@ -365,6 +368,7 @@ class SwitchProfile(APICObject):
 
     _dn_attributes = ['name']
     _dn_template = 'uni/infra/nprof-{name}'
+    tf_resource = 'aci_leaf_profile'
 
     def __init__(self, **kwargs):
         self.children = []
@@ -432,6 +436,7 @@ class InfraRsFuncToEpg(APICObject):
         'mode': 'regular',
         'status': 'created'
     }
+    tf_resource = 'aci_epgs_using_function'
 
     _dn_attributes = ['aep', 'tenant', 'app_profile', 'epg']
     _dn_template = 'uni/infra/attentp-{aep}/gen-default/rsfuncToEpg-[uni/tn-{tenant}/ap-{app_profile}/epg-{epg}]'
@@ -457,6 +462,7 @@ class Tenant(APICObject):
         'status': 'modified'
     }
     post_uri = '/api/mo/uni.json'
+    tf_resource = 'aci_tenant'
 
     def __init__(self, **kwargs):
         self.children = []
@@ -474,6 +480,7 @@ class AP(APICObject):
 
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/ap-{name}'
+    tf_resource = 'aci_application_profile'
 
     def __init__(self, **kwargs):
         self.children = []
@@ -493,6 +500,8 @@ class EPG(APICObject):
 
     _dn_attributes = ['tenant', 'app_profile', 'name']
     _dn_template = 'uni/tn-{tenant}/ap-{app_profile}/epg-{name}'
+
+    tf_resource = 'aci_application_epg'
 
     def __init__(self, **kwargs):
         self.children = []
@@ -534,6 +543,7 @@ class BD(APICObject):
         'unkMacUcastAct': '',
         'limitIpLearnToSubnets': 'yes'
     }
+    tf_resource = 'aci_bridge_domain'
 
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/BD-{name}'
@@ -612,6 +622,7 @@ class Subnet(APICObject):
         'scope': 'public',
         'virtual': 'no'
     }
+    tf_resource = 'aci_subnet'
 
     _dn_attributes = ['tenant', 'bd', 'ip_network']
     _dn_template = 'uni/tn-{tenant}/BD-{bd}/subnet-[{ip_network}]'
@@ -668,6 +679,8 @@ class FvRsDomAtt(APICObject):
         'tDn': ''
     }
 
+    tf_resource = 'aci_epg_to_domain'
+
     def __init__(self, name: str = ''):
         self.children = []
         self.attributes = Attributes(**self.attrs)
@@ -680,6 +693,7 @@ class Context(APICObject):
         'dn': '',
         'name': ''
     }
+    tf_resource = 'aci_vrf'
 
     def __init__(self, **kwargs):
         self.children = []

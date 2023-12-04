@@ -3,6 +3,7 @@
         {
             "Name": "SLDC",
             "DREnv": "FRDC-AZ1",
+            "DataCenter": "SLDC",
             "F5ProdEnvironment": "SLDC Prod ADMZ",
             "F5QAEnvironment": "SLDC QA Internal",
             "ADMZDomain": "RDC",
@@ -50,6 +51,7 @@
         {
             "Name": "TPDC",
             "DREnv": "XRDC-AZ1",
+            "DataCenter": "TPDC",
             "F5ProdEnvironment": "TPDC Prod ADMZ",
             "F5QAEnvironment": "TPDC QA Internal",
             "ADMZDomain": "RDC",
@@ -97,6 +99,7 @@
         {
             "Name": "FRDC-AZ1",
             "DREnv": "XRDC-AZ1",
+            "DataCenter": "FRDC",
             "F5ProdEnvironment": "FRDC AZ1",
             "F5QAEnvironment": "FRDC AZ1 QA",
             "ADMZDomain": "RDC",
@@ -145,6 +148,7 @@
         {
             "Name": "XRDC-AZ1",
             "DREnv": "FRDC-AZ1",
+            "DataCenter": "XRDC",
             "F5ProdEnvironment": "XRDC AZ1",
             "F5QAEnvironment": "XRDC AZ1 QA",
             "ADMZDomain": "RDC",
@@ -192,6 +196,7 @@
         {
             "Name": "SEDC",
             "DREnv": "XRDC-AZ1",
+            "DataCenter": "SEDC",
             "F5ProdEnvironment": "SEDC Prod LTM",
             "F5QAEnvironment": "SEDC QA LTM",
             "ADMZDomain": "RDC",
@@ -239,6 +244,7 @@
         {
             "Name": "DRDC",
             "DREnv": "XRDC-AZ1",
+            "DataCenter": "SEDC",
             "F5ProdEnvironment": "",
             "F5QAEnvironment": "",
             "ADMZDomain": "",
@@ -286,6 +292,7 @@
         {
             "Name": "HODC-AZ1",
             "DREnv": "FRDC-AZ1",
+            "DataCenter": "HODC",
             "F5ProdEnvironment": "HODC-Prod-LTM",
             "F5QAEnvironment": "HODC-QA-LTM",
             "ADMZDomain": "RDC",
@@ -333,6 +340,7 @@
         {
             "Name": "QOL-AZ1",
             "DREnv": null,
+            "DataCenter": "BDG4",
             "F5ProdEnvironment": "XRDC QOL",
             "F5QAEnvironment": "XRDC QOL",
             "ADMZDomain": "Lab",
@@ -381,6 +389,7 @@
         {
             "Name": "Parallon-Dev",
             "DREnv": null,
+            "DataCenter": "XRDC",
             "F5ProdEnvironment": null,
             "F5QAEnvironment": "XRDC AG2 DEV/QA Parallon ADMZ",
             "ADMZDomain": "Lab",

@@ -1,3 +1,6 @@
+import sys
+sys.path.extend(['C:\\Users\\JXU8356\\PycharmProjects\\Network_APIs'])
+
 from lxml.etree import Element
 from lxml import etree
 from bs4 import BeautifulSoup
@@ -7,9 +10,14 @@ from getpass import getpass
 import urllib3
 import requests
 import json
-import sys
 import os
 import re
+
+
+# Template host data
+TEMP_FQDN = 'xrdcupprx01a.mgmt.medcity.net'
+TEMP_MGMT_IP = '10.27.31.103'
+TEMP_HOST = 'XRDCUPPRX01A'
 
 
 def xmlprint(element):
@@ -19,7 +27,7 @@ def xmlprint(element):
 def download_config(host: str=None):
     # Login to WSA management interface and download XML configuration file wsa_config_gen.xml
     if not host:
-        host = 'tpdcupprx01a.mgmt.medcity.net'
+        host = TEMP_FQDN
 
     session = requests.session()
     session.verify = False
@@ -409,9 +417,9 @@ def buildWSA(mgmtIP: str, ntp: list, dns: list, auth_servers: list, hostname: st
     #
     #
     # Configure log settings
-    log_name_elem = tree.find('log_subscriptions/log_w3c_accesslog/[name="10.227.2.100"]/name')
-    log_dest_elem = tree.find('log_subscriptions/log_w3c_accesslog/[name="10.227.2.100"]/retrieval/'
-                              'syslog_push/hostname')
+    log_name_elem = tree.find(f'log_subscriptions/log_w3c_accesslog/[name="{TEMP_MGMT_IP}"]/name')
+    log_dest_elem = tree.find(f'log_subscriptions/log_w3c_accesslog/[name="{TEMP_MGMT_IP}"]/retrieval/'
+                              f'syslog_push/hostname')
 
     log_name_elem.text = mgmtIP['ip']
     log_dest_elem.text = kwargs['logging']
@@ -420,9 +428,9 @@ def buildWSA(mgmtIP: str, ntp: list, dns: list, auth_servers: list, hostname: st
     #
     # Configure wga_config (auth realms)
     wga_config = tree.find('wga_config')
-    auth_realm_username = tree.find('wga_config/prox_config_auth_realms/prox_config_auth_realm/'
-                                    'prox_config_auth_realm_ad/[prox_config_auth_realm_ad_username="TPDCUPPRX01A$"]/'
-                                    'prox_config_auth_realm_ad_username')
+    auth_realm_username = tree.find(f'wga_config/prox_config_auth_realms/prox_config_auth_realm/'
+                                    f'prox_config_auth_realm_ad/[prox_config_auth_realm_ad_username="{TEMP_HOST}$"]/'
+                                    f'prox_config_auth_realm_ad_username')
 
     for elem in list(wga_config):
         if elem.tag == 'prox_etc_continue_custom_text':
@@ -785,6 +793,7 @@ if __name__ == '__main__':
     credentials = {
         'username': input('Enter the username to be used for all logins: '),
         'password': getpass('Enter the password: ')
+        # 'password': 'ironport'
     }
 
     urllib3.disable_warnings()

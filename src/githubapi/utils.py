@@ -2,7 +2,7 @@ import os
 import time
 import base64
 from github import Github, GithubObject
-from github.GithubException import UnknownObjectException
+from github.GithubException import UnknownObjectException, GithubException
 
 
 class GithubAPI:
@@ -90,6 +90,22 @@ class GithubAPI:
     def delete_file(self, file_path: str, message: str, branch=GithubObject.NotSet):
         file = self.get_file_blob(file_path=file_path, branch=branch)
         self.repo.delete_file(path=file_path, message=message, sha=file.sha, branch=branch)
+        return None
+
+    def move_file(self, file_path: str, new_file_path: str, branch=GithubObject.NotSet):
+        # Retrieve file contents
+        file_content = self.get_file_content(file_path=file_path, branch=branch)
+
+        try:
+            self.delete_file(file_path=file_path, message='deleted', branch=branch)
+        except:
+            raise GithubException(status=500, data='', headers=None)
+
+        try:
+            self.add_file(file_path=new_file_path, message='moved', content=file_content, branch=branch)
+        except:
+            self.add_file(file_path=file_path, message='Move Failed', content=file_content, branch=branch)
+
         return None
 
     def list_dir(self, directory_path: str='', branch=GithubObject.NotSet):

@@ -4,6 +4,30 @@ import re
 import os
 
 
+class Route:
+    origin_as = None
+    communities = None
+
+    def __init__(self, route: str):
+        self.network = IPv4Network(re.search(r'Routing entry for ([^\n]+)', route).group(1))
+        self.distance = int(re.search(r'distance (\d+)', route).group(1))
+        self.metric = int(re.search(r'metric (\d+)', route).group(1))
+
+        if self.distance == 20:
+            self.protocol = 'ebgp'
+        elif self.distance == 200:
+            self.protocol = 'ibgp'
+        elif self.distance == 110:
+            self.protocol = 'ospf'
+        elif self.distance == 90:
+            self.protocol = 'eigrp'
+        elif self.distance == 0:
+            self.protocol = 'connected'
+        else:
+            # Accounts for any other administrative distance
+            self.protocol = 'static'
+
+
 class IOSXE:
     def __init__(self, ip):
         device = {
@@ -96,3 +120,19 @@ class IOSXE:
         else:
             return None
 
+    def prefix_lookup(self, cidr: str) -> IPv4Network or None:
+        """Finds specific prefix only"""
+        network = IPv4Network(cidr, strict=False)
+
+        output = self.session.send_command(f'show ip route {network}')
+        prefixes = set(_ for _ in re.findall(r'Routing entry for ([^\n]+)', output))
+
+        if prefixes:
+            return network
+        else:
+            return None
+
+    def route_lookup(self, ip: str) -> Route:
+        output = self.session.send_command(f'show ip route {ip}')
+        route = Route(route=output)
+        return route

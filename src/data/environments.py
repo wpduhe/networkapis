@@ -6,6 +6,7 @@ from typing import List
 class ACIEnvironment:
     Name: str
     DREnv: str
+    DataCenter: str
     F5ProdEnvironment: str
     F5QAEnvironment: str
     ADMZDomain: str

@@ -9,7 +9,7 @@ import io
 import urllib3
 import logging
 import string
-from typing import Tuple
+from typing import Tuple, List
 from base64 import b64encode
 from datetime import datetime
 from openpyxl.writer.excel import save_virtual_workbook
@@ -27,6 +27,7 @@ from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
 from itertools import groupby
 from operator import itemgetter
+from terraform.utils import Resource
 
 
 urllib3.disable_warnings()
@@ -47,6 +48,8 @@ ODDS = 'Odds'
 EVENS = 'Evens'
 OOB = 'OOB'
 STAGING = 'Staging'
+
+EPG_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/ap-([^/]+)/epg-([^/]+)')
 
 
 def q_wcard(c, a, v) -> str:
@@ -127,6 +130,12 @@ class APIC:
         else:
             self.logout()
             self.session.close()
+
+    def __str__(self):
+        if self.env:
+            return self.env.Name
+        else:
+            return self.ip
 
     def login(self, username: str=None, password: str=None):
         self.session = requests.Session()
@@ -332,6 +341,14 @@ class APIC:
         else:
             return aps
 
+    def collect_tf_aps(self) -> list:
+        r = [APICObject.load(_) for _ in self.get(f'/api/class/fvAp.json').json()['imdata']]
+        # Filter application profiles to include only production tenants
+        r = [_ for _ in r if re.search(rf'/tn-({self.env.Tenant}|{self.env.ADMZTenant})/', _.attributes.dn)]
+        r = [_.attributes.annotation.tfref for _ in r if _.attributes.annotation.__dict__.get('tfref')]
+        r.sort()
+        return r
+
     def collect_tags(self, tag: str):
         r = self.get(f'/api/class/tagInst.json?query-target-filter=eq(tagInst.name,"{tag}")')
         r = json.loads(r.text)
@@ -369,11 +386,20 @@ class APIC:
             networks.append([IPv4Network(subnet.attributes.ip, strict=False), subnet])
 
         if not ip == '':
-            ip = IPv4Address(ip)
+            matching_networks = []
+
+            ip = IPv4Network(ip)
             for network in networks:
-                if ip in list(network[0].hosts()) or ip == network[0].network_address:
-                    return network[1].json()
-            return 'IP is not a member of any subnet within any ACI fabric'
+                if network[0].overlaps(ip):
+                    matching_networks.append(network)
+
+            matching_networks.sort(key=lambda x: network[0].prefixlen)
+
+            # Returns the smallest network matching the provided IP
+            if matching_networks:
+                return matching_networks[-1][1].json()
+            else:
+                return matching_networks
         else:
             return [network[1].json() for network in networks]
 
@@ -582,6 +608,14 @@ class APIC:
             r = json.loads(r.text)
             r = r['imdata']
             return r
+
+    def collect_eps_by_subnet(self, cidr: str) -> List[GenericClass]:
+        cidr = IPv4Network(cidr, strict=False)
+
+        eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
+        eps = [_ for _ in eps if _.attributes.ip if cidr.overlaps(IPv4Network(_.attributes.ip))]
+
+        return eps
 
     def collect_nodes(self, node_id=None):
         r = self.get('/api/class/fabricNode.json')
@@ -2447,6 +2481,378 @@ class APIC:
 
         return unused_epgs, unused_bds, (unused_subnets, used_subnets)
 
+    def create_new_epg_tf(self, app_profile: str, app_instance_name: str, description: str, num_ips_needed: int) -> \
+            Tuple[int, str]:
+
+        with BIG() as big:
+            subnet = big.assign_next_network_from_list(block_list=self.env.Subnets, no_of_ips=num_ips_needed,
+                                                       name=app_instance_name, coid=int(self.env.COID),
+                                                       asn=int(self.env.ASN))
+            network = IPv4Network(subnet.properties['CIDR'])
+            gateway = network.network_address + 1
+
+        aps = [APICObject.load(a) for a in self.collect_aps()]
+
+        try:
+            ap = next(a for a in aps if a.attributes.annotation.__dict__.get('tfref') == app_profile.lower())
+        except StopIteration:
+            return 404, 'Terraform does not yet support this application profile.  Contact William Duhe for support'
+
+        ap_ref = '.'.join([AP.tf_resource, ap.attributes.annotation.tfref, 'id'])
+
+        # Create TF file content
+        tf_name = re.sub(r'\W', '_', app_instance_name).lower()
+
+        tfbd = Resource(BD.tf_resource, tf_name,
+                        tenant_dn='local.tenantdn',
+                        name=f'"bd-{app_instance_name}"',
+                        description=f'"{description}"',
+                        relation_fv_rs_bd_to_out='[local.l3outcoredn]',
+                        relation_fv_rs_ctx='local.vrfdn',
+                        arp_flood='"no"    # Options: yes | no',
+                        unicast_route='"yes"    # Options: yes | no',
+                        unk_mac_ucast_act='"proxy"    # Options: proxy | flood')
+
+        tfepg = Resource(EPG.tf_resource, tf_name,
+                         application_profile_dn=ap_ref,
+                         name=f'"epg-{app_instance_name}"',
+                         description=f'"{description}"',
+                         relation_fv_rs_bd=tfbd.ref_id())
+
+        tfsubnet = Resource(Subnet.tf_resource, tf_name,
+                            parent_dn=tfbd.ref_id(),
+                            # ip='"192.168.2.1/29"',
+                            ip=f'"{gateway}/{network.prefixlen}"',
+                            scope=json.dumps(['public']))
+
+        tfepgdomain = Resource(FvRsDomAtt.tf_resource, tf_name,
+                               application_epg_dn=tfepg.ref_id(),
+                               tdn='local.physicaldomaindn')
+
+        resources = ['', tfbd, tfepg, tfsubnet, tfepgdomain]
+
+        # Add the EPG to the AEP with the VLAN returned
+        epg_dn = f'uni/tn-{self.env.Tenant}/ap-{ap.attributes.name}/epg-{app_instance_name}'
+
+        vlan_assignment = InfraRsFuncToEpg(encap=f'vlan-{self.get_next_vlan()}', tDn=epg_dn)
+        vlan_assignment.create()
+
+        # POST the encapsulation to aep-Placeholders
+        # self.post(configuration=vlan_assignment.json(),
+        #           uri='/api/mo/uni/infra/attentp-aep-Placeholders/gen-default.json')
+
+        content = '\n'.join([str(x) for x in resources])
+
+        # TODO: Create process to upload TF file to Github
+
+        return 200, content
+
+    def create_custom_epg_tf(self, app_profile: str, app_instance_name: str, description: str, network_cidr: str) -> \
+            Tuple[int, str]:
+
+        network = IPv4Network(network_cidr, strict=False)
+        gateway = network.network_address + 1
+
+        aps = [APICObject.load(a) for a in self.collect_aps()]
+
+        try:
+            ap = next(a for a in aps if a.attributes.annotation.__dict__.get('tfref') == app_profile.lower())
+        except StopIteration:
+            return 404, 'Terraform does not yet support this application profile.  Contact William Duhe for support'
+
+        ap_ref = '.'.join([AP.tf_resource, ap.attributes.annotation.tfref, 'id'])
+
+        # Create TF file content
+        tf_name = re.sub(r'\W', '_', app_instance_name).lower()
+
+        tfbd = Resource(BD.tf_resource, tf_name,
+                        tenant_dn='local.tenantdn',
+                        name=f'"bd-{app_instance_name}"',
+                        description=f'"{description}"',
+                        relation_fv_rs_bd_to_out='[local.l3outcoredn]',
+                        relation_fv_rs_ctx='local.vrfdn',
+                        arp_flood='"no"    # Options: yes | no',
+                        unicast_route='"yes"    # Options: yes | no',
+                        unk_mac_ucast_act='"proxy"    # Options: proxy | flood')
+
+        tfepg = Resource(EPG.tf_resource, tf_name,
+                         application_profile_dn=ap_ref,
+                         name=f'"epg-{app_instance_name}"',
+                         description=f'"{description}"',
+                         relation_fv_rs_bd=tfbd.ref_id())
+
+        tfsubnet = Resource(Subnet.tf_resource, tf_name,
+                            parent_dn=tfbd.ref_id(),
+                            ip=f'"{gateway}/{network.prefixlen}"',
+                            scope=json.dumps(['public']))
+
+        tfepgdomain = Resource(FvRsDomAtt.tf_resource, tf_name,
+                               application_epg_dn=tfepg.ref_id(),
+                               tdn='local.physicaldomaindn')
+
+        resources = ['', tfbd, tfepg, tfsubnet, tfepgdomain]
+
+        # Add the EPG to the AEP with the VLAN returned
+        epg_dn = f'uni/tn-{self.env.Tenant}/ap-{ap.attributes.name}/epg-{app_instance_name}'
+
+        vlan_assignment = InfraRsFuncToEpg(encap=f'vlan-{self.get_next_vlan()}', tDn=epg_dn)
+        vlan_assignment.create()
+
+        # POST the encapsulation to aep-Placeholders
+        # self.post(configuration=vlan_assignment.json(),
+        #           uri='/api/mo/uni/infra/attentp-aep-Placeholders/gen-default.json')
+
+        content = '\n'.join([str(x) for x in resources])
+
+        # TODO: Create process to upload TF file to Github
+
+        return 200, content
+
+    # @classmethod
+    # def move_network(cls, source_az: str, dest_az: str, cidr: str, app_profile: str, inst_name: str):
+    #     cidr = IPv4Network(cidr, strict=False)
+    #     s_apic = cls(env=source_az)
+    #     d_apic = cls(env=dest_az)
+    #
+    #     ssnap = s_apic.snapshot(descr=f'{inst_name}_move')
+    #     dsnap = d_apic.snapshot(descr=f'{inst_name}_move')
+    #
+    #     if not ssnap or not dsnap:
+    #         return 400, {'message': 'Snapshot creation failed in one of the environments, not proceeding'}
+    #
+    #     subnets = [APICObject.load(_)
+    #                for _ in s_apic.get(f'/api/mo/uni/tn-{s_apic.env.Tenant}.json'
+    #                                    f'?query-target=subtree&target-subtree-class=fvSubnet').json()['imdata']]
+    #     subnets += [APICObject.load(_)
+    #                 for _ in s_apic.get(f'/api/mo/uni/tn-{s_apic.env.ADMZTenant}.json'
+    #                                     f'?query-target=subtree&target-subtree-class=fvSubnet').json()['imdata']]
+    #
+    #     subnets = [[IPv4Network(_.attributes.ip, strict=False), _] for _ in subnets]
+    #
+    #     # Get and process subnet information
+    #     try:
+    #         network, subnet = next([n, s] for n, s in subnets if n.overlaps(cidr) and n.prefixlen == cidr.prefixlen)
+    #         subnet.remove_admin_props()
+    #         s_subnet = Subnet.load(subnet.json())
+    #         s_subnet.delete()
+    #         subnet.attributes.__delattr__('dn')
+    #         subnet.create()
+    #     except StopIteration:
+    #         return 404, {'message': 'The prefix does not exist in the source environment'}
+    #
+    #     tenant_name, bd_name = re.search('tn-([^/]+)/BD-([^/]+)', s_subnet.attributes.dn).groups()
+    #
+    #     # Define Tenant
+    #     tenant = Tenant(name=(d_apic.env.Tenant if s_apic.env.Tenant == tenant_name else d_apic.env.ADMZVRF))
+    #     tenant.modify()
+    #
+    #     # Get and setup Bridge Domain
+    #     bd = APICObject.load(s_apic.collect_bds(tn=tenant_name, bd=bd_name))
+    #     bd.children = []
+    #     bd.attributes.__delattr__('dn')
+    #     bd.attributes.name = f'bd-{inst_name}'
+    #     bd.use_vrf(name=(d_apic.env.VRF if s_apic.env.Tenant == tenant_name else d_apic.env.ADMZVRF))
+    #     bd.create_modify()
+    #     if s_apic.env.Tenant == tenant_name:
+    #         bd.to_l3_out(d_apic.env.L3OutCore)
+    #
+    #     # Generate EPG
+    #     epg = EPG(name=f'epg-{inst_name}')
+    #     epg.domain(d_apic.env.PhysicalDomain)
+    #     epg.assign_bd(name=bd.attributes.name)
+    #     epg.create_modify()
+    #
+    #     # Generate AP
+    #     ap = AP()
+    #     ap.tenant = (d_apic.env.Tenant if s_apic.env.Tenant == tenant_name else d_apic.env.ADMZTenant)
+    #     ap.attributes.name = f'ap-{app_profile}'
+    #     ap.create_modify()
+    #
+    #     # Setup structure
+    #     tenant.children = [bd, ap]
+    #     bd.children.append(subnet)
+    #     ap.children = [epg]
+    #
+    #     # Create the objects in the destination environment
+    #     print(json.dumps(tenant.json()))
+    #     # r = d_apic.post(tenant.json())
+    #     # if not r.ok:
+    #     #     return 400, {'message': 'Creating the network in the target environment failed. Revert Snapshots'}
+    #
+    #     # Delete the Subnet
+    #     s_subnet.delete()
+    #     print(json.dumps(subnet.json()))
+    #     # r = s_apic.post(s_subnet.json())
+    #     # if not r.ok:
+    #     #     return 400, {'message': 'Deleting the network from the source environment failed. Revert Snapshots'}
+    #
+    #     return None
+
+    def document_app_instances(self):
+        # Collect subnets
+        path = 'applications'
+
+        subnets = self.get(f'/api/mo/uni/tn-{self.env.Tenant}.json'
+                           f'?query-target=subtree&target-subtree-class={Subnet.class_}').json()['imdata']
+        subnets = [APICObject.load(_) for _ in subnets]
+
+        all_eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
+
+        gh = GithubAPI()
+
+        count = 0
+
+        for subnet in subnets:
+            count += 1
+            print(f'Processing subnet {count} of {len(subnets)}', end='\r')
+            cidr = IPv4Network(subnet.attributes.ip, strict=False)
+            eps = [_ for _ in all_eps
+                   if _.attributes.ip  # Asserts there is an IP associated with the endpoint
+                   if cidr.overlaps(IPv4Network(_.attributes.ip))  # Filter EPs to match the subnet of interest
+                   if '/epg-' in _.attributes.dn]  # Asserts the endpoint is an EPG endpoint
+
+            if eps:
+                epg_tenant, epg_ap, epg_name = EPG_DN_SEARCH.search(eps[0].attributes.dn).groups()
+                epg_dn = EPG_DN_SEARCH.search(eps[0].attributes.dn).group()
+                epg_tenant = re.search(r'/tn-([^/]+)', eps[0].attributes.dn).group(1)
+                inst_name = re.sub(r'(-web-|-app-|-dbs-)', '-', epg_name, flags=re.IGNORECASE).lower()
+                inst_name = re.sub(r'^epg-', '', inst_name).lower().replace('-', '_')
+                inst_name = f'{self.env.DataCenter}_{inst_name}'.lower()
+                ap_name = re.search(r'/ap-([^/]+)', eps[0].attributes.dn).group(1)
+                application = re.sub(r'^ap-', '', ap_name).lower().replace('-', '_')
+
+                # Collect bridge domain settings
+                epg = APICObject.load(self.get(f'/api/mo/{epg_dn}.json?rsp-subtree=full').json()['imdata'])
+                bd_name = epg.pop_child_class('fvRsBd')
+                bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=bd_name.attributes.tnFvBDName))
+                for attr in ['name', 'mac', 'vmac', 'dn', 'llAddr']:
+                    bd.attributes.__delattr__(attr)
+                subnet.remove_admin_props()
+                for attr in ['dn']:
+                    subnet.attributes.__delattr__(attr)
+
+                inst_def = {
+                    'epg': re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE),
+                    'epgDn': epg_dn,
+                    'application': application,
+                    'currentAZ': str(self),
+                    'environmentalTenant': next(_ for _ in dir(self.env) if self.env.__getattribute__(_) == epg_tenant),
+                    'networks': {
+                        subnet.attributes.ip: subnet.attributes.json()
+                    },
+                    'bdSettings': bd.attributes.json()
+                }
+
+                file_path = '/'.join([path, application, inst_name])
+
+                if gh.file_exists(file_path):
+                    content = json.loads(gh.get_file_content(file_path))
+                    app_inst = AppInstance(**content)
+                    app_inst.update(**inst_def)
+
+                    gh.update_file(file_path, f'{inst_name}_update',
+                                   json.dumps(app_inst.json(), indent=2, sort_keys=True))
+                else:
+                    app_inst = AppInstance(**inst_def)
+                    gh.add_file(file_path, f'{inst_name}_add', json.dumps(app_inst.json(), indent=2, sort_keys=True))
+
+        print()
+        return None
+
+
+class AppInstance:
+    epg: str
+    epgDn: str
+    application: str
+    environmentalTenant: str  # This will be the ACIEnvironment attribute name that resolves to the tenant name
+    currentAZ: APIC
+    originAZ: APIC
+    overrideAZ: APIC
+    bdSettings: dict
+    networks: dict
+    createTime: datetime
+    modifiedTime: datetime
+    __time_attrs = ['createTime', 'modifiedTime']
+    __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
+    __str_attrs = ['epg', 'epgDn', 'environmentalTenant', 'application']
+    __dict_attrs = ['networks', 'bdSettings']
+    __int_attrs = []
+
+    def __init__(self, **kwargs):
+        self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
+                           self.__int_attrs
+
+        for attr in self.__dict_attrs +  self.__str_attrs:
+            self.__setattr__(attr, kwargs.get(attr))
+
+        for attr in self.__time_attrs:
+            v = kwargs.get(attr)
+            if v:
+                self.__setattr__(attr, datetime.fromisoformat(v))
+            else:
+                self.__setattr__(attr, None)
+
+        for attr in self.__apic_attrs:
+            # self.__setattr__(attr, kwargs.get(attr))
+            v = kwargs.get(attr)
+            if v:
+                self.__setattr__(attr, v)
+            else:
+                self.__setattr__(attr, None)
+
+        if not self.createTime:
+            now = datetime.now()
+            self.createTime = now
+            self.modifiedTime = now
+
+        if not self.originAZ:
+            self.originAZ = APIC(env=str(self.currentAZ))
+
+        if not self.bdSettings:
+            self.bdSettings = {}
+
+        if not self.networks:
+            self.networks = {}
+
+    def update(self, **kwargs):
+        if kwargs['epgDn'] != self.epgDn:
+            raise NameError('The EPG distinguished name in the update data is not consistent with the AppInstance EPG '
+                            'distinguished name: %s != %s' % (kwargs['epg'], self.epg))
+
+        for k, v in kwargs.items():
+            if k not in self.__all_attrs:
+                continue
+            elif k in self.__dict_attrs:
+                self.__dict__.get(k).update(v)
+            elif k == 'originAZ':
+                continue  # Do not update originAZ using this method
+            elif k == 'overrideAZ':
+                self.overrideAZ = APIC(env=v)
+            else:
+                self.__setattr__(k, v)
+
+        self.modifiedTime = datetime.now()
+
+    def activate(self) -> None:
+        for attr in self.__apic_attrs:
+            if self.__getattribute__(attr):
+                self.__setattr__(attr, APIC(self.__getattribute__(attr)))
+
+    def deactivate(self) -> None:
+        for attr in self.__apic_attrs:
+            if self.__getattribute__(attr):
+                self.__setattr__(attr, str(self.__getattribute__(attr)))
+
+    def json(self):
+        output = {}
+        for attr in self.__all_attrs:
+            if attr in self.__time_attrs + self.__apic_attrs + self.__str_attrs:
+                output[attr] = (str(self.__dict__.get(attr)) if self.__dict__.get(attr) else None)
+            elif attr in self.__dict_attrs + self.__int_attrs:
+                output[attr] = self.__dict__.get(attr)
+
+        return output
+
 
 def update_vlan_spreadsheet():
     envs = json.load(open('data/ACIEnvironments.json'))
@@ -3300,7 +3706,7 @@ def create_new_epg(env: str, req_data: dict):
         # POST the AEP configuration to APIC
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
-    # TODO: Add processes to update CMDB or Waterpark
+    # TODO: Add processes to update Github
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
 
@@ -3724,8 +4130,8 @@ def add_new_leaf_pair(env: str, rack1: str, serial1: str, rack2: str, serial2: s
                                                                                 node_policy1.attributes.nodeId
                                                                                 )
         new_block2.attributes.dn = 'uni/fabric/maintgrp-%s/nodeblk-blk%s-%s' % (apic.env.EvensMaintenanceGroup,
-                                                                                node_policy1.attributes.nodeId,
-                                                                                node_policy1.attributes.nodeId
+                                                                                node_policy2.attributes.nodeId,
+                                                                                node_policy2.attributes.nodeId
                                                                                 )
 
         new_block1.create()
@@ -3810,7 +4216,7 @@ def get_aci_subnet_data(environment, ip: str):
     subnet = APICObject.load(apic.collect_subnets(ip=ip))
     # TODO: Add ability to process L3Out networks - l3extSubnet
 
-    if subnet.class_ == BD.class_:
+    if subnet.class_ == Subnet.class_:
         network = IPv4Network(subnet.attributes.ip, strict=False)
         eps = [APICObject.load(_) for _ in apic.collect_eps()]
         eps = [_ for _ in eps if network.overlaps(IPv4Network(_.attributes.ip))]

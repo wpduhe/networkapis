@@ -806,5 +806,49 @@
         ],
         "logging": "10.227.64.72",
         "timezone": "America/Kentucky/Louisville"
+    },
+    "XRDC-WSA-QA": {
+        "name": "XRDC-WSA",
+        "environments": {
+            "environment_qa": {
+                "internal_gateway": "10.129.200.97",
+                "external_gateway": "10.129.200.129",
+                "wsaList": [
+                    {
+                        "hostname": "XRDCUPPRX01CC",
+                        "mgmtIP": "10.27.31.101/25",
+                        "p1": "10.129.200.102/27",
+                        "p2": "10.129.200.134/27"
+                    },
+                    {
+                        "hostname": "XRDCUPPRX01DD",
+                        "mgmtIP": "10.27.31.102/25",
+                        "p1": "10.129.200.103/27",
+                        "p2": "10.129.200.135/27"
+                    }
+                ]
+            }
+        },
+        "snmpLocation": "XRDC",
+        "frdcRadius": false,
+        "mgmt_gateway": "10.27.31.1",
+        "dns": [
+            "10.129.1.29",
+            "10.227.128.203",
+            "10.65.1.29",
+            "10.226.128.203"
+        ],
+        "ntp": [
+            "10.26.10.100",
+            "10.90.10.100",
+            "10.154.10.100"
+        ],
+        "auth_servers": [
+            "corpadhca01.hca.corpad.net",
+            "corpadhca02.hca.corpad.net",
+            "orladhca02.hca.corpad.net"
+        ],
+        "logging": "10.237.64.26",
+        "timezone": "America/Chicago"
     }
 }
