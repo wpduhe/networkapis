@@ -2690,13 +2690,15 @@ class APIC:
 
     def document_app_instances(self):
         # Collect subnets
-        path = 'applications'
+        github_root_path = 'applications'
 
         subnets = self.get(f'/api/mo/uni/tn-{self.env.Tenant}.json'
                            f'?query-target=subtree&target-subtree-class={Subnet.class_}').json()['imdata']
         subnets = [APICObject.load(_) for _ in subnets]
 
         all_eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
+        # Filter out EPs without IP addresses and non-EPG EPs
+        all_eps = [_ for _ in all_eps if _.attributes.ip and '/epg-' in _.attributes.dn]
 
         gh = GithubAPI()
 
@@ -2707,24 +2709,20 @@ class APIC:
             print(f'Processing subnet {count} of {len(subnets)}', end='\r')
             cidr = IPv4Network(subnet.attributes.ip, strict=False)
             eps = [_ for _ in all_eps
-                   if _.attributes.ip  # Asserts there is an IP associated with the endpoint
-                   if cidr.overlaps(IPv4Network(_.attributes.ip))  # Filter EPs to match the subnet of interest
-                   if '/epg-' in _.attributes.dn]  # Asserts the endpoint is an EPG endpoint
+                   if cidr.overlaps(IPv4Network(_.attributes.ip))]  # Filter EPs to match the subnet of interest
 
             if eps:
+                orig_dn = EPG_DN_SEARCH.search(eps[0].attributes.dn).group()
                 epg_tenant, epg_ap, epg_name = EPG_DN_SEARCH.search(eps[0].attributes.dn).groups()
-                epg_dn = EPG_DN_SEARCH.search(eps[0].attributes.dn).group()
-                epg_tenant = re.search(r'/tn-([^/]+)', eps[0].attributes.dn).group(1)
-                inst_name = re.sub(r'(-web-|-app-|-dbs-)', '-', epg_name, flags=re.IGNORECASE).lower()
-                inst_name = re.sub(r'^epg-', '', inst_name).lower().replace('-', '_')
+                epg_name = re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE)
+                epg_dn = f'uni/tn-{epg_tenant}/ap-{epg_ap}/epg-{epg_name}'
+                inst_name = re.sub(r'^epg-', '', epg_name).lower().replace('-', '_')
                 inst_name = f'{self.env.DataCenter}_{inst_name}'.lower()
-                ap_name = re.search(r'/ap-([^/]+)', eps[0].attributes.dn).group(1)
-                application = re.sub(r'^ap-', '', ap_name).lower().replace('-', '_')
+                application = re.sub(r'^ap-', '', epg_ap).lower().replace('-', '_')
 
                 # Collect bridge domain settings
-                epg = APICObject.load(self.get(f'/api/mo/{epg_dn}.json?rsp-subtree=full').json()['imdata'])
-                bd_name = epg.pop_child_class('fvRsBd')
-                bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=bd_name.attributes.tnFvBDName))
+                rsbd = APICObject.load(self.get(f'/api/mo/{orig_dn}/rsbd.json').json()['imdata'])
+                bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=rsbd.attributes.tnFvBDName))
                 for attr in ['name', 'mac', 'vmac', 'dn', 'llAddr']:
                     bd.attributes.__delattr__(attr)
                 subnet.remove_admin_props()
@@ -2732,7 +2730,7 @@ class APIC:
                     subnet.attributes.__delattr__(attr)
 
                 inst_def = {
-                    'epg': re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE),
+                    'epg': epg_name,
                     'epgDn': epg_dn,
                     'application': application,
                     'currentAZ': str(self),
@@ -2743,7 +2741,7 @@ class APIC:
                     'bdSettings': bd.attributes.json()
                 }
 
-                file_path = '/'.join([path, application, inst_name])
+                file_path = '/'.join([github_root_path, application, inst_name])
 
                 if gh.file_exists(file_path):
                     content = json.loads(gh.get_file_content(file_path))
