@@ -2690,14 +2690,12 @@ class APIC:
 
     def document_app_instances(self):
         # Collect subnets
-        github_root_path = 'applications'
-
         subnets = self.get(f'/api/mo/uni/tn-{self.env.Tenant}.json'
                            f'?query-target=subtree&target-subtree-class={Subnet.class_}').json()['imdata']
         subnets = [APICObject.load(_) for _ in subnets]
 
+        # Get all EPs and filter out EPs without IP addresses and non-EPG EPs
         all_eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
-        # Filter out EPs without IP addresses and non-EPG EPs
         all_eps = [_ for _ in all_eps if _.attributes.ip and '/epg-' in _.attributes.dn]
 
         gh = GithubAPI()
@@ -2723,36 +2721,25 @@ class APIC:
                 # Collect bridge domain settings
                 rsbd = APICObject.load(self.get(f'/api/mo/{orig_dn}/rsbd.json').json()['imdata'])
                 bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=rsbd.attributes.tnFvBDName))
-                for attr in ['name', 'mac', 'vmac', 'dn', 'llAddr']:
-                    bd.attributes.__delattr__(attr)
                 subnet.remove_admin_props()
                 for attr in ['dn']:
                     subnet.attributes.__delattr__(attr)
 
-                inst_def = {
-                    'epg': epg_name,
-                    'epgDn': epg_dn,
-                    'application': application,
-                    'currentAZ': str(self),
-                    'environmentalTenant': next(_ for _ in dir(self.env) if self.env.__getattribute__(_) == epg_tenant),
-                    'networks': {
-                        subnet.attributes.ip: subnet.attributes.json()
-                    },
-                    'bdSettings': bd.attributes.json()
-                }
+                inst = AppInstance(epg=epg_name, epgDn=epg_dn, application=application, currentAZ=self.__str__(),
+                                   environmentalTenant=next(_ for _ in dir(self.env)
+                                                            if self.env.__getattribute__(_) == epg_tenant),
+                                   networks={subnet.attributes.ip: subnet.attributes.json()},
+                                   bdSettings=bd.attributes.json())
 
-                file_path = '/'.join([github_root_path, application, inst_name])
-
-                if gh.file_exists(file_path):
-                    content = json.loads(gh.get_file_content(file_path))
-                    app_inst = AppInstance(**content)
-                    app_inst.update(**inst_def)
-
-                    gh.update_file(file_path, f'{inst_name}_update',
-                                   json.dumps(app_inst.json(), indent=2, sort_keys=True))
+                if gh.file_exists(inst.path()):
+                    app_inst = AppInstance.load(inst.path())
+                    if app_inst.content() != inst.content():
+                        app_inst.update(**inst.json())
+                        gh.update_file(file_path=inst.path(), message=f'{inst_name}_update', content=app_inst.content())
+                    else:
+                        continue
                 else:
-                    app_inst = AppInstance(**inst_def)
-                    gh.add_file(file_path, f'{inst_name}_add', json.dumps(app_inst.json(), indent=2, sort_keys=True))
+                    gh.add_file(file_path=inst.path(), message=f'{inst}_add', content=inst.content())
 
         print()
         return None
@@ -2775,6 +2762,8 @@ class AppInstance:
     __str_attrs = ['epg', 'epgDn', 'environmentalTenant', 'application']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
+    GITHUB_PATH = 'applications'
+    __active: bool
 
     def __init__(self, **kwargs):
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
@@ -2804,13 +2793,53 @@ class AppInstance:
             self.modifiedTime = now
 
         if not self.originAZ:
-            self.originAZ = APIC(env=str(self.currentAZ))
+            self.originAZ = self.currentAZ
 
         if not self.bdSettings:
             self.bdSettings = {}
 
         if not self.networks:
             self.networks = {}
+
+        if isinstance(self.currentAZ, APIC):
+            self.__active = True
+        else:
+            self.__active = False
+
+    def __str__(self):
+        if not self.__active:
+            self.activate()
+
+        inst_name = re.sub(r'^epg-', '', self.epg).lower().replace('-', '_')
+        inst_name = f'{self.originAZ.env.DataCenter}_{inst_name}'.lower()
+
+        return inst_name
+
+    def activate(self) -> None:
+        for attr in self.__apic_attrs:
+            if self.__getattribute__(attr) and not isinstance(self.__getattribute__(attr), APIC):
+                self.__setattr__(attr, APIC(env=self.__getattribute__(attr)))
+
+        self.__active = True
+
+    def deactivate(self) -> None:
+        for attr in self.__apic_attrs:
+            if self.__getattribute__(attr):
+                self.__setattr__(attr, str(self.__getattribute__(attr)))
+
+        self.__active = False
+
+    def path(self):
+        return f'{self.GITHUB_PATH}/{self.application}/{self.__str__()}'
+
+    @classmethod
+    def load(cls, app_inst_path: str):
+        if not app_inst_path.startswith('%s/' % cls.GITHUB_PATH):
+            app_inst_path = f'{cls.GITHUB_PATH}/{app_inst_path}'
+        gh = GithubAPI()
+        c = gh.get_file_content(app_inst_path)
+        inst = cls(**json.loads(c))
+        return inst
 
     def update(self, **kwargs):
         if kwargs['epgDn'] != self.epgDn:
@@ -2825,24 +2854,23 @@ class AppInstance:
             elif k == 'originAZ':
                 continue  # Do not update originAZ using this method
             elif k == 'overrideAZ':
-                self.overrideAZ = APIC(env=v)
+                if v:
+                    self.overrideAZ = APIC(env=v)
+                else:
+                    self.overrideAZ = v
             else:
                 self.__setattr__(k, v)
 
         self.modifiedTime = datetime.now()
 
-    def activate(self) -> None:
-        for attr in self.__apic_attrs:
-            if self.__getattribute__(attr):
-                self.__setattr__(attr, APIC(self.__getattribute__(attr)))
-
-    def deactivate(self) -> None:
-        for attr in self.__apic_attrs:
-            if self.__getattribute__(attr):
-                self.__setattr__(attr, str(self.__getattribute__(attr)))
-
     def json(self):
         output = {}
+
+        # Filter out any unwanted Bridge Domain specifics
+        for k in list(self.bdSettings.keys()):
+            if k in ['name', 'mac', 'vmac', 'dn', 'llAddr']:
+                _ = self.bdSettings.pop(k)
+
         for attr in self.__all_attrs:
             if attr in self.__time_attrs + self.__apic_attrs + self.__str_attrs:
                 output[attr] = (str(self.__dict__.get(attr)) if self.__dict__.get(attr) else None)
@@ -2850,6 +2878,10 @@ class AppInstance:
                 output[attr] = self.__dict__.get(attr)
 
         return output
+
+    def content(self):
+        """Returns standard output for dumping into a file"""
+        return json.dumps(self.json(), indent=2, sort_keys=True)
 
 
 def update_vlan_spreadsheet():
@@ -3704,7 +3736,20 @@ def create_new_epg(env: str, req_data: dict):
         # POST the AEP configuration to APIC
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
-    # TODO: Add processes to update Github
+    # Add the instance to Github
+    inst = AppInstance(application=re.sub(r'^ap-', '', ap.attributes.name).lower().replace('-', '_'),
+                       bdSettings=bd.attributes.json(),
+                       currentAZ=apic.__str__(),
+                       environmentalTenant=next(_ for _ in dir(apic.env)
+                                                if apic.env.__getattribute__(_) == tn.attributes.name),
+                       epg=epg.attributes.name,
+                       epgDn=g_epg.attributes.dn,
+                       networks={f'{gateway}/{network.prefixlen}': {}},
+                       originAZ=str(apic),
+                       overrideAZ=None)
+
+    gh = GithubAPI()
+    gh.add_file(file_path=inst.path(), message=f'{inst.__str__()}_add', content=inst.content())
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
 
