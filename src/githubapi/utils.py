@@ -18,7 +18,7 @@ class GithubAPI:
             self.repo = next(repo for repo in self.gh.get_user().get_repos()
                              if repo.full_name == 'HCANetworkServices/Network_APIs_Data')
 
-        print(f'Repository set to {self.repo.full_name}')
+        # print(f'Repository set to {self.repo.full_name}')
 
     def set_repo(self, repo: str):
         self.repo = next(set_repo for set_repo in self.gh.get_user().get_repos() if set_repo.name == repo)
