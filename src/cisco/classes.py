@@ -31,6 +31,9 @@ class Container:
         if self.__type == CDPNeighbor:
             data = [x.__dict__ for x in self]
             data.sort(key=lambda x: x['platform'])
+        elif self.__type == Interface:
+            data = [x.__dict__ for x in self]
+            data.sort(key=lambda x: x['name'])
         else:
             data = [x.__dict__ for x in self]
 
