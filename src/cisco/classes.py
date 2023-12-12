@@ -28,8 +28,12 @@ class Container:
         return len(list(self.__iter__()))
 
     def __json__(self):
-        data = [x.__dict__ for x in self]
-        data.sort(key=lambda x: x['platform'])
+        if self.__type == CDPNeighbor:
+            data = [x.__dict__ for x in self]
+            data.sort(key=lambda x: x['platform'])
+        else:
+            data = [x.__dict__ for x in self]
+
         return data
 
 
