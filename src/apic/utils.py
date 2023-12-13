@@ -94,6 +94,8 @@ class ACIJob:
 
 
 class APIC:
+    PLACEHOLDERS = 'aep-Placeholders'
+
     def __init__(self, env: str=None, ip: str=None, username: str=None, password: str=None,
                  use_key: str=OSP_AUTOMATION_KEY):
         if env:
@@ -2754,22 +2756,29 @@ class AppInstance:
     originAZ: APIC
     overrideAZ: APIC
     bdSettings: dict
+    name: str
     networks: dict
     createTime: datetime
     modifiedTime: datetime
     __time_attrs = ['createTime', 'modifiedTime']
     __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
-    __str_attrs = ['epg', 'epgDn', 'environmentalTenant', 'application']
+    __str_attrs = ['epg', 'epgDn', 'environmentalTenant', 'application', 'name']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
     GITHUB_PATH = 'applications'
-    __active: bool
+    __active = True
 
     def __init__(self, **kwargs):
+        assert 'name' and 'application' and 'environmentalTenant' in kwargs
+
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
                            self.__int_attrs
 
         for attr in self.__dict_attrs +  self.__str_attrs:
+            if attr == 'name' or attr == 'application':
+                value = self.format_name(kwargs.get(attr))
+                self.__setattr__(attr, value)
+                continue
             self.__setattr__(attr, kwargs.get(attr))
 
         for attr in self.__time_attrs:
@@ -2783,7 +2792,7 @@ class AppInstance:
             # self.__setattr__(attr, kwargs.get(attr))
             v = kwargs.get(attr)
             if v:
-                self.__setattr__(attr, v)
+                self.__setattr__(attr, APIC(env=v))
             else:
                 self.__setattr__(attr, None)
 
@@ -2801,19 +2810,16 @@ class AppInstance:
         if not self.networks:
             self.networks = {}
 
-        if isinstance(self.currentAZ, APIC):
-            self.__active = True
-        else:
-            self.__active = False
+        # if isinstance(self.currentAZ, APIC):
+        #     self.__active = True
+        # else:
+        #     self.__active = False
 
     def __str__(self):
         if not self.__active:
             self.activate()
 
-        inst_name = re.sub(r'^epg-', '', self.epg).lower().replace('-', '_')
-        inst_name = f'{self.originAZ.env.DataCenter}_{inst_name}'.lower()
-
-        return inst_name
+        return f'{self.originAZ.env.DataCenter}_{self.name}'.lower()
 
     def activate(self) -> None:
         for attr in self.__apic_attrs:
@@ -2830,7 +2836,9 @@ class AppInstance:
         self.__active = False
 
     def path(self):
-        return f'{self.GITHUB_PATH}/{self.application}/{self.__str__()}'
+        if not self.__active:
+            self.activate()
+        return f'{self.GITHUB_PATH}/{self.application}/{self}'
 
     @classmethod
     def load(cls, app_inst_path: str):
@@ -2863,6 +2871,14 @@ class AppInstance:
 
         self.modifiedTime = datetime.now()
 
+    def store(self):
+        gh = GithubAPI()
+
+        if gh.file_exists(self.path()):
+            gh.update_file(file_path=self.path(), message=f'{self}_update', content=self.content())
+        else:
+            gh.add_file(file_path=self.path(), message=f'{self}_add', content=self.content())
+
     def json(self):
         output = {}
 
@@ -2882,6 +2898,297 @@ class AppInstance:
     def content(self):
         """Returns standard output for dumping into a file"""
         return json.dumps(self.json(), indent=2, sort_keys=True)
+
+    @staticmethod
+    def format_name(name: str) -> str:
+        name = re.sub(r'^(ap-|epg-|bd-)', '', name).lower()
+        name = re.sub(r'\W+', '_', name)
+        return name
+
+    @staticmethod
+    def ap_name(name) -> str:
+        name = re.sub(r'^ap-', '', name, flags=re.IGNORECASE)
+        name = re.split(rf'[_\W]+', name.lower())
+        name = [_.capitalize() for _ in name]
+        name = '-'.join(name)
+        name = (name if name.startswith('ap-') else f'ap-{name}')
+        return name
+
+    @staticmethod
+    def epg_name(name) -> str:
+        name = re.sub(r'^epg-', '', name, flags=re.IGNORECASE)
+        name = re.split(r'[_\W]+', name.lower())
+        name = [_.capitalize() for _ in name]
+        name = '-'.join(name)
+        name = (name if name.startswith('epg-') else f'epg-{name}')
+        return name
+
+    def bd_name(self) -> str:
+        if not self.__active:
+            self.activate()
+        return f'{self.originAZ.env.DataCenter}_{self}'.lower()
+
+    def dn(self, override=False) -> str:
+        if not self.__active:
+            self.activate()
+
+        if override:
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.environmentalTenant)}/' \
+                   f'ap-{self.application}/epg-{self.__str__()}'
+        elif self.epgDn:
+            return self.epgDn
+        else:
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.environmentalTenant)}/' \
+                   f'ap-{self.application}/epg-{self.__str__()}'
+
+    def placeholder_mapping(self) -> dict:
+        if not self.__active:
+            self.activate()
+        t, a, e = EPG_DN_SEARCH.search(self.dn()).groups()
+        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=t, AP=a, EPG=e)
+        return mapping
+
+    @classmethod
+    def create_new_instance(cls, az: str, application: str, inst_name: str, no_of_ips: int, dmz: bool=False) ->\
+            Tuple[int, dict]:
+        """Create a new application instance"""
+        # Cleanse application and inst_name input
+        application = cls.format_name(application)
+        inst_name = cls.format_name(inst_name)
+
+        # Ensure instance does not yet exist
+        gh = GithubAPI()
+        if gh.file_exists(file_path=f'{cls.GITHUB_PATH}/{application}/{inst_name}'):
+            return 400, {'message': 'The specified application instance already exists'}
+
+        apic = APIC(env=az)
+
+        tenant = Tenant(name=(apic.env.__getattribute__('ADMZTenant') if dmz else apic.env.__getattribute__('Tenant')))
+        tenant.modify()
+
+        with BIG() as big:
+            network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
+                                                        name=inst_name, coid=int(apic.env.COID), asn=int(apic.env.ASN))
+
+        if not network:
+            return 400, {'message': f'{apic.env.Name} has no available network for the required number of IPs.'}
+
+        ipnetwork = IPv4Network(network.properties['CIDR'])
+
+        app_inst = cls(application=application,
+                       name=inst_name,
+                       epg=None,
+                       epgDn=None,
+                       currentAZ=apic,
+                       environmentalTenant=next(_ for _ in dir(apic.env)
+                                                if apic.env.__getattribute__(_) == tenant.attributes.name)
+                       )
+
+        ap = AP(name=app_inst.application)
+        ap.create_modify()
+
+        bd = BD(name=str(app_inst))
+        bd.create_modify()
+        if not dmz:
+            bd.to_l3_out(apic.env.L3OutCore)
+        bd.layer3()
+        bd.use_vrf(name=(apic.env.ADMZVRF if dmz else apic.env.VRF))
+
+        epg = EPG(name=app_inst.__str__())
+        epg.domain(apic.env.PhysicalDomain)
+        epg.assign_bd(bd.attributes.name)
+
+        subnet = Subnet()
+        subnet.attributes.ip = f'{ipnetwork.network_address + 1}/{ipnetwork.prefixlen}'
+
+        bd.children += [subnet]
+
+        tenant.children = [bd, ap]
+        ap.children = [epg]
+
+        app_inst.bdSettings = bd.attributes.json()
+        app_inst.networks = {subnet.attributes.ip: subnet.attributes.json()}
+
+        # Store instance before implementing in the fabric
+        gh.add_file(file_path=app_inst.path(), message=f'{app_inst}_add', content=app_inst.content())
+
+        # Create the APIC objects
+        r = apic.post(tenant.json())
+
+        if not r.ok:
+            return r.status_code, {'message': 'EPG creation failed',
+                                   'epg_dn': app_inst.dn(),
+                                   'apic_status': r.status_code,
+                                   'apic_json': r.json(),
+                                   'configuration': tenant.json()}
+
+        mapping = app_inst.placeholder_mapping()
+
+        _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
+
+        return 200, {'message': 'Application Instance creation successful',
+                     'epg_dn': app_inst.epgDn,
+                     'vlan': vlan['VLAN'],
+                     'application': app_inst.application}
+
+    @classmethod
+    def deploy_instance(cls, inst_path: str) -> Tuple[int, dict]:
+        """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
+        inst = cls.load(app_inst_path=inst_path)
+        inst.activate()
+
+        tenant = Tenant(name=(inst.originAZ.env.__getattribute__(inst.environmentalTenant)))
+        tenant.modify()
+
+        bd = BD()
+        bd.attributes = Attributes(**inst.bdSettings)
+        bd.attributes.name = str(inst)
+        bd.use_vrf(name=(inst.originAZ.env.VRF if inst.environmentalTenant == 'Tenant' else inst.originAZ.env.ADMZVRF))
+        if inst.environmentalTenant == 'Tenant':
+            bd.to_l3_out(name=inst.originAZ.env.L3OutCore)
+
+        ap = AP(name=inst.application)
+        ap.create_modify()
+
+        epg = EPG(name=str(inst))
+        epg.domain(name=inst.originAZ.env.PhysicalDomain)
+        epg.assign_bd(name=bd.attributes.name)
+
+        for network, settings in inst.networks.items():
+            subnet = Subnet()
+            subnet.attributes = Attributes(**settings)
+            bd.children += [subnet]
+
+        # Assemble configuration
+        tenant.children = [bd, ap]
+        ap.children = [epg]
+
+        r = inst.originAZ.post(tenant.json())
+
+        response = {'instance': inst.json(),
+                    'apic_response': r.json(),
+                    'configuration': tenant.json()
+                    }
+
+        if r.ok:
+            # Update instance settings
+            inst.epg = None
+            inst.epgDn = None
+
+            inst.currentAZ = inst.originAZ
+
+            inst.update(**inst.json())
+            inst.store()
+            inst.activate()
+
+            # Assign VLAN for the EPG
+            _ = APIC.assign_epg_to_aep(env=inst.originAZ.env.Name, mapping=inst.placeholder_mapping())
+            return r.status_code, dict(message='Application instance deployed', **response)
+        else:
+            return r.status_code, dict(message='Application instance deployment failed', **response)
+
+    @classmethod
+    def rebrand_instance(cls, application: str, inst_name: str, new_application: str, new_inst_name: str):
+        # TODO: Determine new location: new_application/new_inst_name
+        # TODO: Retrieve instance
+        # TODO: Determine new information to do with
+
+        new_application = cls.format_name(new_application)
+        new_inst_name = cls.format_name(new_inst_name)
+        new_epg = cls.epg_name(new_inst_name)
+
+        inst = cls.load(f'applications/{application}/{inst_name}')
+
+        new_inst = cls(**inst.__dict__)
+        new_inst.application = new_application
+
+        return 200, {'message': 'The application has been rebranded',
+                     'application': inst.application,
+                     'instance': inst.__str__(),
+                     'currentAZ': inst.currentAZ}
+
+    @classmethod
+    def move_instance(cls, app_inst_path: str, az: str):
+        inst = cls.load(app_inst_path=app_inst_path)
+
+        if inst.currentAZ.__str__().lower() == az.lower():
+            return 200, {'message': 'The application instance already exists in the specified AZ',
+                         'application': inst.application,
+                         'instance': inst.__str__(),
+                         'currentAZ': inst.currentAZ,
+                         'requestedAZ': az}
+        else:
+            inst.activate()
+
+        # Check to see if source environment is accessible.  If so, delete source networks
+        try:
+            snapshot = inst.currentAZ.snapshot(descr=f'{inst.__str__()}_move_az')
+            accessible = True
+        except ConnectionError:
+            snapshot = None
+            accessible = False
+
+        # if accessible:
+        #     # Delete networks from the source environment
+        #     for s in inst.networks:
+        #         subnet = APICObject.load(inst.currentAZ.collect_subnets(ip=s.split('/')[0]))
+        #         subnet.delete()
+        #         inst.currentAZ.post(subnet.json())
+
+        # Create the networks in the new environment
+        apic = APIC(env=az)
+        _, epg_ap, epg_name = EPG_DN_SEARCH.search(inst.epgDn).groups()
+        tenant = Tenant(name=apic.env.__getattribute__(inst.environmentalTenant))
+        bd = BD(name=inst.epg.replace('epg-', 'bd-'), **inst.bdSettings)
+        bd.create_modify()
+        if inst.environmentalTenant == 'Tenant':
+            bd.to_l3_out(apic.env.L3OutCore)
+        bd.use_vrf(name=(apic.env.VRF if inst.environmentalTenant == 'Tenant' else apic.env.ADMZVRF))
+
+        ap = AP(name=epg_ap)
+        epg = EPG(name=inst.epg)
+        epg.domain(apic.env.PhysicalDomain)
+        epg.assign_bd(name=bd.attributes.name)
+        for ip, settings in inst.networks.items():
+            subnet = Subnet(subnet=ip)
+            subnet.attributes = Attributes(**settings)
+            subnet.create_modify()
+            bd.children += [subnet]
+
+        # Assemble components
+        tenant.children = [bd, ap]
+        ap.children = [epg]
+
+        response = apic.post(tenant.json())
+        print(tenant.json())
+        mapping = {'AEP': 'aep-Placeholders', 'Tenant': tenant.attributes.name, 'AP': ap.attributes.name,
+                   'EPG': epg.attributes.name}
+        _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
+
+        if not response.ok:
+            return_data = {
+                'message': 'Instance move failed',
+                'configuration': tenant.json(),
+                'apic_json': response.json(),
+                'apic_status': response.status_code,
+                'snapshot': snapshot,
+                'vlan': None
+            }
+        else:
+            return_data = {
+                'message': 'Move Successful',
+                'configuration': tenant.json(),
+                'apic_json': response.json(),
+                'apic_status': response.status_code,
+                'snapshot': snapshot,
+                'vlan': vlan['VLAN']
+            }
+
+            # Update Github file
+            gh = GithubAPI()
+            gh.update_file(file_path=inst.path(), message='Instance Moved AZ', content=inst.content())
+
+        return response.status_code, return_data
 
 
 def update_vlan_spreadsheet():
