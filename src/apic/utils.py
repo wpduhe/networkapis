@@ -1,14 +1,3 @@
-import time
-import json
-import requests
-import random
-import os
-import openpyxl
-import socket
-import io
-import urllib3
-import logging
-import string
 from typing import Tuple, List
 from base64 import b64encode
 from datetime import datetime
@@ -28,6 +17,17 @@ from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
 from itertools import groupby
 from operator import itemgetter
 from terraform.utils import Resource
+import time
+import json
+import requests
+import random
+import os
+import openpyxl
+import socket
+import io
+import urllib3
+import logging
+import string
 
 
 urllib3.disable_warnings()
@@ -49,7 +49,9 @@ EVENS = 'Evens'
 OOB = 'OOB'
 STAGING = 'Staging'
 
-EPG_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/ap-([^/]+)/epg-([^/]+)')
+EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
+BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/]+)')
+AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/]+)')
 
 
 def q_wcard(c, a, v) -> str:
@@ -2716,8 +2718,9 @@ class APIC:
                 epg_tenant, epg_ap, epg_name = EPG_DN_SEARCH.search(eps[0].attributes.dn).groups()
                 epg_name = re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE)
                 epg_dn = f'uni/tn-{epg_tenant}/ap-{epg_ap}/epg-{epg_name}'
-                inst_name = re.sub(r'^epg-', '', epg_name).lower().replace('-', '_')
-                inst_name = f'{self.env.DataCenter}_{inst_name}'.lower()
+                inst_name = AppInstance.format_name(epg_name)
+                # inst_name = re.sub(r'^epg-', '', epg_name).lower().replace('-', '_')
+                # inst_name = f'{self.env.DataCenter}_{inst_name}'.lower()
                 application = re.sub(r'^ap-', '', epg_ap).lower().replace('-', '_')
 
                 # Collect bridge domain settings
@@ -2728,6 +2731,7 @@ class APIC:
                     subnet.attributes.__delattr__(attr)
 
                 inst = AppInstance(epg=epg_name, epgDn=epg_dn, application=application, currentAZ=self.__str__(),
+                                   bdName=bd.attributes.name, apName=epg_ap, name=inst_name,
                                    environmentalTenant=next(_ for _ in dir(self.env)
                                                             if self.env.__getattribute__(_) == epg_tenant),
                                    networks={subnet.attributes.ip: subnet.attributes.json()},
@@ -2748,6 +2752,8 @@ class APIC:
 
 
 class AppInstance:
+    apName: str
+    bdName: str
     epg: str
     epgDn: str
     application: str
@@ -2762,17 +2768,16 @@ class AppInstance:
     modifiedTime: datetime
     __time_attrs = ['createTime', 'modifiedTime']
     __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
-    __str_attrs = ['epg', 'epgDn', 'environmentalTenant', 'application', 'name']
+    __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'environmentalTenant', 'application', 'name']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
     GITHUB_PATH = 'applications'
-    __active = True
 
     def __init__(self, **kwargs):
         assert 'name' and 'application' and 'environmentalTenant' in kwargs
 
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
-                           self.__int_attrs
+            self.__int_attrs
 
         for attr in self.__dict_attrs +  self.__str_attrs:
             if attr == 'name' or attr == 'application':
@@ -2789,7 +2794,6 @@ class AppInstance:
                 self.__setattr__(attr, None)
 
         for attr in self.__apic_attrs:
-            # self.__setattr__(attr, kwargs.get(attr))
             v = kwargs.get(attr)
             if v:
                 self.__setattr__(attr, APIC(env=v))
@@ -2810,34 +2814,22 @@ class AppInstance:
         if not self.networks:
             self.networks = {}
 
-        # if isinstance(self.currentAZ, APIC):
-        #     self.__active = True
-        # else:
-        #     self.__active = False
+        self.__activate()
+
+        if not self.name.startswith(f'{self.originAZ.env.DataCenter}_'.lower()):
+            self.name = f'{self.originAZ.env.DataCenter}_{self.name}'.lower()
 
     def __str__(self):
-        if not self.__active:
-            self.activate()
+        self.__activate()
+        return self.name.lower()
 
-        return f'{self.originAZ.env.DataCenter}_{self.name}'.lower()
-
-    def activate(self) -> None:
+    def __activate(self) -> None:
         for attr in self.__apic_attrs:
             if self.__getattribute__(attr) and not isinstance(self.__getattribute__(attr), APIC):
                 self.__setattr__(attr, APIC(env=self.__getattribute__(attr)))
 
-        self.__active = True
-
-    def deactivate(self) -> None:
-        for attr in self.__apic_attrs:
-            if self.__getattribute__(attr):
-                self.__setattr__(attr, str(self.__getattribute__(attr)))
-
-        self.__active = False
-
     def path(self):
-        if not self.__active:
-            self.activate()
+        self.__activate()
         return f'{self.GITHUB_PATH}/{self.application}/{self}'
 
     @classmethod
@@ -2845,9 +2837,12 @@ class AppInstance:
         if not app_inst_path.startswith('%s/' % cls.GITHUB_PATH):
             app_inst_path = f'{cls.GITHUB_PATH}/{app_inst_path}'
         gh = GithubAPI()
-        c = gh.get_file_content(app_inst_path)
-        inst = cls(**json.loads(c))
-        return inst
+        if gh.file_exists(app_inst_path):
+            c = gh.get_file_content(app_inst_path)
+            inst = cls(**json.loads(c))
+            return inst
+        else:
+            raise NameError('The application instance does not exist: %s' % app_inst_path)
 
     def update(self, **kwargs):
         if kwargs['epgDn'] != self.epgDn:
@@ -2872,6 +2867,8 @@ class AppInstance:
         self.modifiedTime = datetime.now()
 
     def store(self):
+        self.modifiedTime = datetime.now()
+
         gh = GithubAPI()
 
         if gh.file_exists(self.path()):
@@ -2884,7 +2881,7 @@ class AppInstance:
 
         # Filter out any unwanted Bridge Domain specifics
         for k in list(self.bdSettings.keys()):
-            if k in ['name', 'mac', 'vmac', 'dn', 'llAddr']:
+            if k in ['name', 'mac', 'vmac', 'dn', 'llAddr', 'status']:
                 _ = self.bdSettings.pop(k)
 
         for attr in self.__all_attrs:
@@ -2905,32 +2902,8 @@ class AppInstance:
         name = re.sub(r'\W+', '_', name)
         return name
 
-    @staticmethod
-    def ap_name(name) -> str:
-        name = re.sub(r'^ap-', '', name, flags=re.IGNORECASE)
-        name = re.split(rf'[_\W]+', name.lower())
-        name = [_.capitalize() for _ in name]
-        name = '-'.join(name)
-        name = (name if name.startswith('ap-') else f'ap-{name}')
-        return name
-
-    @staticmethod
-    def epg_name(name) -> str:
-        name = re.sub(r'^epg-', '', name, flags=re.IGNORECASE)
-        name = re.split(r'[_\W]+', name.lower())
-        name = [_.capitalize() for _ in name]
-        name = '-'.join(name)
-        name = (name if name.startswith('epg-') else f'epg-{name}')
-        return name
-
-    def bd_name(self) -> str:
-        if not self.__active:
-            self.activate()
-        return f'{self.originAZ.env.DataCenter}_{self}'.lower()
-
     def dn(self, override=False) -> str:
-        if not self.__active:
-            self.activate()
+        self.__activate()
 
         if override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.environmentalTenant)}/' \
@@ -2942,8 +2915,7 @@ class AppInstance:
                    f'ap-{self.application}/epg-{self.__str__()}'
 
     def placeholder_mapping(self) -> dict:
-        if not self.__active:
-            self.activate()
+        self.__activate()
         t, a, e = EPG_DN_SEARCH.search(self.dn()).groups()
         mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=t, AP=a, EPG=e)
         return mapping
@@ -2977,8 +2949,6 @@ class AppInstance:
 
         app_inst = cls(application=application,
                        name=inst_name,
-                       epg=None,
-                       epgDn=None,
                        currentAZ=apic,
                        environmentalTenant=next(_ for _ in dir(apic.env)
                                                 if apic.env.__getattribute__(_) == tenant.attributes.name)
@@ -3035,7 +3005,6 @@ class AppInstance:
     def deploy_instance(cls, inst_path: str) -> Tuple[int, dict]:
         """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
         inst = cls.load(app_inst_path=inst_path)
-        inst.activate()
 
         tenant = Tenant(name=(inst.originAZ.env.__getattribute__(inst.environmentalTenant)))
         tenant.modify()
@@ -3079,7 +3048,6 @@ class AppInstance:
 
             inst.update(**inst.json())
             inst.store()
-            inst.activate()
 
             # Assign VLAN for the EPG
             _ = APIC.assign_epg_to_aep(env=inst.originAZ.env.Name, mapping=inst.placeholder_mapping())
@@ -3118,7 +3086,7 @@ class AppInstance:
                          'currentAZ': inst.currentAZ,
                          'requestedAZ': az}
         else:
-            inst.activate()
+            inst.__activate()
 
         # Check to see if source environment is accessible.  If so, delete source networks
         try:
