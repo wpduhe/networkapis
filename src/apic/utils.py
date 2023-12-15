@@ -2732,8 +2732,8 @@ class APIC:
 
                 inst = AppInstance(epg=epg_name, epgDn=epg_dn, application=application, currentAZ=self.__str__(),
                                    bdName=bd.attributes.name, apName=epg_ap, name=inst_name,
-                                   environmentalTenant=next(_ for _ in dir(self.env)
-                                                            if self.env.__getattribute__(_) == epg_tenant),
+                                   tenant=next(_ for _ in dir(self.env)
+                                               if self.env.__getattribute__(_) == epg_tenant),
                                    networks={subnet.attributes.ip: subnet.attributes.json()},
                                    bdSettings=bd.attributes.json())
 
@@ -2757,7 +2757,7 @@ class AppInstance:
     epg: str
     epgDn: str
     application: str
-    environmentalTenant: str  # This will be the ACIEnvironment attribute name that resolves to the tenant name
+    tenant: str
     currentAZ: APIC
     originAZ: APIC
     overrideAZ: APIC
@@ -2768,13 +2768,13 @@ class AppInstance:
     modifiedTime: datetime
     __time_attrs = ['createTime', 'modifiedTime']
     __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
-    __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'environmentalTenant', 'application', 'name']
+    __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'tenant', 'application', 'name']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
     GITHUB_PATH = 'applications'
 
     def __init__(self, **kwargs):
-        assert 'name' and 'application' and 'environmentalTenant' in kwargs
+        assert 'name' and 'application' and 'tenant' in kwargs
 
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
             self.__int_attrs
@@ -2905,13 +2905,10 @@ class AppInstance:
     def dn(self, override=False) -> str:
         self.__activate()
 
-        if override:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.environmentalTenant)}/' \
-                   f'ap-{self.application}/epg-{self.__str__()}'
-        elif self.epgDn:
+        if self.epgDn and not override:
             return self.epgDn
         else:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.environmentalTenant)}/' \
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/' \
                    f'ap-{self.application}/epg-{self.__str__()}'
 
     def placeholder_mapping(self) -> dict:
@@ -2950,7 +2947,7 @@ class AppInstance:
         app_inst = cls(application=application,
                        name=inst_name,
                        currentAZ=apic,
-                       environmentalTenant=next(_ for _ in dir(apic.env)
+                       tenant=next(_ for _ in dir(apic.env)
                                                 if apic.env.__getattribute__(_) == tenant.attributes.name)
                        )
 
@@ -2997,7 +2994,7 @@ class AppInstance:
         _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
 
         return 200, {'message': 'Application Instance creation successful',
-                     'epg_dn': app_inst.epgDn,
+                     'epg_dn': app_inst.dn(),
                      'vlan': vlan['VLAN'],
                      'application': app_inst.application}
 
@@ -3006,14 +3003,14 @@ class AppInstance:
         """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
         inst = cls.load(app_inst_path=inst_path)
 
-        tenant = Tenant(name=(inst.originAZ.env.__getattribute__(inst.environmentalTenant)))
+        tenant = Tenant(name=(inst.originAZ.env.__getattribute__(inst.tenant)))
         tenant.modify()
 
         bd = BD()
         bd.attributes = Attributes(**inst.bdSettings)
         bd.attributes.name = str(inst)
-        bd.use_vrf(name=(inst.originAZ.env.VRF if inst.environmentalTenant == 'Tenant' else inst.originAZ.env.ADMZVRF))
-        if inst.environmentalTenant == 'Tenant':
+        bd.use_vrf(name=(inst.originAZ.env.VRF if inst.tenant == 'Tenant' else inst.originAZ.env.ADMZVRF))
+        if inst.tenant == 'Tenant':
             bd.to_l3_out(name=inst.originAZ.env.L3OutCore)
 
         ap = AP(name=inst.application)
@@ -3043,7 +3040,6 @@ class AppInstance:
             # Update instance settings
             inst.epg = None
             inst.epgDn = None
-
             inst.currentAZ = inst.originAZ
 
             inst.update(**inst.json())
@@ -3055,25 +3051,21 @@ class AppInstance:
         else:
             return r.status_code, dict(message='Application instance deployment failed', **response)
 
-    @classmethod
-    def rebrand_instance(cls, application: str, inst_name: str, new_application: str, new_inst_name: str):
-        # TODO: Determine new location: new_application/new_inst_name
-        # TODO: Retrieve instance
-        # TODO: Determine new information to do with
-
-        new_application = cls.format_name(new_application)
-        new_inst_name = cls.format_name(new_inst_name)
-        new_epg = cls.epg_name(new_inst_name)
-
-        inst = cls.load(f'applications/{application}/{inst_name}')
-
-        new_inst = cls(**inst.__dict__)
-        new_inst.application = new_application
-
-        return 200, {'message': 'The application has been rebranded',
-                     'application': inst.application,
-                     'instance': inst.__str__(),
-                     'currentAZ': inst.currentAZ}
+    # def rebrand_to_default(self):
+    #     """Rebrands all APIC Objects to meet AppInstance defaults, except for rebranding the BD"""
+    #     if self.apName or self.bdName or self.epg or self.epgDn:
+    #         dn = f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.apName}/' \
+    #              f'epg-{self.epg}'
+    #         # Attempt to get EPG using assembled dn
+    #         epg = self.currentAZ.get(f'/api/mo/{dn}.json?rsp-subtree=full').json()
+    #         if not 0 < int(epg['totalCount']) < 2:
+    #             raise Exception('This is not working for me')
+    #         else:
+    #             epg = APICObject.load(epg['imdata'])
+    #
+    #         new_dn = self.dn(override=True)
+    #
+    #         _ = self.currentAZ.rebrand_epg_bd(old_epg_dn=epg.attributes.dn, new_epg_dn=new_dn)
 
     @classmethod
     def move_instance(cls, app_inst_path: str, az: str):
@@ -3106,12 +3098,12 @@ class AppInstance:
         # Create the networks in the new environment
         apic = APIC(env=az)
         _, epg_ap, epg_name = EPG_DN_SEARCH.search(inst.epgDn).groups()
-        tenant = Tenant(name=apic.env.__getattribute__(inst.environmentalTenant))
+        tenant = Tenant(name=apic.env.__getattribute__(inst.tenant))
         bd = BD(name=inst.epg.replace('epg-', 'bd-'), **inst.bdSettings)
         bd.create_modify()
-        if inst.environmentalTenant == 'Tenant':
+        if inst.tenant == 'Tenant':
             bd.to_l3_out(apic.env.L3OutCore)
-        bd.use_vrf(name=(apic.env.VRF if inst.environmentalTenant == 'Tenant' else apic.env.ADMZVRF))
+        bd.use_vrf(name=(apic.env.VRF if inst.tenant == 'Tenant' else apic.env.ADMZVRF))
 
         ap = AP(name=epg_ap)
         epg = EPG(name=inst.epg)
@@ -4015,7 +4007,7 @@ def create_new_epg(env: str, req_data: dict):
     inst = AppInstance(application=re.sub(r'^ap-', '', ap.attributes.name).lower().replace('-', '_'),
                        bdSettings=bd.attributes.json(),
                        currentAZ=apic.__str__(),
-                       environmentalTenant=next(_ for _ in dir(apic.env)
+                       tenant=next(_ for _ in dir(apic.env)
                                                 if apic.env.__getattribute__(_) == tn.attributes.name),
                        epg=epg.attributes.name,
                        epgDn=g_epg.attributes.dn,
