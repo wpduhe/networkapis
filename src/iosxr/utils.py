@@ -1,6 +1,7 @@
 from cisco.classes import *
 from netmiko.cisco.cisco_xr import CiscoXrSSH
 from ipaddress import IPv4Network
+from typing import List
 import re
 import os
 import json
@@ -35,6 +36,7 @@ class Route:
 
 class IOSXR:
     routes = None
+
     def __init__(self, hostname: str, username: str=None, password: str=None):
         device = {
             'host': hostname,
@@ -141,6 +143,16 @@ class IOSXR:
         output = self.session.send_command(f'show route vrf {vrf} {ip}')
         route = Route(route=output, vrf=vrf)
         return route
+
+    def find_a_slash_16(self) -> List[IPv4Network]:
+        base = [IPv4Network(f'10.{i}.0.0/16') for i in range(256)]
+        networks = []
+        for i in base:
+            output = self.session.send_command(f'show route vrf hca longer-prefixes {i}')
+            if 'No matching routes found' in output:
+                networks.append(i)
+
+        return networks
 
     def bgp_lookup(self, route: Route):
         if route.protocol not in ['ibgp', 'ebgp']:
