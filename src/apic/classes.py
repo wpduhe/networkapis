@@ -178,6 +178,9 @@ class APICObject:
         else:
             return None
 
+    def get_child_class_iter(self, class_):
+        return [c for c in self.children if c.class_ == class_]
+
     def get_child_tdn(self, dn: str):
         try:
             child = next(c for c in self.children if c.attributes.tdn == dn)
@@ -271,6 +274,9 @@ class GenericClass:
             return child
         else:
             return None
+
+    def get_child_class_iter(self, class_):
+        return [c for c in self.children if c.class_ == class_]
 
     def remove_admin_props(self):
         self.attributes.remove_admin_props()
