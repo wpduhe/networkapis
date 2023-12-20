@@ -69,7 +69,8 @@ class Attributes:
         admin_props = [
             'modTs', 'lcOwn', 'uid', 'monPolDn', 'extMngdBy', 'ownerKey', 'ownerTag', 'lastStateModTs', 'state',
             'unixUserId', 'rn', 'pwdChangeIntervalBegin', 'pwdChangedDate', 'expState', 'fingerprint',
-            'certificateDecodeInformation', 'certdn', 'certValidUntil', 'rType', 'stateQual', 'tType', 'tCl'
+            'certificateDecodeInformation', 'certdn', 'certValidUntil', 'rType', 'stateQual', 'tType', 'tCl',
+            'configSt', 'isSharedSrvMsiteEPg', 'pcTag'
         ]
         for _ in admin_props:
             try:
