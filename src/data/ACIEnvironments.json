@@ -312,8 +312,7 @@
             "PhysicalDomain": "phy-dom-HODC",
             "FirewallAEP": "aep-ADMZ-FW-Backside",
             "Subnets": [
-                "10.192.216.0/21",
-                "10.192.224.0/20"
+                "10.192.216.0/21"
             ],
             "ADMZSubnets": [],
             "OOBLeafIPRange": "10.192.209.0/25",
@@ -432,6 +431,52 @@
             "BLF101Location": "F27",
             "BLF102Location": "F27",
             "IPSupernet": "10.234.160.0/23"
+        },
+        {
+            "Name": "QOL-AZ2",
+            "DREnv": null,
+            "DataCenter": "BDG4",
+            "F5ProdEnvironment": "XRDC QOL",
+            "F5QAEnvironment": "XRDC QOL",
+            "ADMZDomain": "Lab",
+            "ADMZPolicy": "QOL-AZ2",
+            "IPAddress": "10.31.254.7",
+            "DNSName": "qol-az2-apic.app.medcity.net",
+            "L3OutCore": "l3-QOL-Core",
+            "L3OutCore_EPG": "epg-External-Networks",
+            "L3OutADMZ": "",
+            "L3OutADMZ_EPG": "",
+            "Tenant": "QOLab",
+            "ADMZTenant": "tn-ADMZ",
+            "ASN": "65500",
+            "COID": "99934",
+            "VRF": "QOLab_VRF",
+            "ADMZVRF": "vrf-NotRouted",
+            "PhysicalDomain": "phy-dom-QOL",
+            "FirewallAEP": "aep-ADMZ-FW-Backside",
+            "Subnets": [
+            ],
+            "ADMZSubnets": [],
+            "OOBLeafIPRange": "10.31.254.0/27",
+            "OOBLeafGateway": "10.31.254.1",
+            "LeafDNSTemplate": "naxdc-aclf-#-q-h.xdc.na.mgmt.medcity.net",
+            "FirmwareGroup": "ACI-Fabric",
+            "EvensMaintenanceGroup": "Evens",
+            "OddsMaintenanceGroup": "Odds",
+            "OOBMaintenanceGroup": "OOB",
+            "StagingMaintenanceGroup": "Staging",
+            "OOBLeafProfile": "OOB-Leafs",
+            "DataLeafSeries": 100,
+            "MgmtLeafSeries": 300,
+            "InitLeaf": 101,
+            "PrimaryDNS": "10.26.31.125",
+            "SecondaryDNS": "10.154.10.5",
+            "TertiaryDNS": "10.26.10.37",
+            "PreferredNTP": "10.26.10.100",
+            "SyslogDest": "10.27.22.89",
+            "BLF101Location": "QOL",
+            "BLF102Location": "QOL",
+            "IPSupernet": "10.28.0.0/16"
         }
     ]
 }
