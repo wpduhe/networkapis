@@ -122,8 +122,11 @@ class APIC:
         self.version = GenericClass.load(json.loads(self.get('/api/class/firmwareCtrlrFwP.json').text)['imdata'][0])
         self.version = self.version.attributes.version.replace('apic-', '')
 
-        init_leaf = APICObject.load(self.collect_nodes(node_id=self.env.InitLeaf))
-        self.leaf_version = init_leaf.attributes.version.replace('n9000-1', '')
+        if self.env:
+            init_leaf = APICObject.load(self.collect_nodes(node_id=self.env.InitLeaf))
+            self.leaf_version = init_leaf.attributes.version.replace('n9000-1', '')
+        else:
+            self.leaf_version = None
 
     def __enter__(self):
         return self
@@ -881,6 +884,71 @@ class APIC:
 
         return response
     
+    def get_vlan_data(self, vlan=None, epg=None, aep=None):
+        """
+        :rtype: dict if vlan is not None: list
+        :param vlan:
+        :param epg:
+        :param aep:
+        :return:
+        """
+        if_conn = [APICObject.load(_) for _ in self.get('/api/class/fvIfConn.json').json()['imdata']]
+        func_to_epg = [APICObject.load(_) for _ in self.get('/api/class/infraRsFuncToEpg.json').json()['imdata']]
+
+        if_conn = [_ for _ in if_conn if re.search(r'vlan-\d+', _.attributes.encap)]
+
+        for record in if_conn:
+            # record.encap = int(record['fvIfConn']['attributes']['encap'].replace('vlan-', ''))
+            record.encap = int(re.search(r'\d+', record.attributes.encap).group())
+            # record['fvIfConn']['attributes']['object'] = \
+            #     re.search('tn[-A-Za-z_/0-9]+', record['fvIfConn']['attributes']['dn']).group()
+            # print(record.attributes.dn)
+            record.object = re.search(r'\[(uni/tn-[^]]+)', record.attributes.dn)
+            record.aep = re.search(r'attEntitypathatt-\[([^]]+)', record.attributes.dn)
+
+        for record in func_to_epg:
+            # record['infraRsFuncToEpg']['attributes']['encap'] = \
+            #     int(record['infraRsFuncToEpg']['attributes']['encap'].replace('vlan-', ''))
+            record.encap = int(re.search(r'\d+', record.attributes.encap).group())
+            # record['infraRsFuncToEpg']['attributes']['object'] = \
+            #     re.search('tn.*', record['infraRsFuncToEpg']['attributes']['tDn']).group()
+            record.object = re.search(r'\[(uni/tn-[^]]+)', record.attributes.dn)
+            record.aep = AEP_DN_SEARCH.search(record.attributes.dn)
+
+        vlan_dict = {each.encap: {'Consumers': set(), 'AEPs': set()} for each in if_conn + func_to_epg}
+
+        for record in if_conn + func_to_epg:
+            if record.object:
+                vlan_dict[record.encap]['Consumers'].add(record.object.group(1))
+            if record.aep:
+                vlan_dict[record.encap]['AEPs'].add(record.aep.group(1))
+
+        for key in vlan_dict:
+            vlan_dict[key]['Consumers'] = list(vlan_dict[key]['Consumers'])
+            vlan_dict[key]['AEPs'] = list(vlan_dict[key]['AEPs'])
+
+        if vlan is not None:
+            try:
+                return {vlan: vlan_dict[vlan]}
+            except KeyError:
+                return 'VLAN Is Not Used'
+        elif epg is not None:
+            try:
+                return list(({key: vlan_dict[key]} for key in vlan_dict
+                             for entry in vlan_dict[key]['Consumers']
+                             if re.search(f'{epg}$', entry)))
+            except StopIteration:
+                return ['VLAN Not Found for Endpoint Group']
+        elif aep is not None:
+            try:
+                return list(({key: vlan_dict[key]} for key in vlan_dict
+                             for entry in vlan_dict[key]['AEPs']
+                             if aep in entry))
+            except StopIteration:
+                return ['No VLANs Not Found on Port Template']
+        else:
+            return vlan_dict
+
     def get_nondr_vlans(self):
         func_to_epg = self.class_dn_search(object_class='infraRsFuncToEpg', filter_string='', config_only=True)
 
@@ -904,7 +972,7 @@ class APIC:
 
         return response
 
-    def get_vlan_data(self, vlan=None, epg=None, aep=None):
+    def get_vlan_data_old(self, vlan=None, epg=None, aep=None):
         """
         :rtype: dict if vlan is not None: list
         :param vlan:
@@ -2473,7 +2541,7 @@ class APIC:
 
         # Collect all bridge domains from production and ADMZ tenants
         bds = [APICObject.load(_) for _ in self.collect_bds()]
-        bds = [bd for bd in bds if re.search(r'tn-([^/]+)', bd.attributes.dn).group(1) in [self.env.Tenant, 
+        bds = [bd for bd in bds if re.search(r'tn-([^/]+)', bd.attributes.dn).group(1) in [self.env.Tenant,
                                                                                            self.env.ADMZTenant]]
         all_bds = set(bd.attributes.dn for bd in bds)
 
@@ -2752,6 +2820,8 @@ class APIC:
 
 
 class AppInstance:
+    ADMZTENANT = 'ADMZTenant'
+    TENANT = 'Tenant'
     apName: str
     bdName: str
     epg: str
@@ -2766,6 +2836,7 @@ class AppInstance:
     networks: dict
     createTime: datetime
     modifiedTime: datetime
+    __naming_attrs = ['apName', 'bdName', 'epg', 'epgDn']
     __time_attrs = ['createTime', 'modifiedTime']
     __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
     __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'tenant', 'application', 'name']
@@ -2779,7 +2850,7 @@ class AppInstance:
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
             self.__int_attrs
 
-        for attr in self.__dict_attrs +  self.__str_attrs:
+        for attr in self.__dict_attrs + self.__str_attrs:
             if attr == 'name' or attr == 'application':
                 value = self.format_name(kwargs.get(attr))
                 self.__setattr__(attr, value)
@@ -2902,7 +2973,7 @@ class AppInstance:
         name = re.sub(r'\W+', '_', name)
         return name
 
-    def dn(self, override=False) -> str:
+    def epg_dn(self, override: bool=False) -> str:
         self.__activate()
 
         if self.epgDn and not override:
@@ -2911,11 +2982,74 @@ class AppInstance:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/' \
                    f'ap-{self.application}/epg-{self.__str__()}'
 
+    def bd_dn(self, override: bool=False) -> str:
+        self.__activate()
+
+        if override:
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self}'
+        else:
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self.bd_name()}'
+
+    def subnet_dn(self, network: str):
+        return f'{self.bd_dn()}/subnet-[{network}]'
+
+    def bd_name(self):
+        return self.bdName if self.bdName else str(self)
+
+    def epg_name(self):
+        return self.epg if self.epg else str(self)
+
+    def ap_name(self):
+        return self.apName if self.apName else self.application
+
     def placeholder_mapping(self) -> dict:
         self.__activate()
-        t, a, e = EPG_DN_SEARCH.search(self.dn()).groups()
+        t, a, e = EPG_DN_SEARCH.search(self.epg_dn()).groups()
         mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=t, AP=a, EPG=e)
         return mapping
+
+    def generate_config(self, origin_az: bool=False, defaults: bool=False, delete: bool=False):
+        az = (self.originAZ if origin_az else self.currentAZ)
+
+        tenant = Tenant(name=az.env.__getattribute__(self.tenant))
+        tenant.create_modify()
+
+        bd = (BD(**self.bdSettings) if self.bdSettings else BD())
+        if BD().json() == bd.json():
+            # Configure BD settings if none presently exist
+            bd.layer3()
+        bd.attributes.name = (str(self) if defaults else self.bd_name())
+        bd.use_vrf((az.env.VRF if self.tenant == self.TENANT else az.env.ADMZVRF))
+        if self.tenant == self.TENANT:
+            bd.to_l3_out(name=az.env.L3OutCore)
+        bd.create_modify()
+
+        ap = AP(name=(self.application if defaults else self.ap_name()))
+        ap.create_modify()
+
+        epg = EPG(name=(str(self) if defaults else self.epg_name()))
+        epg.domain(az.env.PhysicalDomain)
+        epg.assign_bd(name=bd.attributes.name)
+        if delete:
+            epg.delete()
+        else:
+            epg.create_modify()
+
+        for prefix, settings in self.networks.items():
+            subnet = Subnet()
+            subnet.attributes = (Attributes(**settings) if settings else Attributes(**subnet.attributes.json()))
+            subnet.attributes.ip = prefix
+            if delete:
+                subnet.delete()
+            else:
+                subnet.create_modify()
+
+            bd.children += [subnet]
+
+        tenant.children = [bd, ap]
+        ap.children = [epg]
+
+        return tenant
 
     @classmethod
     def create_new_instance(cls, az: str, application: str, inst_name: str, no_of_ips: int, dmz: bool=False) ->\
@@ -2932,9 +3066,6 @@ class AppInstance:
 
         apic = APIC(env=az)
 
-        tenant = Tenant(name=(apic.env.__getattribute__('ADMZTenant') if dmz else apic.env.__getattribute__('Tenant')))
-        tenant.modify()
-
         with BIG() as big:
             network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
                                                         name=inst_name, coid=int(apic.env.COID), asn=int(apic.env.ASN))
@@ -2943,38 +3074,23 @@ class AppInstance:
             return 400, {'message': f'{apic.env.Name} has no available network for the required number of IPs.'}
 
         ipnetwork = IPv4Network(network.properties['CIDR'])
+        gateway = ipnetwork.network_address + 1
 
         app_inst = cls(application=application,
                        name=inst_name,
                        currentAZ=apic,
-                       tenant=next(_ for _ in dir(apic.env)
-                                                if apic.env.__getattribute__(_) == tenant.attributes.name)
+                       tenant=(cls.ADMZTENANT if dmz else cls.TENANT),
+                       networks={f'{gateway}/{ipnetwork.prefixlen}': {}}
                        )
 
-        ap = AP(name=app_inst.application)
-        ap.create_modify()
+        tenant = app_inst.generate_config(origin_az=True)
 
-        bd = BD(name=str(app_inst))
-        bd.create_modify()
-        if not dmz:
-            bd.to_l3_out(apic.env.L3OutCore)
-        bd.layer3()
-        bd.use_vrf(name=(apic.env.ADMZVRF if dmz else apic.env.VRF))
-
-        epg = EPG(name=app_inst.__str__())
-        epg.domain(apic.env.PhysicalDomain)
-        epg.assign_bd(bd.attributes.name)
-
-        subnet = Subnet()
-        subnet.attributes.ip = f'{ipnetwork.network_address + 1}/{ipnetwork.prefixlen}'
-
-        bd.children += [subnet]
-
-        tenant.children = [bd, ap]
-        ap.children = [epg]
+        bd = tenant.get_child_class(BD.class_)
+        subnets = bd.get_child_class_iter(Subnet.class_)
 
         app_inst.bdSettings = bd.attributes.json()
-        app_inst.networks = {subnet.attributes.ip: subnet.attributes.json()}
+        for subnet in subnets:
+            app_inst.networks[subnet.attributes.ip] = subnet.attributes.json()
 
         # Store instance before implementing in the fabric
         gh.add_file(file_path=app_inst.path(), message=f'{app_inst}_add', content=app_inst.content())
@@ -2984,7 +3100,7 @@ class AppInstance:
 
         if not r.ok:
             return r.status_code, {'message': 'EPG creation failed',
-                                   'epg_dn': app_inst.dn(),
+                                   'epg_dn': app_inst.epg_dn(),
                                    'apic_status': r.status_code,
                                    'apic_json': r.json(),
                                    'configuration': tenant.json()}
@@ -2994,7 +3110,7 @@ class AppInstance:
         _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
 
         return 200, {'message': 'Application Instance creation successful',
-                     'epg_dn': app_inst.dn(),
+                     'epg_dn': app_inst.epg_dn(),
                      'vlan': vlan['VLAN'],
                      'application': app_inst.application}
 
@@ -3003,31 +3119,7 @@ class AppInstance:
         """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
         inst = cls.load(app_inst_path=inst_path)
 
-        tenant = Tenant(name=(inst.originAZ.env.__getattribute__(inst.tenant)))
-        tenant.modify()
-
-        bd = BD()
-        bd.attributes = Attributes(**inst.bdSettings)
-        bd.attributes.name = str(inst)
-        bd.use_vrf(name=(inst.originAZ.env.VRF if inst.tenant == 'Tenant' else inst.originAZ.env.ADMZVRF))
-        if inst.tenant == 'Tenant':
-            bd.to_l3_out(name=inst.originAZ.env.L3OutCore)
-
-        ap = AP(name=inst.application)
-        ap.create_modify()
-
-        epg = EPG(name=str(inst))
-        epg.domain(name=inst.originAZ.env.PhysicalDomain)
-        epg.assign_bd(name=bd.attributes.name)
-
-        for network, settings in inst.networks.items():
-            subnet = Subnet()
-            subnet.attributes = Attributes(**settings)
-            bd.children += [subnet]
-
-        # Assemble configuration
-        tenant.children = [bd, ap]
-        ap.children = [epg]
+        tenant = inst.generate_config(origin_az=True, defaults=True)
 
         r = inst.originAZ.post(tenant.json())
 
@@ -3038,8 +3130,9 @@ class AppInstance:
 
         if r.ok:
             # Update instance settings
-            inst.epg = None
-            inst.epgDn = None
+            for attr in cls.__naming_attrs:
+                inst.__setattr__(attr, None)
+
             inst.currentAZ = inst.originAZ
 
             inst.update(**inst.json())
@@ -3051,25 +3144,12 @@ class AppInstance:
         else:
             return r.status_code, dict(message='Application instance deployment failed', **response)
 
-    # def rebrand_to_default(self):
-    #     """Rebrands all APIC Objects to meet AppInstance defaults, except for rebranding the BD"""
-    #     if self.apName or self.bdName or self.epg or self.epgDn:
-    #         dn = f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.apName}/' \
-    #              f'epg-{self.epg}'
-    #         # Attempt to get EPG using assembled dn
-    #         epg = self.currentAZ.get(f'/api/mo/{dn}.json?rsp-subtree=full').json()
-    #         if not 0 < int(epg['totalCount']) < 2:
-    #             raise Exception('This is not working for me')
-    #         else:
-    #             epg = APICObject.load(epg['imdata'])
-    #
-    #         new_dn = self.dn(override=True)
-    #
-    #         _ = self.currentAZ.rebrand_epg_bd(old_epg_dn=epg.attributes.dn, new_epg_dn=new_dn)
-
     @classmethod
-    def move_instance(cls, app_inst_path: str, az: str):
+    def move_instance(cls, app_inst_path: str, az: str) -> Tuple[int, dict]:
         inst = cls.load(app_inst_path=app_inst_path)
+
+        src_az = APIC(env=inst.currentAZ.env.Name)
+        dst_az = APIC(env=az)
 
         if inst.currentAZ.__str__().lower() == az.lower():
             return 200, {'message': 'The application instance already exists in the specified AZ',
@@ -3077,78 +3157,112 @@ class AppInstance:
                          'instance': inst.__str__(),
                          'currentAZ': inst.currentAZ,
                          'requestedAZ': az}
-        else:
-            inst.__activate()
 
         # Check to see if source environment is accessible.  If so, delete source networks
         try:
-            snapshot = inst.currentAZ.snapshot(descr=f'{inst.__str__()}_move_az')
-            accessible = True
+            src_snapshot = inst.currentAZ.snapshot(descr=f'{inst}_move_az')
         except ConnectionError:
-            snapshot = None
-            accessible = False
+            src_snapshot = None
 
-        # if accessible:
-        #     # Delete networks from the source environment
-        #     for s in inst.networks:
-        #         subnet = APICObject.load(inst.currentAZ.collect_subnets(ip=s.split('/')[0]))
-        #         subnet.delete()
-        #         inst.currentAZ.post(subnet.json())
+        deletions = []
+
+        if src_snapshot:
+            # Get networks from the source environment
+            for network, settings in inst.networks.items():
+                r = inst.currentAZ.get(f'/api/mo/{inst.subnet_dn(network)}.json')
+                if int(r.json()['totalCount']):
+                    subnet = APICObject.load(r.json()['imdata'])
+                    subnet.delete()
+                    subnet.remove_admin_props()
+                    deletions.append(subnet)
+                else:
+                    return 404, {'message': f'Failed to collect {inst.subnet_dn(network)}'}
+
+            # Get the EPG
+            r = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json')
+            if int(r.json()['totalCount']):
+                epg = EPG(dn=inst.epg_dn())
+                epg.delete()
+                deletions.append(epg)
+            else:
+                return 404, {'message': f'Failed to collect {inst.epg_dn()}'}
+
+            # Determine usage of BD and whether it should be deleted
+            r = inst.currentAZ.get(f'/api/class/fvRsBd.json?query-target-filter=eq(fvRsBd.tDn,"{inst.bd_dn()}")')
+            if int(r.json()['totalCount']) == 1:
+                rsbd = APICObject.load(r.json()['imdata'])
+                if epg.attributes.dn == EPG_DN_SEARCH.search(rsbd.attributes.dn).group():
+                    bd = BD(dn=inst.bd_dn())
+                    bd.delete()
+                    deletions.append(bd)
+                else:
+                    # BD usage found does not match the instance EPG; take no action
+                    pass
+            else:
+                # BD is in use by more than one policy
+                pass
 
         # Create the networks in the new environment
-        apic = APIC(env=az)
-        _, epg_ap, epg_name = EPG_DN_SEARCH.search(inst.epgDn).groups()
-        tenant = Tenant(name=apic.env.__getattribute__(inst.tenant))
-        bd = BD(name=inst.epg.replace('epg-', 'bd-'), **inst.bdSettings)
-        bd.create_modify()
-        if inst.tenant == 'Tenant':
-            bd.to_l3_out(apic.env.L3OutCore)
-        bd.use_vrf(name=(apic.env.VRF if inst.tenant == 'Tenant' else apic.env.ADMZVRF))
+        # Change currentAZ to be the new AZ
+        inst.currentAZ = dst_az
+        dst_snapshot = inst.currentAZ.snapshot(descr=f'{inst}_move')
+        tenant = inst.generate_config(defaults=True)  # Because of this, naming attributes should be cleared
 
-        ap = AP(name=epg_ap)
-        epg = EPG(name=inst.epg)
-        epg.domain(apic.env.PhysicalDomain)
-        epg.assign_bd(name=bd.attributes.name)
-        for ip, settings in inst.networks.items():
-            subnet = Subnet(subnet=ip)
-            subnet.attributes = Attributes(**settings)
-            subnet.create_modify()
-            bd.children += [subnet]
+        create_resp = dst_az.post(configuration=tenant.json())
 
-        # Assemble components
-        tenant.children = [bd, ap]
-        ap.children = [epg]
+        deletion_results = []
 
-        response = apic.post(tenant.json())
-        print(tenant.json())
-        mapping = {'AEP': 'aep-Placeholders', 'Tenant': tenant.attributes.name, 'AP': ap.attributes.name,
-                   'EPG': epg.attributes.name}
-        _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
+        if create_resp.ok:
+            if src_snapshot:
+                for deletion in deletions:
+                    r = src_az.post(configuration=deletion.json())
+                    deletion_results += [r.status_code, r.json(), deletion.json()]
 
-        if not response.ok:
+        _, vlan = inst.currentAZ.assign_epg_to_aep(env=inst.currentAZ.env.Name, mapping=inst.placeholder_mapping())
+
+        if not create_resp.ok:
             return_data = {
                 'message': 'Instance move failed',
                 'configuration': tenant.json(),
-                'apic_json': response.json(),
-                'apic_status': response.status_code,
-                'snapshot': snapshot,
-                'vlan': None
+                'apic_json': create_resp.json(),
+                'apic_status': create_resp.status_code,
+                'src_snapshot': src_snapshot,
+                'dst_snapshot': dst_snapshot,
+                'deletions': deletion_results
             }
         else:
+            if src_snapshot:
+                for deletion in deletions:
+                    r = src_az.post(configuration=deletion.json())
+
+                    if deletion.class_ == Subnet.class_:
+                        if not r.ok:
+                            return 400, {
+                                'message': 'Instance move failed; failed to delete networks from source environment',
+                                'configuration': deletion.json(),
+                                'apic_json': r.json(),
+                                'apic_status': r.status_code,
+                                'src_snapshot': src_snapshot,
+                                'dst_snapshot': dst_snapshot,
+                                'deletions': deletion_results
+                            }
+
+            for attr in inst.__naming_attrs:
+                inst.__setattr__(attr, None)
+
             return_data = {
                 'message': 'Move Successful',
                 'configuration': tenant.json(),
-                'apic_json': response.json(),
-                'apic_status': response.status_code,
-                'snapshot': snapshot,
-                'vlan': vlan['VLAN']
+                'apic_json': create_resp.json(),
+                'apic_status': create_resp.status_code,
+                'snapshot': src_snapshot,
+                'deletions': deletion_results
             }
 
             # Update Github file
-            gh = GithubAPI()
-            gh.update_file(file_path=inst.path(), message='Instance Moved AZ', content=inst.content())
+            inst.store()
 
-        return response.status_code, return_data
+        return create_resp.status_code, return_data
 
 
 def update_vlan_spreadsheet():
@@ -4008,7 +4122,7 @@ def create_new_epg(env: str, req_data: dict):
                        bdSettings=bd.attributes.json(),
                        currentAZ=apic.__str__(),
                        tenant=next(_ for _ in dir(apic.env)
-                                                if apic.env.__getattribute__(_) == tn.attributes.name),
+                                   if apic.env.__getattribute__(_) == tn.attributes.name),
                        epg=epg.attributes.name,
                        epgDn=g_epg.attributes.dn,
                        networks={f'{gateway}/{network.prefixlen}': {}},
