@@ -2824,21 +2824,19 @@ class AppInstance:
     TENANT = 'Tenant'
     apName: str
     bdName: str
-    epg: str
-    epgDn: str
+    epgName: str
     application: str
     tenant: str
     currentAZ: APIC
     originAZ: APIC
-    overrideAZ: APIC
     bdSettings: dict
     name: str
     networks: dict
     createTime: datetime
     modifiedTime: datetime
-    __naming_attrs = ['apName', 'bdName', 'epg', 'epgDn']
+    __naming_attrs = ['apName', 'bdName', 'epgName']
     __time_attrs = ['createTime', 'modifiedTime']
-    __apic_attrs = ['currentAZ', 'originAZ', 'overrideAZ']
+    __apic_attrs = ['currentAZ', 'originAZ']
     __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'tenant', 'application', 'name']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
@@ -2905,7 +2903,7 @@ class AppInstance:
 
     @classmethod
     def load(cls, app_inst_path: str):
-        if not app_inst_path.startswith('%s/' % cls.GITHUB_PATH):
+        if not app_inst_path.startswith(f'{cls.GITHUB_PATH}/'):
             app_inst_path = f'{cls.GITHUB_PATH}/{app_inst_path}'
         gh = GithubAPI()
         if gh.file_exists(app_inst_path):
@@ -2913,10 +2911,11 @@ class AppInstance:
             inst = cls(**json.loads(c))
             return inst
         else:
-            raise NameError('The application instance does not exist: %s' % app_inst_path)
+            raise NameError(f'The application instance does not exist: {app_inst_path}')
 
     def update(self, **kwargs):
-        if kwargs['epgDn'] != self.epgDn:
+        pot_inst = AppInstance(**kwargs)
+        if pot_inst.epg_dn(override=True) != self.epg_dn(override=True):
             raise NameError('The EPG distinguished name in the update data is not consistent with the AppInstance EPG '
                             'distinguished name: %s != %s' % (kwargs['epg'], self.epg))
 
@@ -2927,11 +2926,6 @@ class AppInstance:
                 self.__dict__.get(k).update(v)
             elif k == 'originAZ':
                 continue  # Do not update originAZ using this method
-            elif k == 'overrideAZ':
-                if v:
-                    self.overrideAZ = APIC(env=v)
-                else:
-                    self.overrideAZ = v
             else:
                 self.__setattr__(k, v)
 
@@ -2976,8 +2970,9 @@ class AppInstance:
     def epg_dn(self, override: bool=False) -> str:
         self.__activate()
 
-        if self.epgDn and not override:
-            return self.epgDn
+        if not override:
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.ap_name()}/' \
+                   f'epg-{self.epg_name()}'
         else:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/' \
                    f'ap-{self.application}/epg-{self.__str__()}'
@@ -3059,12 +3054,18 @@ class AppInstance:
         application = cls.format_name(application)
         inst_name = cls.format_name(inst_name)
 
+        apic = APIC(env=az)
+
+        app_inst = cls(application=application,
+                       name=inst_name,
+                       currentAZ=apic.env.Name,
+                       tenant=(cls.ADMZTENANT if dmz else cls.TENANT)
+                       )
+
         # Ensure instance does not yet exist
         gh = GithubAPI()
-        if gh.file_exists(file_path=f'{cls.GITHUB_PATH}/{application}/{inst_name}'):
+        if gh.file_exists(file_path=app_inst.path()):
             return 400, {'message': 'The specified application instance already exists'}
-
-        apic = APIC(env=az)
 
         with BIG() as big:
             network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
@@ -3076,12 +3077,8 @@ class AppInstance:
         ipnetwork = IPv4Network(network.properties['CIDR'])
         gateway = ipnetwork.network_address + 1
 
-        app_inst = cls(application=application,
-                       name=inst_name,
-                       currentAZ=apic,
-                       tenant=(cls.ADMZTENANT if dmz else cls.TENANT),
-                       networks={f'{gateway}/{ipnetwork.prefixlen}': {}}
-                       )
+        n = {f'{gateway}/{ipnetwork.prefixlen}': {}}
+        app_inst.networks.update(n)
 
         tenant = app_inst.generate_config(origin_az=True)
 
@@ -3105,13 +3102,10 @@ class AppInstance:
                                    'apic_json': r.json(),
                                    'configuration': tenant.json()}
 
-        mapping = app_inst.placeholder_mapping()
-
-        _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
+        _, vlan = apic.assign_epg_to_aep(env=apic.env.Name, mapping=app_inst.placeholder_mapping())
 
         return 200, {'message': 'Application Instance creation successful',
                      'epg_dn': app_inst.epg_dn(),
-                     'vlan': vlan['VLAN'],
                      'application': app_inst.application}
 
     @classmethod
@@ -4126,8 +4120,7 @@ def create_new_epg(env: str, req_data: dict):
                        epg=epg.attributes.name,
                        epgDn=g_epg.attributes.dn,
                        networks={f'{gateway}/{network.prefixlen}': {}},
-                       originAZ=str(apic),
-                       overrideAZ=None)
+                       originAZ=str(apic))
 
     gh = GithubAPI()
     gh.add_file(file_path=inst.path(), message=f'{inst.__str__()}_add', content=inst.content())
