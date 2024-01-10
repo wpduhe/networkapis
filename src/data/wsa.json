@@ -807,8 +807,8 @@
         "logging": "10.227.64.72",
         "timezone": "America/Kentucky/Louisville"
     },
-    "XRDC-WSA-QA": {
-        "name": "XRDC-WSA",
+    "XRDC-QA-WSA": {
+        "name": "XRDC-QA-WSA",
         "environments": {
             "environment_qa": {
                 "internal_gateway": "10.129.200.97",
