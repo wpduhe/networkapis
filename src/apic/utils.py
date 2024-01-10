@@ -41,6 +41,7 @@ SUBTREE = 'query-target=subtree'
 FULL_CONFIG = 'rsp-subtree=full'
 CLASS_FILTER = 'target-subtree-class='
 CONFIG_ONLY = 'rsp-prop-include=config-only'
+FCCO = f'{FULL_CONFIG}&{CONFIG_ONLY}'
 
 SPINE_EVENS = 'Spine-Evens'
 SPINE_ODDS = 'Spine-Odds'
@@ -50,8 +51,8 @@ OOB = 'OOB'
 STAGING = 'Staging'
 
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
-BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/]+)')
-AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/]+)')
+BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
+AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
 
 
 def q_wcard(c, a, v) -> str:
@@ -2784,21 +2785,24 @@ class APIC:
             if eps:
                 orig_dn = EPG_DN_SEARCH.search(eps[0].attributes.dn).group()
                 epg_tenant, epg_ap, epg_name = EPG_DN_SEARCH.search(eps[0].attributes.dn).groups()
-                epg_name = re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE)
-                epg_dn = f'uni/tn-{epg_tenant}/ap-{epg_ap}/epg-{epg_name}'
+                # TODO: or NOT TODO: remove tier based naming
+                # epg_name = re.sub(r'(-app-|-web-|-dbs-)', '-', epg_name, flags=re.IGNORECASE)
+                # epg_dn = f'uni/tn-{epg_tenant}/ap-{epg_ap}/epg-{epg_name}'
                 inst_name = AppInstance.format_name(epg_name)
                 # inst_name = re.sub(r'^epg-', '', epg_name).lower().replace('-', '_')
                 # inst_name = f'{self.env.DataCenter}_{inst_name}'.lower()
-                application = re.sub(r'^ap-', '', epg_ap).lower().replace('-', '_')
+                application = AppInstance.format_name(epg_ap)
 
                 # Collect bridge domain settings
                 rsbd = APICObject.load(self.get(f'/api/mo/{orig_dn}/rsbd.json').json()['imdata'])
                 bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=rsbd.attributes.tnFvBDName))
+
                 subnet.remove_admin_props()
+                # Do not document distinguished name of the subnet
                 for attr in ['dn']:
                     subnet.attributes.__delattr__(attr)
 
-                inst = AppInstance(epg=epg_name, epgDn=epg_dn, application=application, currentAZ=self.__str__(),
+                inst = AppInstance(epgName=epg_name, epgDn=orig_dn, application=application, currentAZ=self.__str__(),
                                    bdName=bd.attributes.name, apName=epg_ap, name=inst_name,
                                    tenant=next(_ for _ in dir(self.env)
                                                if self.env.__getattribute__(_) == epg_tenant),
@@ -2809,7 +2813,7 @@ class APIC:
                     app_inst = AppInstance.load(inst.path())
                     if app_inst.content() != inst.content():
                         app_inst.update(**inst.json())
-                        gh.update_file(file_path=inst.path(), message=f'{inst_name}_update', content=app_inst.content())
+                        app_inst.store()
                     else:
                         continue
                 else:
@@ -2837,18 +2841,19 @@ class AppInstance:
     __naming_attrs = ['apName', 'bdName', 'epgName']
     __time_attrs = ['createTime', 'modifiedTime']
     __apic_attrs = ['currentAZ', 'originAZ']
-    __str_attrs = ['apName', 'bdName', 'epg', 'epgDn', 'tenant', 'application', 'name']
+    __str_attrs = ['apName', 'bdName', 'epgName', 'epgDn', 'tenant', 'application', 'name']
     __dict_attrs = ['networks', 'bdSettings']
     __int_attrs = []
     GITHUB_PATH = 'applications'
+    ISSUES_PATH = 'pyapis/appinst/issues'
 
     def __init__(self, **kwargs):
         assert 'name' and 'application' and 'tenant' in kwargs
 
         self.__all_attrs = self.__time_attrs + self.__apic_attrs + self.__dict_attrs + self.__str_attrs + \
-            self.__int_attrs
+            self.__int_attrs + self.__naming_attrs
 
-        for attr in self.__dict_attrs + self.__str_attrs:
+        for attr in self.__dict_attrs + self.__str_attrs + self.__naming_attrs:
             if attr == 'name' or attr == 'application':
                 value = self.format_name(kwargs.get(attr))
                 self.__setattr__(attr, value)
@@ -2917,7 +2922,7 @@ class AppInstance:
         pot_inst = AppInstance(**kwargs)
         if pot_inst.epg_dn(override=True) != self.epg_dn(override=True):
             raise NameError('The EPG distinguished name in the update data is not consistent with the AppInstance EPG '
-                            'distinguished name: %s != %s' % (kwargs['epg'], self.epg))
+                            'distinguished name: %s != %s' % (kwargs['epgDn'], self.epg_dn()))
 
         for k, v in kwargs.items():
             if k not in self.__all_attrs:
@@ -2992,7 +2997,7 @@ class AppInstance:
         return self.bdName if self.bdName else str(self)
 
     def epg_name(self):
-        return self.epg if self.epg else str(self)
+        return self.epgName if self.epgName else str(self)
 
     def ap_name(self):
         return self.apName if self.apName else self.application
@@ -3175,7 +3180,8 @@ class AppInstance:
             # Get the EPG
             r = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json')
             if int(r.json()['totalCount']):
-                epg = EPG(dn=inst.epg_dn())
+                epg = EPG()
+                epg.attributes.dn = inst.epg_dn()
                 epg.delete()
                 deletions.append(epg)
             else:
@@ -3257,6 +3263,59 @@ class AppInstance:
             inst.store()
 
         return create_resp.status_code, return_data
+
+    @classmethod
+    def discovery(cls):
+        # TODO: Write process to refresh instance settings
+        gh = GithubAPI()
+        for application in gh.list_dir(cls.GITHUB_PATH):
+            for file in gh.list_dir(f'{cls.GITHUB_PATH}/{application}'):
+                inst = cls.load(f'{application}/{file}')
+
+                # Check the EPG existence in the current AZ
+                r = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json?{FCCO}')
+                if int(r.json()['totalCount']):
+                    epg = EPG.load(r.json()['imdata'])
+                else:
+                    gh.add_file(f'{cls.ISSUES_PATH}/{inst}', message='EPG DN was not found', content=inst.content())
+                    continue
+                    
+                # Check that the EPG still uses the same BD
+                r = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}/rsbd.json')
+                if int(r.json()['totalCount']):
+                    rsbd = FvRsBd.load(r.json()['imdata'])
+                    bd = BD.load(inst.currentAZ.get(f'/api/mo/{rsbd.attributes.tDn}.json?{FCCO}').json()['imdata'])
+
+                    if bd.attributes.dn != inst.bd_dn():
+                        # This would mean a new bridge domain is in use, Get the new BD and update the settings
+                        if bd.attributes.name != inst.bd_name():
+                            inst.bdName = bd.attributes.name
+
+                        # Update BD settings
+                        inst.bdSettings = bd.attributes.json()
+
+                    # TODO: Check that all networks are found within the BD
+                    bd_subnets = bd.get_child_class_iter(Subnet.class_)
+                    bd_subnets_set = {_.attributes.ip for _ in bd_subnets}
+
+                    inst_subnets = {_ for _ in inst.networks}
+                    if bd_subnets_set.intersection(inst_subnets) != inst_subnets:
+                        # One of the networks defined in the instance is missing from the bridge domain
+                        gh.add_file(f'{cls.ISSUES_PATH}/{inst}', message='Instance subnet found to be missing from BD',
+                                    content=inst.content())
+                        continue
+                    else:
+                        # Everything is good, refresh Subnet settings
+                        for subnet in bd_subnets:
+                            if subnet.attributes.ip in inst_subnets:
+                                u = {subnet.attributes.ip: subnet.attributes.json()}
+                                inst.networks.update(u)
+
+                else:
+                    # This would mean no BD is assigned to the EPG
+                    gh.add_file(f'{cls.ISSUES_PATH}/{inst}', message='No BD assigned to EPG', content=inst.content())
+
+                inst.store()
 
 
 def update_vlan_spreadsheet():
