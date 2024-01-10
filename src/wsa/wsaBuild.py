@@ -757,13 +757,13 @@ def build_wsa_api(wsa_env: str, wsa_list: str, username: str, password: str):
 if __name__ == '__main__':
     failed_attempts = []
 
-    site = input('\nFRDC\nSEDC\nSLDC\nTPDC\nXRDC\n\n'
+    site = input('\nFRDC\nSEDC\nSLDC\nTPDC\nXRDC\nXRDC-QA\n\n'
                  'Enter the environment you would like to build or type \'cancel\' to abort: ').upper()
 
     if site.lower() == 'cancel':
         print('   Exiting...')
         exit()
-    elif site not in ['FRDC', 'SEDC', 'SLDC', 'TPDC', 'XRDC']:
+    elif site not in ['FRDC', 'SEDC', 'SLDC', 'TPDC', 'XRDC', 'XRDC-QA']:
         print(f'Invalid Environment provided: {site}')
         exit()
     else:
