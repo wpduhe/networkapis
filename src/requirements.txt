@@ -73,7 +73,7 @@ ntc-templates==3.2.0
 numpy==1.20.2
 nxapi-plumbing==0.5.2
 openpyxl==3.0.1
-pandas==1.4.4
+pandas==2.1.4
 paramiko==3.0.0
 passlib==1.7.4
 patternmatcher==3.0.8
