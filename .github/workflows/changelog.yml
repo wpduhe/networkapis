@@ -23,7 +23,7 @@ jobs:
           release_branch: "main"
 
       - name: Commit and push changes
-        uses: EndBug/add-and-commit@v8
+        uses: EndBug/add-and-commit@v9
         with:
           author_name:  "$(git log -n 1 --pretty=format:%an)"
           author_email: "$(git log -n 1 --pretty=format:%ae)" 
