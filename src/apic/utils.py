@@ -41,7 +41,8 @@ SUBTREE = 'query-target=subtree'
 FULL_CONFIG = 'rsp-subtree=full'
 CLASS_FILTER = 'target-subtree-class='
 CONFIG_ONLY = 'rsp-prop-include=config-only'
-FCCO = f'{FULL_CONFIG}&{CONFIG_ONLY}'
+CO = 'rsp-prop-include=config-only'
+FCCO = f'{FULL_CONFIG}&{CO}'
 
 SPINE_EVENS = 'Spine-Evens'
 SPINE_ODDS = 'Spine-Odds'
@@ -1064,6 +1065,7 @@ class APIC:
         :rtype: int
         :return:
         """
+        self.clear_vlans_assigned_to_nonexistent_epgs()
         rs_vlp = self.get(f'/api/mo/uni/phys-{self.env.PhysicalDomain}/rsvlanNs.json').json()['imdata'][0]
         encap_blocks = self.get(f'/api/mo/{rs_vlp["infraRsVlanNs"]["attributes"]["tDn"]}.json?'
                                 f'query-target=subtree&target-subtree-class=fvnsEncapBlk').json()['imdata']
@@ -1688,6 +1690,17 @@ class APIC:
             return None
         else:
             return aeps, epgs
+
+    def clear_vlans_assigned_to_nonexistent_epgs(self) -> None:
+        """Deletes VLANs assigned to AEPs for EPGs that do not exist"""
+        faults = self.get('/api/class/faultInst.json?query-target-filter=eq(faultInst.code,"F0982")')
+        faults = [APICObject.load(_) for _ in faults.json()['imdata']]
+
+        for fault in faults:
+            subject = re.search(r'(.*)/fault-F0982', fault.attributes.dn).group(1)
+            subject = APICObject.load(self.get(f'/api/mo/{subject}.json?{CO}').json()['imdata'])
+            subject.delete()
+            self.post(subject.json())
 
     def reassign_encap(self, old_epg_dn: str, new_epg_dn: str):
         # Ensure that each variable starts with uni/
