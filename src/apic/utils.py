@@ -3127,6 +3127,40 @@ class AppInstance:
                      'application': app_inst.application}
 
     @classmethod
+    def expand_instance(cls, application: str, inst_name: str, no_of_ips: int) -> Tuple[int, dict]:
+        application = cls.format_name(application)
+        inst_name = cls.format_name(inst_name)
+
+        try:
+            inst = cls.load(f'{application}/{inst_name}')
+        except NameError:
+            return 404, {'message': f'Application instance {application}/{inst_name} does not exist'}
+
+        with BIG() as big:
+            network = big.assign_next_network_from_list(block_list=inst.originAZ.env.Subnets, no_of_ips=no_of_ips,
+                                                        name=inst_name, coid=int(inst.originAZ.env.COID),
+                                                        asn=int(inst.originAZ.env.ASN))
+
+        ipnetwork = IPv4Network(network.properties['CIDR'])
+        gateway = f'{ipnetwork.network_address + 1}/{ipnetwork.prefixlen}'
+
+        subnet = Subnet(subnet=gateway)
+        inst.networks[gateway] = subnet.attributes.json()
+        inst.store()
+
+        subnet.tenant = inst.currentAZ.env.__getattribute__(inst.tenant)
+        subnet.bd = inst.bd_name()
+        subnet.ip_network = gateway
+
+        # Add the new network to the current AZ
+        snapshot = inst.currentAZ.snapshot(descr=f'{inst.path()}_expansion')
+        response = inst.currentAZ.post(subnet.json())
+
+        return response.status_code, {'apic_response': response.json(), 'network': str(ipnetwork),
+                                      'application': inst.application, 'instance': str(inst),
+                                      'availability_zone': str(inst.currentAZ), 'snapshot': snapshot}
+
+    @classmethod
     def deploy_instance(cls, inst_path: str) -> Tuple[int, dict]:
         """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
         inst = cls.load(app_inst_path=inst_path)
