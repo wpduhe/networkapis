@@ -308,7 +308,6 @@ def task_location(ident):
 
 
 @app.get('/apis/nexus/environments', tags=['Nexus'])
-@challenge_request
 def get_nexus_environments(request: Request):
     """Returns JSON that represents all Nexus environments"""
     req_logit(get_nexus_environments, request)
