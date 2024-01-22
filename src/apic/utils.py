@@ -3192,6 +3192,7 @@ class AppInstance:
 
     @classmethod
     def move_instance(cls, app_inst_path: str, az: str) -> Tuple[int, dict]:
+        app_inst_path = re.sub(r'[^/\w]', '_', app_inst_path)
         inst = cls.load(app_inst_path=app_inst_path)
 
         src_az = APIC(env=inst.currentAZ.env.Name)
@@ -3322,7 +3323,8 @@ class AppInstance:
                 # Check the EPG existence in the current AZ
                 r = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json?{FCCO}')
                 if int(r.json()['totalCount']):
-                    epg = EPG.load(r.json()['imdata'])
+                    # EPG exists
+                    pass
                 else:
                     gh.add_file(f'{cls.ISSUES_PATH}/{inst}', message='EPG DN was not found', content=inst.content())
                     continue
