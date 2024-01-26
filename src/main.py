@@ -615,7 +615,6 @@ def find_lldp_neigh(request: Request, az: str, neigh: str):
     return data
 
 
-
 @app.get('/apis/aci/snmp_clients', tags=['ACI'], include_in_schema=False)
 def collect_snmp_clients(request: Request):
     req_logit(collect_snmp_clients, request, None)
