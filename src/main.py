@@ -604,6 +604,17 @@ def collect_teps(request: Request, az: str):
     return data
 
 
+@app.get('/apis/aci/{az}/find_lldp_neigh/{neigh}', tags=['ACI'])
+def find_lldp_neigh(request: Request, az: str, neigh: str):
+    req_logit(find_lldp_neigh, request, (az, neigh))
+
+    with apic_utils.APIC(env=az) as apic_api:
+        _, data = apic_api.find_lldp_neighbors(neigh)
+    data = sorted(data, key=lambda x: x['chassisIdV'])
+    return data
+
+
+
 @app.get('/apis/aci/snmp_clients', tags=['ACI'], include_in_schema=False)
 def collect_snmp_clients(request: Request):
     req_logit(collect_snmp_clients, request, None)
