@@ -610,7 +610,7 @@ def find_lldp_neigh(request: Request, az: str, neigh: str):
 
     with apic_utils.APIC(env=az) as apic_api:
         _, data = apic_api.find_lldp_neighbors(neigh)
-    data = sorted(data, key=lambda x: x['chassisIdV'])
+    data = sorted(data, key=lambda x: x['chassisID'])
     return data
 
 
