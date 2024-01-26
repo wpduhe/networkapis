@@ -54,6 +54,17 @@ STAGING = 'Staging'
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
 BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
+APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}')
+
+
+def format_mac_addresses(mac_addresses: list) -> List:
+    mac_addresses = [''.join(re.findall(r'[a-f0-9]+', _)) for _ in mac_addresses]
+    mac_addresses = [':'.join([_.group() for _ in re.finditer(r'[a-f0-9]{2}', mac)]) for mac in mac_addresses]
+
+    # Filter MAC addresses to only include proper MAC addresses
+    mac_addresses = [_ for _ in mac_addresses if bool(APIC_MAC_MATCH.fullmatch(_))]
+
+    return mac_addresses
 
 
 def q_wcard(c, a, v) -> str:
@@ -2834,6 +2845,23 @@ class APIC:
 
         print()
         return None
+
+    def find_lldp_neighbors(self, mac_addresses: str) -> Tuple[int, list]:
+        mac_addresses = format_mac_addresses(mac_addresses.lower().split(','))
+
+        lldp_neigh = [APICObject.load(_) for _ in self.get('/api/class/lldpAdjEp.json').json()['imdata']]
+        lldp_neigh = [neigh for neigh in lldp_neigh if neigh.attributes.portIdV in mac_addresses]
+
+        lldp_neigh = [{
+            'node': re.search(r'node-(\d+)', neigh.attributes.dn).group(1),
+            'port': re.search(r'eth\d+/\d+', neigh.attributes.dn).group(),
+            'sysName': (neigh.attributes.sysName if neigh.attributes.sysName else 'unspecified'),
+            'chassisID': neigh.attributes.chassisIdV,
+            'portIdV': neigh.attributes.portIdV,
+            'mgmtIp': neigh.attributes.mgmtIp
+        } for neigh in lldp_neigh]
+
+        return 200, lldp_neigh
 
 
 class AppInstance:
