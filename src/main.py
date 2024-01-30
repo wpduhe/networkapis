@@ -606,7 +606,8 @@ def collect_teps(request: Request, az: str):
 
 @app.get('/apis/aci/{az}/find_lldp_neigh/{neigh}', tags=['ACI'])
 def find_lldp_neigh(request: Request, az: str, neigh: str):
-    """Query the fabric for information about a list of LLDP neighbors.  Supports comma separated list"""
+    """Query the fabric for information about a list of LLDP neighbors.  Supports comma separated list of MAC addresses
+    """
     req_logit(find_lldp_neigh, request, (az, neigh))
 
     with apic_utils.APIC(env=az) as apic_api:
