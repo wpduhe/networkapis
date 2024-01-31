@@ -4155,6 +4155,10 @@ def create_new_epg(env: str, req_data: dict):
         if not bd_name.startswith('bd-'):
             bd_name = f'bd-{bd_name}'
 
+        # TODO: Create process to check if EPG exists prior to assigning a network
+        if apic.dn_exists(fvAEPg=f'uni/tn-{apic.env.Tenant}/ap-{ap_name}/epg-{epg_name}'):
+            return 400, {'message': 'The requested EPG already exists'}
+
         subnet = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips, name=epg_name,
                                                    coid=int(apic.env.COID), asn=int(apic.env.ASN))
 
