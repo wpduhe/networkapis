@@ -4253,14 +4253,15 @@ def create_new_epg(env: str, req_data: dict):
 
     # Add the instance to Github
     inst = AppInstance(application=ap.attributes.name,
+                       name=epg.attributes.name,
+                       apName=ap.attributes.name,
+                       bdName=bd.attributes.name,
+                       epgName=epg.attributes.name,
                        bdSettings=bd.attributes.json(),
-                       currentAZ=apic.__str__(),
                        tenant=next(_ for _ in dir(apic.env)
                                    if apic.env.__getattribute__(_) == tn.attributes.name),
-                       epg=epg.attributes.name,
-                       epgDn=g_epg.attributes.dn,
                        networks={f'{gateway}/{network.prefixlen}': {}},
-                       originAZ=str(apic))
+                       currentAZ=str(apic))
 
     gh = GithubAPI()
     gh.add_file(file_path=inst.path(), message=f'{inst.__str__()}_add', content=inst.content())
