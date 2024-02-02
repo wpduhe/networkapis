@@ -4252,7 +4252,7 @@ def create_new_epg(env: str, req_data: dict):
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
     # Add the instance to Github
-    inst = AppInstance(application=re.sub(r'^ap-', '', ap.attributes.name).lower().replace('-', '_'),
+    inst = AppInstance(application=ap.attributes.name,
                        bdSettings=bd.attributes.json(),
                        currentAZ=apic.__str__(),
                        tenant=next(_ for _ in dir(apic.env)
