@@ -617,10 +617,10 @@ def find_lldp_neigh(request: Request, az: str, neigh: str):
 
 
 @app.get('/apis/aci/{az}/get_unused_objects', tags=['ACI'])
-def get_unused_objects(request: Request, az: str, neigh: str):
+def get_unused_objects(request: Request, az: str):
     """Get a list of unused EPGs, BDs, and Subnets from the target fabric
     """
-    req_logit(find_lldp_neigh, request, (az, neigh))
+    req_logit(find_lldp_neigh, request, az)
 
     data = apic_utils.APIC(env=az).remove_unused_epgs_bds_subnets()
 
