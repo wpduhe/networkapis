@@ -40,10 +40,10 @@ class Attributes:
     def __init__(self, **kwargs):
         if not kwargs == {}:
             for arg in kwargs:
-                if arg == 'annotation':
-                    self.__setattr__(arg, Attributes(**annotation_parser(kwargs[arg])))
-                else:
-                    self.__setattr__(arg, kwargs[arg])
+                # if arg == 'annotation':
+                #     self.__setattr__(arg, Attributes(**annotation_parser(kwargs[arg])))
+                # else:
+                self.__setattr__(arg, kwargs[arg])
 
     def __hasattr__(self, attribute: str):
         if attribute in self.__dict__.keys():
@@ -55,10 +55,10 @@ class Attributes:
         json_data = {}
         for attribute in self.__dict__.keys():
             if not self.__getattribute__(attribute) == '':
-                if attribute == 'annotation':
-                    json_data[attribute] = annotation_to_string(self.__getattribute__(attribute).json())
-                else:
-                    json_data[attribute] = self.__getattribute__(attribute)
+                # if attribute == 'annotation':
+                #     json_data[attribute] = annotation_to_string(self.__getattribute__(attribute).json())
+                # else:
+                json_data[attribute] = self.__getattribute__(attribute)
         return json_data
 
     @classmethod
