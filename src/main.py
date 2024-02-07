@@ -1767,6 +1767,26 @@ def get_subnet_information(request: Request, ip: str=None):
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
 
 
+@app.get('/apis/nexus/resolve_ip_to_datacenter', tags=['Nexus'])
+def resolve_ip_to_datacenter(request: Request, ip: str=None):
+    """This API looks for the subnet of the queried IP and attempts to login to the gateway device.  If successful,
+    information about the device and subnet is returned."""
+    req_logit(resolve_ip_to_datacenter, request, ip)
+
+    if ip is None:
+        ip = request.query_params.get('ip')
+
+    try:
+        ip = IPv4Address(ip)
+    except AddressValueError:
+        return Response(status_code=400, content=json.dumps({'error': 'The supplied value is not a valid IP address'}),
+                        media_type='application/json')
+
+    status, response = IOSXR.resolve_ip_to_datacenter(ip=ip.exploded)
+
+    return Response(status_code=status, content=json.dumps(response), media_type='application/json')
+
+
 @app.get('/apis/nexus/{env}/get_vlan_information/{vlan}', tags=['Nexus'])
 def nexus_get_vlan_information(request: Request, env: str, vlan: str):
     """Get Information about a VLAN in a Nexus environment"""
