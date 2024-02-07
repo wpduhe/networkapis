@@ -238,6 +238,36 @@ class IOSXR:
 
         return complete_config
 
+    @staticmethod
+    def resolve_ip_to_datacenter(ip: str):
+        res_data = {
+            '65500': 'XRDC',
+            '65501': 'FWDC',
+            '65503': 'SLDC',
+            '65505': 'TPDC',
+            '65506': 'HODC',
+            '65462': 'SEDC'
+        }
+
+        with IOSXR('10.0.255.46') as xr:
+            xr_prefix = xr.ip_lookup(ip)
+
+            # Check to make sure a route was found before continuing
+            if xr_prefix:
+                pass
+            else:
+                return 404, {'message': 'No specific route found for the given IP'}
+
+            xr_route = (xr.route_lookup(xr_prefix) if xr_prefix else None)
+
+            if xr_route:
+                xr.bgp_lookup(xr_route)
+
+            origin_as = xr_route.origin_as
+            dc = res_data.get(xr_route.origin_as)
+
+            return 200, {'datacenter': dc}
+
 
 def subnet_exists(cidr: str):
     cidr = IPv4Network(cidr, strict=False)
