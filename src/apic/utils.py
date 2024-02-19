@@ -2274,6 +2274,15 @@ class APIC:
 
         return None
 
+    def remove_maintenance_policies(self):
+        # Just delete all maintenance groups and policies
+        groups = [APICObject.load(_) for _ in self.collect(maintMaintGrp='')]
+        policies = [APICObject.load(_) for _ in self.collect(maintMaintP='')]
+
+        for _ in groups + policies:
+            _.delete()
+            self.post(_.json())
+
     def verify_maintenance_policies_and_groups(self):
         def check_group(name: str):
             if not self.dn_exists(maintMaintGrp='uni/fabric/maintgrp-%s' % name):
@@ -2345,12 +2354,12 @@ class APIC:
 
         self.verify_maintenance_policies_and_groups()
 
-        # Delete all existing node blocks in maintenance groups
-        blocks = [APICObject.load(_) for _ in self.collect(fabricNodeBlk='')]
-        for block in blocks:
-            block.delete()
-            self.post(block.json())
-
+        # # Delete all existing node blocks in maintenance groups
+        # blocks = [APICObject.load(_) for _ in self.collect(fabricNodeBlk='')]
+        # for block in blocks:
+        #     block.delete()
+        #     self.post(block.json())
+        #
         # Collect all nodes
         nodes = [APICObject.load(_) for _ in self.collect_nodes()]
 
