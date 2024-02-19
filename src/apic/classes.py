@@ -928,6 +928,7 @@ class FabricProtPol(APICObject):
         'dn': 'uni/fabric/protpol',
         'status': 'modified'
     }
+    post_uri = '/api/mo/uni/fabric.json'
 
     def __init__(self):
         self.children = []
