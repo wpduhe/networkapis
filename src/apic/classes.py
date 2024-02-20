@@ -51,7 +51,7 @@ class Attributes:
         else:
             return False
 
-    def json(self):
+    def json(self, empty_fields: bool=False):
         json_data = {}
         for attribute in self.__dict__.keys():
             if not self.__getattribute__(attribute) == '':
@@ -59,6 +59,8 @@ class Attributes:
                 #     json_data[attribute] = annotation_to_string(self.__getattribute__(attribute).json())
                 # else:
                 json_data[attribute] = self.__getattribute__(attribute)
+            elif empty_fields and self.__getattribute__(attribute) == '':
+                json_data[attribute] = ''
         return json_data
 
     @classmethod
@@ -110,7 +112,7 @@ class APICObject:
 
         return obj
 
-    def json(self):
+    def json(self, empty_fields: bool=False):
         try:
             self._dn_constructor()
         except AttributeError:
@@ -125,7 +127,7 @@ class APICObject:
         else:
             json_data = {
                 self.class_: {
-                    'attributes': self.attributes.json(),
+                    'attributes': self.attributes.json(empty_fields=empty_fields),
                     'children': list((obj.json() for obj in self.children))
                 }
             }
@@ -205,18 +207,18 @@ class GenericClass:
         self.class_ = apic_class
         self.attributes = Attributes(**kwargs)
 
-    def json(self):
+    def json(self, empty_fields: bool=False):
         if self.children == list():
             json_data = {
                 self.class_: {
-                    'attributes': self.attributes.json()
+                    'attributes': self.attributes.json(empty_fields=empty_fields)
                 }
             }
         else:
             json_data = {
                 self.class_: {
-                    'attributes': self.attributes.json(),
-                    'children': list((obj.json() for obj in self.children))
+                    'attributes': self.attributes.json(empty_fields=empty_fields),
+                    'children': list((obj.json(empty_fields=empty_fields) for obj in self.children))
                 }
             }
 
