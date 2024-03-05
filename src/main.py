@@ -12,7 +12,6 @@ from ipam.utils import BIG, valid_ip
 from job_handler import run_job_handler
 from checkpoint.CheckpointUtilities import CheckpointAPI, generate_policy_list
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
-from tetration.tetration_utils import TetrationAPI
 from apic import utils as apic_utils
 from apic.classes import EPG, AEP
 from apic import sviToBd
@@ -152,9 +151,6 @@ tags_metadata = [
     }, {
         'name': 'PyAPIs',
         'description': 'Operations for PyAPIs'
-    }, {
-        'name': 'Tetration',
-        'description': 'Operations for Tetration'
     }, {
         'name': 'IOS-XR',
         'description': 'Helpful IOS-XR Utilities'
@@ -1604,7 +1600,7 @@ def create_new_aep(request: Request, req_data: CreateNewAEP):
     return Response(status_code=resp.status_code, content=json.dumps(resp.json()), media_type='application/json')
 
 
-@app.post('/apis/aci/intfProfile', tags=['ACI'])
+@app.post('/apis/aci/intfProfile', tags=['ACI'], include_in_schema=False)
 def interface_profile(request: Request, req_data: IntfProfile):
     """Creates a new ACI interface configuration given the supplied information."""
     req_data = req_data.dict()
@@ -2319,28 +2315,6 @@ def wlcpower(request: Request, ip: str):
 
     if status == 404:
         return Response(status_code=status, media_type='text/plain', content=results)
-
-    return Response(status_code=status, content=json.dumps(results), media_type='application/json')
-
-
-@app.get('/apis/tetration/query', tags=['Tetration'])
-def tetration_query(request: Request, query_filter: str):
-    req_logit(tetration_query, request, query_filter)
-
-    status, results = TetrationAPI.query(search_filter=query_filter)
-
-    res_logit(tetration_query, request, results)
-
-    return Response(status_code=status, content=json.dumps(results), media_type='application/json')
-
-
-@app.get('/apis/tetration/raw_query', tags=['Tetration'])
-def tetration_raw_query(request: Request, query_filter: str):
-    req_logit(tetration_raw_query, request, query_filter)
-
-    status, results = TetrationAPI.raw_query(search_filter=query_filter)
-
-    res_logit(tetration_raw_query, request, results)
 
     return Response(status_code=status, content=json.dumps(results), media_type='application/json')
 
