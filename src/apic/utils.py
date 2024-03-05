@@ -54,7 +54,7 @@ STAGING = 'Staging'
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
 BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
-MAC_SEARCH = re.compile(r'([a-f0-9]:){5}[a-f0-9]', flags=re.IGNORECASE)
+MAC_SEARCH = re.compile(r'([a-f0-9]:){5}[a-f0-9]{2}', flags=re.IGNORECASE)
 APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}')
 
 
