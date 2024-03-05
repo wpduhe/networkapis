@@ -81,8 +81,6 @@ def req_logit(func, web_request, req_data=None):
         f'{socket.gethostname()} from {client}: {json.dumps(req_data)}'
 
     LOGGER.debug(f)
-    # Disable logging to Github -- too much overhead
-    # gh.prepend_to_file(file_path='pyapis/log/pyapis.log', message='PyAPIs Log Update', new_content=f)
 
 
 def res_logit(func, web_request, res_data=None):
@@ -96,8 +94,6 @@ def res_logit(func, web_request, res_data=None):
     f = f'{t.ctime()}:  Returned from {socket.gethostname()} : {func.__name__} : to {client}: {json.dumps(res_data)}'
 
     LOGGER.debug(f)
-    # Disable logging to Github -- too much overhead
-    # gh.prepend_to_file(file_path='pyapis/log/pyapis.log', message='PyAPIs Log Update', new_content=f)
 
 
 def validate_api_key(key):
