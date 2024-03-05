@@ -2,2397 +2,562 @@ from ipaddress import ip_network as network
 from ipaddress import ip_address as address
 from data.environments import ACIEnvironment
 from apic.classes import *
-import itertools
+# import itertools
 import requests
 import json
 import re
 import os
 
-env = ACIEnvironment('hodc')
+os.chdir('C:/Users/jxu8356/PycharmProjects/networkapis/src')
 
-# TODO: Remove TACACS or make it optional in some way
+env = ACIEnvironment('hodc-az2')
 
-'''
-Order of submission:
-
-infra
-fabric
-uni
-tn_mgmt
-tn_hca
-tn_hcadr
-tn_admz
-'''
-
-data_center = re.search(r'\w+', env.Name).group()
 CR = 'created,modified'
 MOD = 'modified'
+PASSWORD = ''
 
-url = f'https://{env.IPAddress}'
-loginURL = f'{url}/api/aaaLogin.json'
-post_url = f'{url}/api/mo/uni.json'
+URL = f'https://{env.IPAddress}'
+loginURL = f'{URL}/api/aaaLogin.json'
+SNMP_TRAP_DEST = '10.26.32.93'
+OOBPROFILENAME = 'OOB-Leafs'
+SNMP_CLIENTS = [('Spec-10-Dist-03-xrdclpappspc06', '10.26.33.131'),
+                ('Cisco-Collector-Server-1', '10.26.31.30'),
+                ('Spectrum1', '10.26.32.65'),
+                ('Spec-9-Dist-02-naspcp06', '10.26.32.67'),
+                ('Spec-9-Dist-08-naspcp0C', '10.26.32.89'),
+                ('Spec-10-Dist-04-xrdclpappspc07', '10.26.33.132'),
+                ('Spec-9-Dist-05-naspcp09', '10.26.32.75'),
+                ('Spec-9-FT-Dist-02-naspcp0I', '10.26.32.96'),
+                ('Spec-9-FT-Dist-08-naspcp0O', '10.26.32.109'),
+                ('Spec-9-FT-Dist-04-naspcp0K', '10.26.32.98'),
+                ('Spec-9-FT-Dist-07-naspcp0N', '10.26.32.108'),
+                ('Spec-10-FT-Dist-01-xrdclpappspc11', '10.26.33.136'),
+                ('Spec-9-Dist-03-naspcp07', '10.26.32.68'),
+                ('Spec-9-FT-Dist-06-naspcp0M', '10.26.32.107'),
+                ('Spec-10-FT-Dist-04-xrdclpappspc14', '10.26.33.139'),
+                ('Spec-9-FT-Dist-10-naspcp0Q', '10.26.32.158'),
+                ('Spec-9-Dist-06-naspcp0A', '10.26.32.79'),
+                ('Spec-10-FT-Dist-02-xrdclpappspc12', '10.26.33.137'),
+                ('CAPM-Data-Collector1', '10.26.33.62'),
+                ('Spec-9-Dist-07-naspcp0B', '10.26.32.88'),
+                ('Spec-9-FT-Dist-05-naspcp0L', '10.26.32.99'),
+                ('Spec-9-Dist-04-naspcp08', '10.26.32.69'),
+                ('Spec-9-FT-Dist-09-naspcp0P', '10.26.32.157'),
+                ('Spec-9-FT-Dist-03-naspcp0J', '10.26.32.97'),
+                ('Spec-10-Dist-01-xrdclpappspc04', '10.26.33.129'),
+                ('Spec-9-Dist-09-naspcp0D', '10.26.32.91'),
+                ('Spec-9-Dist-01-naspcp05', '10.26.32.66'),
+                ('Spec-9-Dist-10-naspcp0E', '10.26.32.92'),
+                ('CAPM-Data-Collector2', '10.26.33.6'),
+                ('Spec-9-FT-Dist-01-naspcp0H', '10.26.32.95'),
+                ('Spec-10-FT-Dist-03-xrdclpappspc13', '10.26.33.138'),
+                ('Spec-10-Dist-02-xrdclpappspc05', '10.26.33.130')]
+
 
 session = requests.session()
 session.verify = False
 
-response = session.post(loginURL, json={'aaaUser': {'attributes': {'name': 'admin', 'pwd': 'C1sco123'}}})
+
+# Login to APIC
+response = session.post(loginURL, json={'aaaUser': {'attributes': {'name': 'admin', 'pwd': PASSWORD}}})
 assert response.ok
 
-uni = {
-    'polUni': {
-        'attributes': {
-            'dn': 'uni',
-            'status': MOD
-        },
-        'children': []
-    }
+
+# Configure fabric-wide settings
+settings = {
+    'domainValidation': 'no',
+    'enforceSubnetCheck': 'yes',
+    'opflexpAuthenticateClients': 'no',
+    'opflexpUseSsl': 'yes',
+    'reallocateGipo': 'no',
+    'unicastXrEpLearnDisable': 'yes',
 }
-infra_funcp = {
-    'infraFuncP': {
-        'attributes': {
-            'dn': 'uni/infra/funcprof',
-            'status': MOD
-        },
-        'children': []
-    }
-}
-infra = {
-    'infraInfra': {
-        'attributes': {
-            'dn': 'uni/infra',
-            'status': 'modified'
-        },
-        'children': []
-    }
-}
-fabric_funcp = {
-    'fabricFuncP': {
-        'attributes': {
-            'dn': 'uni/fabric/funcprof',
-            'status': MOD
-        },
-        'children': []
-    }
-}
-fabric = {
-    'fabricInst': {
-        'attributes': {
-            'dn': 'uni/fabric',
-            'status': MOD
-        },
-        'children': []
-    }
-}
-tn_mgmt = {
-    'fvTenant': {
-        'attributes': {
-            'name': 'mgmt',
-            'status': MOD
-        },
-        'children': []
-    }
-}
-tn_hca = {
-    'fvTenant': {
-        'attributes': {
-            'dn': 'uni/tn-tn-HCA',
-            'name': 'tn-HCA',
-            'status': CR
-        },
-        'children': []
-    }
-}
-tn_hcadr = {
-    'fvTenant': {
-        'attributes': {
-            'dn': 'uni/tn-tn-HCADR',
-            'name': 'tn-HCADR',
-            'status': CR
-        },
-        'children': []
-    }
-}
-tn_admz = {
-    'fvTenant': {
-        'attributes': {
-            'dn': 'uni/tn-tn-ADMZ',
-            'name': 'tn-ADMZ',
-            'status': CR
-        },
-        'children': [{
-                'fvCtx': {
-                    'attributes': {
-                        'bdEnforcedEnable': 'no',
-                        'knwMcastAct': 'permit',
-                        'name': 'vrf-admz',
-                        'pcEnfDir': 'ingress',
-                        'pcEnfPref': 'enforced',
-                        'status': CR
-                    }
-                }
-            }
-        ]
-    }
-}
+fabric_settings = GenericClass(apic_class='infraSetPol', name='default', **settings)
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', fabric_settings.json())
+print(resp.json())
+assert resp.ok
 
 
-# fabricFuncP is a child object of fabricInst
-fabric['fabricInst']['children'].append(fabric_funcp)
+# Configure Standard interface policies  CDP / LLDP / Port Aggregation
+cdp = GenericClass(apic_class='cdpIfPol', name='CDP-Enable', adminSt='enabled')
+lldp = GenericClass(apic_class='lldpIfPol', name='LLDP-Enable', adminRxSt='enabled', adminTxSt='enabled')
+pc_active = GenericClass(apic_class='lacpLagPol', name='pc-LACP-Active', mode='active', minLinks='1', maxLinks='16',
+                         ctrl='fast-sel-hot-stdby,graceful-conv,susp-individual')
+pc_on = GenericClass(apic_class='lacpLagPol', name='pc-Static-ON', mode='off', minLinks='1', maxLinks='16',
+                     ctrl='fast-sel-hot-stdby,graceful-conv,susp-individual')
 
-# infraFuncP is a child object of infraInfra
-infra['infraInfra']['children'].append(infra_funcp)
+resp = session.post(f'{URL}/api/mo/uni/infra.json', cdp.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', lldp.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', pc_active.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', pc_on.json())
+print(resp.json())
+assert resp.ok
 
 
 # Create VLAN pool for fabric
-vlan_pool = {
-    'fvnsVlanInstP': {
-        'attributes': {
-            'allocMode': 'dynamic',
-            'name': f'vlp-{data_center}',
-            'status': CR
-        },
-        'children': [{
-                'fvnsEncapBlk': {
-                    'attributes': {
-                        'allocMode': 'static',
-                        'from': 'vlan-2',
-                        'role': 'external',
-                        'to': 'vlan-3966'
-                    }
-                }
-            }, {
-                'fvnsEncapBlk': {
-                    'attributes': {
-                        'allocMode': 'static',
-                        'from': 'vlan-3968',
-                        'role': 'external',
-                        'to': 'vlan-4094'
-                    }
-                }
-            }
-        ]
-    }
-}
-infra['infraInfra']['children'].append(vlan_pool)
+vlp = GenericClass(apic_class='fvnsVlanInstP', name=f'vlp-{env.DataCenter}', allocMode='dynamic')
+block1 = GenericClass(apic_class='fvnsEncapBlk', allocMode='static', to='vlan-3966', role='external')
+block2 = GenericClass(apic_class='fvnsEncapBlk', allocMode='static', to='vlan-4094', role='external')
+block1.attributes.__setattr__('from', 'vlan-2')
+block2.attributes.__setattr__('from', 'vlan-3968')
 
-# Fabric interface policies append to infra/
-cdp_enable = {
-    'cdpIfPol': {
-        'attributes': {
-            'adminSt': 'enabled',
-            'name': 'CDP-Enable',
-            'status': CR,
-        }
-    }
-}
-infra['infraInfra']['children'].append(cdp_enable)
+vlp.children = [block1, block2]
 
-lldp_enable = {
-    'lldpIfPol': {
-        'attributes': {
-            'adminRxSt': 'enabled',
-            'adminTxSt': 'enabled',
-            'name': 'LLDP-Enable',
-            'status': CR
-        }
-    }
-}
-infra['infraInfra']['children'].append(lldp_enable)
-
-pc_lacp_active = {
-    'lacpLagPol': {
-        'attributes': {
-            'ctrl': 'fast-sel-hot-stdby,graceful-conv,susp-individual',
-            'maxLinks': '16',
-            'minLinks': '1',
-            'mode': 'active',
-            'name': 'pc-LACP-Active',
-            'status': CR
-        }
-    }
-}
-infra['infraInfra']['children'].append(pc_lacp_active)
-
-pc_static_on = {
-    'lacpLagPol': {
-        'attributes': {
-            'ctrl': 'fast-sel-hot-stdby,graceful-conv,susp-individual',
-            'maxLinks': '16',
-            'minLinks': '1',
-            'mode': 'off',
-            'name': 'pc-Static-ON',
-            'status': CR
-        }
-    }
-}
-infra['infraInfra']['children'].append(pc_static_on)
-
-fabric_settings = {
-    'infraSetPol': {
-        'attributes': {
-            'dn': 'uni/infra/settings',
-            'domainValidation': 'no',
-            'enforceSubnetCheck': 'yes',
-            'name': 'default',
-            'opflexpAuthenticateClients': 'no',
-            'opflexpUseSsl': 'yes',
-            'reallocateGipo': 'no',
-            'unicastXrEpLearnDisable': 'yes',
-            'status': MOD
-        }
-    }
-}
-infra['infraInfra']['children'].append(fabric_settings)
-
-# Create physical domains for fabric
-physical_domain = {  # This goes under uni/
-    'physDomP': {
-        'attributes': {
-            'annotation': '',
-            'dn': f'uni/phys-phy-dom-{data_center}',
-            'name': f'phy-dom-{data_center}',
-            'status': CR
-        },
-        'children': [{
-                'infraRsVlanNs': {
-                    'attributes': {
-                        'annotation': '',
-                        'tDn': f'uni/infra/vlanns-[vlp-{data_center}]-dynamic'
-                    }
-                }
-            }
-        ]
-    }
-}
-uni['polUni']['children'].append(physical_domain)
-
-l3_domain = {
-    'l3extDomP': {
-        'attributes': {
-            'dn': f'uni/l3dom-l3-dom-{data_center}',
-            'name': f'l3-dom-{data_center}',
-            'status': CR
-        },
-        'children': [{
-                'infraRsVlanNs': {
-                    'attributes': {
-                        'tDn': f'uni/infra/vlanns-[vlp-{data_center}]-dynamic'
-                    }
-                }
-            }
-        ]
-    }
-}
-uni['polUni']['children'].append(l3_domain)
-
-aep_l3_ports = {
-    'infraAttEntityP': {
-        'attributes': {
-            'dn': 'uni/infra/attentp-aep-L3-Ports',
-            'name': 'aep-L3-Ports',
-            'status': CR
-        },
-        'children': [{
-                'infraRsDomP': {
-                    'attributes': {
-                        'tDn': f'uni/l3dom-l3-dom-{data_center}'
-                    }
-                }
-            }
-        ]
-    }
-}
-infra['infraInfra']['children'].append(aep_l3_ports)
-
-rt_core_policy_group = {
-    'infraAccPortGrp': {
-        'attributes': {
-            'dn': f'uni/infra/funcprof/accportgrp-rt-{data_center}-Core',
-            'name': f'rt-{data_center}-Core',
-            'status': CR
-        },
-        'children': [{
-                'infraRsAttEntP': {
-                    'attributes': {
-                        'annotation': '',
-                        'tDn': 'uni/infra/attentp-aep-L3-Ports'
-                    }
-                }
-            }, {
-                'infraRsCdpIfPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnCdpIfPolName': 'CDP-Enable'
-                    }
-                }
-            }, {
-                'infraRsLldpIfPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnLldpIfPolName': 'LLDP-Enable'
-                    }
-                }
-            }
-        ]
-    }
-}
-infra_funcp['infraFuncP']['children'].append(rt_core_policy_group)
-
-rt_core_profile = {
-    'infraAccPortP': {
-        'attributes': {
-            'descr': 'RT 45--48',
-            'dn': f'uni/infra/accportprof-rt-{data_center}-Core',
-            'name': f'rt-{data_center}-Core',
-            'status': CR
-        },
-        'children': [{
-                'infraHPortS': {
-                    'attributes': {
-                        'descr': 'Routed Links to Core',
-                        'name': 'rt-45--48',
-                        'type': 'range'
-                    },
-                    'children': [{
-                            'infraRsAccBaseGrp': {
-                                'attributes': {
-                                    'tDn': f'uni/infra/funcprof/accportgrp-rt-{data_center}-Core'
-                                }
-                            }
-                        }, {
-                            'infraPortBlk': {
-                                'attributes': {
-                                    'descr': f'{data_center}-Core',
-                                    'fromCard': '1',
-                                    'fromPort': '45',
-                                    'name': 'block2',
-                                    'toCard': '1',
-                                    'toPort': '48'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-infra['infraInfra']['children'].append(rt_core_profile)
+resp = session.post(f'{URL}/api/mo/uni/infra.json', vlp.json())
+print(resp.json())
+assert resp.ok
 
 
-# Create vpc policy for border leafs
-vpc_policy = {
-    'fabricProtPol': {
-        'attributes': {
-            'dn': 'uni/fabric/protpol',
-            'name': 'default',
-            'pairT': 'explicit',
-            'status': MOD
-        },
-        'children': [{
-                'fabricExplicitGEp': {
-                    'attributes': {
-                        'id': '101',
-                        'name': 'vpc-101-102'
-                    },
-                    'children': [{
-                            'fabricRsVpcInstPol': {
-                                'attributes': {
-                                    'tnVpcInstPolName': 'default'
-                                }
-                            }
-                        }, {
-                            'fabricNodePEp': {
-                                'attributes': {
-                                    'id': '101',
-                                    'podId': '1'
-                                }
-                            }
-                        }, {
-                            'fabricNodePEp': {
-                                'attributes': {
-                                    'id': '102',
-                                    'podId': '1'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(vpc_policy)
+# Create physical and layer3 domains for fabric
+vlp_rel = GenericClass(apic_class='infraRsVlanNs', tDn=f'uni/infra/vlanns-[vlp-{env.DataCenter}]-dynamic')
+
+phy_dom = GenericClass(apic_class='physDomP', name=f'phy-dom-{env.DataCenter}')
+l3_dom = GenericClass(apic_class='l3extDomP', name=f'l3-dom-{env.DataCenter}')
+
+phy_dom.children = [vlp_rel]
+l3_dom.children = [vlp_rel]
+
+resp = session.post(f'{URL}/api/mo/uni.json', phy_dom.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni.json', l3_dom.json())
+print(resp.json())
+assert resp.ok
 
 
-# Fabric Policies append to fabric/
-fabric_policy_group = {
-    'fabricPodPGrp': {
-        'attributes': {
-            'name': env.Name,
-            'status': CR
-        },
-        'children': [{
-                'fabricRsSnmpPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnSnmpPolName': 'default'
-                    }
-                }
-            }, {
-                'fabricRsPodPGrpIsisDomP': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnIsisDomPolName': ''
-                    }
-                }
-            }, {
-                'fabricRsPodPGrpCoopP': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnCoopPolName': ''
-                    }
-                }
-            }, {
-                'fabricRsPodPGrpBGPRRP': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnBgpInstPolName': 'default'
-                    }
-                }
-            }, {
-                'fabricRsTimePol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnDatetimePolName': 'default'
-                    }
-                }
-            }, {
-                'fabricRsMacsecPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnMacsecFabIfPolName': ''
-                    }
-                }
-            }, {
-                'fabricRsCommPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnCommPolName': ''
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric_funcp['fabricFuncP']['children'].append(fabric_policy_group)  # Appends to fabric/funcp
+# Create Standard AEPs
+aep_l3 = GenericClass(apic_class='infraAttEntityP', name='aep-L3-Ports')
+l3_dom_rel = GenericClass(apic_class='infraRsDomP', tDn=f'uni/l3dom-{l3_dom.attributes.name}')
 
-pod_profile = {
-    'fabricPodP': {
-        'attributes': {
-            'dn': 'uni/fabric/podprof-default',
-            'name': 'default',
-            'status': MOD
-        },
-        'children': [{
-                'fabricPodS': {
-                    'attributes': {
-                        'annotation': '',
-                        'name': 'default',
-                        'type': 'ALL'
-                    },
-                    'children': [{
-                            'fabricRsPodPGrp': {
-                                'attributes': {
-                                    'tDn': 'uni/fabric/funcprof/podpgrp-{}'.format(env.Name)
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(pod_profile)
+aep_place = GenericClass(apic_class='infraAttEntityP', name='aep-Placeholders')
+place_dom_rel = GenericClass(apic_class='infraRsDomP', tDn=f'uni/phys-{phy_dom.attributes.name}')
 
-dns_policy = {
-    'dnsProfile': {
-        'attributes': {
-            'IPVerPreference': 'IPv4',
-            'dn': 'uni/fabric/dnsp-default',
-            'name': 'default',
-            'status': MOD
-        },
-        'children': [{
-                'dnsRsProfileToEpg': {
-                    'attributes': {
-                        'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                    }
-                }
-            }, {
-                'dnsProv': {
-                    'attributes': {
-                        'addr': env.PrimaryDNS,
-                        'preferred': 'yes'
-                    }
-                }
-            }, {
-                'dnsProv': {
-                    'attributes': {
-                        'addr': env.SecondaryDNS,
-                        'preferred': 'no'
-                    }
-                }
-            }, {
-                'dnsProv': {
-                    'attributes': {
-                        'addr': env.TertiaryDNS,
-                        'preferred': 'no'
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(dns_policy)
+aep_l3.children = [l3_dom_rel]
+aep_place.children = [place_dom_rel]
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', aep_l3.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', aep_place.json())
+print(resp.json())
+assert resp.ok
+
+
+# Create RDC Core interface policy group
+core_pol_grp = GenericClass(apic_class='infraAccPortGrp', name=f'rt-{env.DataCenter}-Core')
+aep_rel = GenericClass(apic_class='infraRsAttEntP', tDn='uni/infra/attentp-aep-L3-Ports')
+cdp_rel = GenericClass(apic_class='infraRsCdpIfPol', tnCdpIfPolName='CDP-Enable')
+lldp_rel = GenericClass(apic_class='infraRsLldpIfPol', tnLldpIfPolName='LLDP-Enable')
+
+core_pol_grp.children = [aep_rel, cdp_rel, lldp_rel]
+
+resp = session.post(f'{URL}/api/mo/uni/infra/funcprof.json', core_pol_grp.json())
+print(resp.json())
+assert resp.ok
+
+
+# Create the RDC Core interface profile using the policy group above
+core_prof = GenericClass(apic_class='infraAccPortP', descr='Routed 49--52', name=f'rt-{env.DataCenter}-Core')
+core_sel = GenericClass(apic_class='infraHPortS', name='rt-49--52', type='range')
+base_grp = GenericClass(apic_class='infraRsAccBaseGrp',
+                        tDn=f'uni/infra/funcprof/accportgrp-{core_pol_grp.attributes.name}')
+core_block = GenericClass(apic_class='infraPortBlk', name='block49', fromCard='1', toCard='1', fromPort='49',
+                          toPort='52', descr=f'{env.DataCenter}-Core')
+
+core_sel.children = [base_grp, core_block]
+core_prof.children = [core_sel]
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', core_prof.json())
+print(resp.json())
+assert resp.ok
+
+
+# Setup Pod Policy Group
+pod_pgrp = GenericClass(apic_class='fabricPodPGrp', name=env.Name, status='created,modified')
+snmp_pol = GenericClass(apic_class='fabricRsSnmpPol', tnSnmpPolName='default')
+bgp_rr = GenericClass(apic_class='fabricRsPodPGrpBGPRRP', tnBgpInstPolName='default')
+time_pol = GenericClass(apic_class='fabricRsTimePol', tnDatetimePolName='default')
+
+pod_pgrp.children = [snmp_pol, bgp_rr, time_pol]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric/funcprof.json', pod_pgrp.json())
+print(resp.json())
+assert resp.ok
+
+
+# Configure Pod Profile
+pod_prof = GenericClass(apic_class='fabricPodP', name='default', status='modified')
+pod_sel = GenericClass(apic_class='fabricPodS', name='default', type='ALL')
+pod_pgrp = GenericClass(apic_class='fabricRsPodPGrp', tDn=f'uni/fabric/funcprof/podpgrp-{env.Name}')
+
+pod_sel.children = [pod_pgrp]
+pod_prof.children = [pod_sel]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', pod_prof.json())
+print(resp.json())
+assert resp.ok
+
+
+# Configure DNS policy
+dns_pol = GenericClass(apic_class='dnsProfile', name='default', status='modified', IPVerPreference='IPv4')
+dns_epg = GenericClass(apic_class='dnsRsProfileToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+dns_prov1 = GenericClass(apic_class='dnsProv', addr=env.PrimaryDNS, preferred='yes')
+dns_prov2 = GenericClass(apic_class='dnsProv', addr=env.SecondaryDNS, preferred='no')
+dns_prov3 = GenericClass(apic_class='dnsProv', addr=env.TertiaryDNS, preferred='no')
+
+dns_pol.children = [dns_epg, dns_prov1, dns_prov2, dns_prov3]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', dns_pol.json())
+print(resp.json())
+assert resp.ok
+
+
+# Configure BGP Route Reflectors
+sp1 = GenericClass(apic_class='bgpRRNodePEp', id='201', podId='1')
+sp2 = GenericClass(apic_class='bgpRRNodePEp', id='202', podId='1')
+bgp_rrp = GenericClass(apic_class='bgpRRP', name='')
+bgp_as = GenericClass(apic_class='bgpAsP', asn=env.ASN)
+bgp_rr = GenericClass(apic_class='bgpInstPol', name='default', status='modified')
+bgp_rrp.children = [sp1, sp2]
+bgp_rr.children = [bgp_rrp, bgp_as]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', bgp_rr.json(empty_fields=True))
+print(resp.json())
+assert resp.ok
 
 snmp_strings = {'rw': 'impasse', 'ro': 'notpublic'}
 
-snmp_clients = {
-    'snmpPol': {
-        'attributes': {
-            'adminSt': 'disabled',  # Leave disabled until fabric is production
-            'contact': 'HCA NOC',
-            'dn': 'uni/fabric/snmppol-default',
-            'loc': env.Name,
-            'name': 'default',
-            'status': MOD
-        },
-        'children': [{
-                'snmpCommunityP': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': 'RW',
-                        'name': snmp_strings['rw'],
-                        'nameAlias': ''
-                    }
-                }
-            }, {
-                'snmpCommunityP': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': 'RO',
-                        'name': snmp_strings['ro'],
-                        'nameAlias': ''
-                    }
-                }
-            }, {
-                'snmpClientGrpP': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'name': 'snmpClients',
-                        'nameAlias': ''
-                    },
-                    'children': [{
-                            'snmpRsEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.131',
-                                    'annotation': '',
-                                    'name': 'Spec-10-Dist-03-xrdclpappspc06',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.31.30',
-                                    'annotation': '',
-                                    'name': 'Cisco-Collector-Server-1',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.65',
-                                    'annotation': '',
-                                    'name': 'Spectrum1',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.67',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-02-naspcp06',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.89',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-08-naspcp0C',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.132',
-                                    'annotation': '',
-                                    'name': 'Spec-10-Dist-04-xrdclpappspc07',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.75',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-05-naspcp09',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.96',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-02-naspcp0I',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.109',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-08-naspcp0O',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.98',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-04-naspcp0K',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.108',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-07-naspcp0N',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.136',
-                                    'annotation': '',
-                                    'name': 'Spec-10-FT-Dist-01-xrdclpappspc11',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.68',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-03-naspcp07',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.107',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-06-naspcp0M',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.139',
-                                    'annotation': '',
-                                    'name': 'Spec-10-FT-Dist-04-xrdclpappspc14',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.158',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-10-naspcp0Q',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.79',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-06-naspcp0A',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.137',
-                                    'annotation': '',
-                                    'name': 'Spec-10-FT-Dist-02-xrdclpappspc12',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.62',
-                                    'annotation': '',
-                                    'name': 'CAPM-Data-Collector1',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.88',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-07-naspcp0B',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.99',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-05-naspcp0L',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.69',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-04-naspcp08',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.157',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-09-naspcp0P',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.97',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-03-naspcp0J',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.129',
-                                    'annotation': '',
-                                    'name': 'Spec-10-Dist-01-xrdclpappspc04',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.91',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-09-naspcp0D',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.66',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-01-naspcp05',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.92',
-                                    'annotation': '',
-                                    'name': 'Spec-9-Dist-10-naspcp0E',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.6',
-                                    'annotation': '',
-                                    'name': 'CAPM-Data-Collector2',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.32.95',
-                                    'annotation': '',
-                                    'name': 'Spec-9-FT-Dist-01-naspcp0H',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.138',
-                                    'annotation': '',
-                                    'name': 'Spec-10-FT-Dist-03-xrdclpappspc13',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }, {
-                            'snmpClientP': {
-                                'attributes': {
-                                    'addr': '10.26.33.130',
-                                    'annotation': '',
-                                    'name': 'Spec-10-Dist-02-xrdclpappspc05',
-                                    'nameAlias': ''
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(snmp_clients)
 
-snmp_dest_group = {
-    'snmpGroup': {
-        'attributes': {
-            'annotation': '',
-            'descr': '',
-            'dn': 'uni/fabric/snmpgroup-SNMP_Dest',
-            'name': 'SNMP_Dest',
-            'status': CR
-        },
-        'children': [{
-                'snmpTrapDest': {
-                    'attributes': {
-                        'host': '10.26.32.93',
-                        'notifT': 'traps',
-                        'port': '162',
-                        'secName': 'notpublic',
-                        'v3SecLvl': 'noauth',
-                        'ver': 'v2c'
-                    },
-                    'children': [{
-                            'fileRsARemoteHostToEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(snmp_dest_group)
+# Configure SNMP Client sources
+snmp_pol = GenericClass(apic_class='snmpPol', name='default', status='modified', contact='HCA NOC', loc=env.Name)
+snmp_comm_ro = GenericClass(apic_class='snmpCommunityP', descr='RO', name=snmp_strings['ro'])
+snmp_comm_rw = GenericClass(apic_class='snmpCommunityP', descr='RW', name=snmp_strings['rw'])
+snmp_client_grp = GenericClass(apic_class='snmpClientGrpP', name='snmpClients')
+snmp_client_epg = GenericClass(apic_class='snmpRsEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
 
-syslog_dest_group = {
-    'syslogGroup': {
-        'attributes': {
-            'annotation': '',
-            'descr': '',
-            'dn': 'uni/fabric/slgroup-Syslog-Destination',
-            'format': 'aci',
-            'name': 'Syslog-Destination',
-            'status': CR
-        },
-        'children': [{
-                'syslogRemoteDest': {
-                    'attributes': {
-                        'adminState': 'disabled',  # Leave disabled until fabric is production
-                        'annotation': '',
-                        'descr': '',
-                        'format': 'aci',
-                        'forwardingFacility': 'local7',
-                        'host': env.SyslogDest,
-                        'name': 'HCA-Syslog',
-                        'nameAlias': '',
-                        'port': '514',
-                        'severity': 'information'
-                    },
-                    'children': [{
-                            'fileRsARemoteHostToEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'syslogProf': {
-                    'attributes': {
-                        'adminState': 'enabled',
-                        'annotation': '',
-                        'descr': '',
-                        'name': 'syslog',
-                        'nameAlias': ''
-                    }
-                }
-            }, {
-                'syslogFile': {
-                    'attributes': {
-                        'adminState': 'enabled',
-                        'annotation': '',
-                        'descr': '',
-                        'format': 'aci',
-                        'name': '',
-                        'nameAlias': '',
-                        'severity': 'information'
-                    }
-                }
-            }, {
-                'syslogConsole': {
-                    'attributes': {
-                        'adminState': 'enabled',
-                        'annotation': '',
-                        'descr': '',
-                        'format': 'aci',
-                        'name': '',
-                        'nameAlias': '',
-                        'severity': 'alerts'
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(syslog_dest_group)
+snmp_pol.children = [snmp_comm_ro, snmp_comm_rw, snmp_client_grp]
+snmp_client_grp.children = [snmp_client_epg]
+for name, addr in SNMP_CLIENTS:
+    client = GenericClass(apic_class='snmpClientP', name=name, addr=addr)
+    snmp_client_grp.children += [client]
 
-bgp_route_reflectors = {
-    'bgpInstPol': {
-        'attributes': {
-            'dn': 'uni/fabric/bgpInstP-default',
-            'name': 'default',
-            'status': MOD
-        },
-        'children': [{
-                'bgpRRP': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'name': '',
-                        'nameAlias': ''
-                    },
-                    'children': [{
-                            'bgpRRNodePEp': {
-                                'attributes': {
-                                    'id': '202',
-                                    'podId': '1'
-                                }
-                            }
-                        }, {
-                            'bgpRRNodePEp': {
-                                'attributes': {
-                                    'id': '201',
-                                    'podId': '1'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'bgpAsP': {
-                    'attributes': {
-                        'asn': env.ASN
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(bgp_route_reflectors)
-
-monitoring_policy = {
-    'monCommonPol': {
-        'attributes': {
-            'dn': 'uni/fabric/moncommon',
-            'name': 'default',
-            'status': MOD
-        },
-        'children': [{
-                'syslogSrc': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'incl': 'all,audit,events,faults,session',
-                        'minSev': 'information',
-                        'name': 'Syslog-Source',
-                        'nameAlias': ''
-                    },
-                    'children': [{
-                            'syslogRsDestGroup': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/fabric/slgroup-Syslog-Destination'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'snmpSrc': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'incl': 'events,faults',
-                        'minSev': 'info',
-                        'name': 'HCA-SNMP',
-                        'nameAlias': ''
-                    },
-                    'children': [{
-                            'snmpRsDestGroup': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/fabric/snmpgroup-SNMP_Dest'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(monitoring_policy)
-
-ntp_policy = {
-    'datetimePol': {
-        'attributes': {
-            'StratumValue': '8',
-            'adminSt': 'enabled',
-            'authSt': 'disabled',
-            'dn': 'uni/fabric/time-default',
-            'masterMode': 'disabled',
-            'name': 'default',
-            'serverState': 'disabled',
-            'status': MOD
-        },
-        'children': [{
-                'datetimeNtpProv': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'keyId': '0',
-                        'maxPoll': '6',
-                        'minPoll': '4',
-                        'name': '10.90.10.100',
-                        'nameAlias': '',
-                        'preferred': ('yes' if env.PreferredNTP == '10.90.10.100' else 'no')
-                    },
-                    'children': [{
-                            'datetimeRsNtpProvToEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'datetimeNtpProv': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'keyId': '0',
-                        'maxPoll': '6',
-                        'minPoll': '4',
-                        'name': '10.26.10.100',
-                        'nameAlias': '',
-                        'preferred': ('yes' if env.PreferredNTP == '10.26.10.100' else 'no')
-                    },
-                    'children': [{
-                            'datetimeRsNtpProvToEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'datetimeNtpProv': {
-                    'attributes': {
-                        'annotation': '',
-                        'descr': '',
-                        'keyId': '0',
-                        'maxPoll': '6',
-                        'minPoll': '4',
-                        'name': '10.154.10.100',
-                        'nameAlias': '',
-                        'preferred': ('yes' if env.PreferredNTP == '10.154.10.100' else 'no')
-                    },
-                    'children': [{
-                            'datetimeRsNtpProvToEpg': {
-                                'attributes': {
-                                    'annotation': '',
-                                    'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(ntp_policy)
-
-time_zone = {
-    'datetimeFormat': {
-        'attributes': {
-            'displayFormat': 'local',
-            'dn': 'uni/fabric/format-default',
-            'name': 'default',
-            'showOffset': 'enabled',
-            'tz': 'n300_America-Chicago',
-            'status': MOD
-        }
-    }
-}
-fabric['fabricInst']['children'].append(time_zone)
-
-maintenance_groups = [
-    {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-Odds',
-                'name': 'Odds',
-                'status': CR,
-                'type': 'range'
-            },
-            'children': []
-        }
-    }, {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-Evens',
-                'name': 'Evens',
-                'status': CR,
-                'type': 'range'
-            },
-            'children': []
-        }
-    }, {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-OOB',
-                'name': 'Evens',
-                'status': CR,
-                'type': 'range'
-            }
-        }
-    }, {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-SP-201',
-                'name': 'SP-201',
-                'status': CR,
-                'type': 'range'
-            },
-            'children': [{
-                    'fabricNodeBlk': {
-                        'attributes': {
-                            'from_': '201',
-                            'name': 'blk201-201',
-                            'to_': '201'
-                        }
-                    }
-                }
-            ]
-        }
-    }, {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-SP-202',
-                'name': 'SP-202',
-                'status': CR,
-                'type': 'range'
-            },
-            'children': [{
-                    'fabricNodeBlk': {
-                        'attributes': {
-                            'from_': '202',
-                            'name': 'blk202-202',
-                            'to_': '202'
-                        }
-                    }
-                }
-            ]
-        }
-    }, {
-        'maintMaintGrp': {
-            'attributes': {
-                'dn': 'uni/fabric/maintgrp-Staging',
-                'name': 'Staging',
-                'status': CR,
-                'type': 'range'
-            }
-        }
-    }
-]
-for group in maintenance_groups:
-    fabric['fabricInst']['children'].append(group)
-
-remote_path = {
-    'fileRemotePath': {
-        'attributes': {
-            'dn': 'uni/fabric/path-Voyence',
-            'remotePort': '22',
-            'name': 'Voyence',
-            'host': '10.26.31.85',
-            'protocol': 'scp',
-            'remotePath': f'/opt/Juniper_Backups/ACI_Fabric/{env.Name}',
-            'userName': os.getenv('voyenceuser'),
-            'userPasswd': os.getenv('voyencepass'),
-            'status': CR
-        },
-        'children': [{
-                'fileRsARemoteHostToEpg': {
-                    'attributes': {
-                        'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default',
-                        'status': 'created,modified'
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(remote_path)
-
-trigger_schedule = {
-    'trigSchedP': {
-        'attributes': {
-            'name': 'Nightly-Backup',
-            'status': CR
-        },
-        'children': [{
-                'trigRecurrWindowP': {
-                    'attributes': {
-                        'concurCap': 'unlimited',
-                        'day': 'every-day',
-                        'hour': '2',
-                        'minute': '0',
-                        'name': 'Morning-2AM',
-                        'procBreak': 'none',
-                        'procCap': 'unlimited',
-                        'timeCap': 'unlimited'
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(trigger_schedule)
-
-config_export_profile = {
-    'configExportP': {
-        'attributes': {
-            'adminSt': 'untriggered',
-            'format': 'json',
-            'includeSecureFields': 'yes',
-            'maxSnapshotCount': 'global-limit',
-            'name': 'Nightly-Offsite-Config-Export',
-            'snapshot': 'no',
-            'status': CR
-        },
-        'children': [{
-                'configRsRemotePath': {
-                    'attributes': {
-                        'tnFileRemotePathName': 'Voyence'
-                    }
-                }
-            }, {
-                'configRsExportScheduler': {
-                    'attributes': {
-                        'tnTrigSchedPName': 'Nightly-Backup'
-                    }
-                }
-            }
-        ]
-    }
-}
-fabric['fabricInst']['children'].append(config_export_profile)
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', snmp_pol.json())
+print(resp.json())
+assert resp.ok
 
 
-# TACACS configuration appends to uni/
-# tacacs = {
-#     'aaaUserEp': {
-#         'attributes': {
-#             'dn': 'uni/userext',
-#             'status': MOD
-#         },
-#         'children': [{
-#                 'aaaTacacsPlusEp': {
-#                     'attributes': {
-#                         'dn': 'uni/userext/tacacsext',
-#                         'status': MOD
-#                     },
-#                     'children': [{
-#                             'aaaTacacsPlusProvider': {
-#                                 'attributes': {
-#                                     'name': '10.27.21.99',
-#                                     'key': 'fYiqjiaw',
-#                                     'status': CREATE
-#                                 },
-#                                 'children': [{
-#                                         'aaaRsSecProvToEpg': {
-#                                             'attributes': {
-#                                                 'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-#                                             }
-#                                         }
-#                                     }
-#                                 ]
-#                             }
-#                         }, {
-#                             'aaaTacacsPlusProvider': {
-#                                 'attributes': {
-#                                     'name': '10.90.42.49',
-#                                     'key': 'fYiqjiaw',
-#                                     'status': CREATE
-#                                 },
-#                                 'children': [{
-#                                         'aaaRsSecProvToEpg': {
-#                                             'attributes': {
-#                                                 'tDn': 'uni/tn-mgmt/mgmtp-default/oob-default'
-#                                             }
-#                                         }
-#                                     }
-#                                 ]
-#                             }
-#                         }, {
-#                             'aaaTacacsPlusProviderGroup': {
-#                                 'attributes': {
-#                                     'name': 'TACACS-Group',
-#                                     'status': CREATE
-#                                 },
-#                                 'children': [{
-#                                         'aaaProviderRef': {
-#                                             'attributes': {
-#                                                 'name': '10.27.21.99',
-#                                                 'order': '1'
-#                                             }
-#                                         }
-#                                     }, {
-#                                         'aaaProviderRef': {
-#                                             'attributes': {
-#                                                 'name': '10.90.42.49',
-#                                                 'order': '2'
-#                                             }
-#                                         }
-#                                     }
-#                                 ]
-#                             }
-#                         }
-#                     ]
-#                 }
-#             }, {
-#                 'aaaAuthRealm': {
-#                     'attributes': {
-#                         'dn': 'uni/userext/authrealm',
-#                         'status': MOD
-#                     },
-#                     'children': [{
-#                             'aaaDefaultAuth': {
-#                                 'attributes': {
-#                                     'dn': 'uni/userext/authrealm/defaultauth',
-#                                     'providerGroup': 'TACACS-Group',
-#                                     'realm': 'tacacs',
-#                                     'status': MOD
-#                                 }
-#                             }
-#                         }
-#                     ]
-#                 }
-#             }
-#         ]
-#     }
-# }
-# uni['polUni']['children'].append(tacacs)
+# Configure SNMP Trap Destination
+snmp_epg = GenericClass(apic_class='fileRsARemoteHostToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+snmp_trap_dest = GenericClass(apic_class='snmpTrapDest', host=SNMP_TRAP_DEST, notifT='traps', port='162',
+                              secName='notpublic', v3SecLvl='noauth', ver='v2c')
+snmp_grp = GenericClass(apic_class='snmpGroup', name='SNMP_Dest', status='created,modified')
+
+snmp_trap_dest.children = [snmp_epg]
+snmp_grp.children = [snmp_trap_dest]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', snmp_grp.json())
+print(resp.json())
+assert resp.ok
 
 
-# Management tenant append to tn-mgmt/
-oob_contract = {
-    'vzOOBBrCP': {
-        'attributes': {
-            'name': 'c-oob-default',
-            'scope': 'context'
-        },
-        'children': [{
-                'vzSubj': {
-                    'attributes': {
-                        'name': 's-oob-default'
-                    },
-                    'children': [{
-                            'vzRsSubjFiltAtt': {
-                                'attributes': {
-                                    'tnVzFilterName': 'default'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_mgmt['fvTenant']['children'].append(oob_contract)
+# Configure Syslog Destinations and Policies
+syslog_epg = GenericClass(apic_class='fileRsARemoteHostToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+syslog_remote = GenericClass(apic_class='syslogRemoteDest', adminState='enabled', host=env.SyslogDest,
+                             name='HCA-Syslog', port=514, severity='information')
+syslog_prof = GenericClass(apic_class='syslogProf', adminState='disabled',  # Leave Disabled until production ready
+                           name='syslog')
+syslog_grp = GenericClass(apic_class='syslogGroup', name='Syslog-Destination', status='created,modified', format='aci')
+syslog_remote.children = [syslog_epg]
+syslog_grp.children = [syslog_remote, syslog_prof]
 
-mgmt_profile = {
-    'mgmtMgmtP': {
-        'attributes': {
-            'name': 'default',
-            'status': MOD
-        },
-        'children': []
-    }
-}
-tn_mgmt['fvTenant']['children'].append(mgmt_profile)
-
-oob_epg = {
-    'mgmtOoB': {
-        'attributes': {
-            'name': 'default'
-        },
-        'children': [{
-                'mgmtRsOoBProv': {
-                    'attributes': {
-                        'tnVzOOBBrCPName': 'c-oob-default'
-                    }
-                }
-            }
-        ]
-    }
-}
-mgmt_profile['mgmtMgmtP']['children'].append(oob_epg)
-
-oob_external = {
-    'mgmtExtMgmtEntity': {
-        'attributes': {
-            'name': 'default'
-        },
-        'children': [{
-                'mgmtInstP': {
-                    'attributes': {
-                        'name': 'oob-mgmt-ext'
-                    },
-                    'children': [{
-                            'mgmtRsOoBCons': {
-                                'attributes': {
-                                    'tnVzOOBBrCPName': 'c-oob-default'
-                                }
-                            }
-                        }, {
-                            'mgmtSubnet': {
-                                'attributes': {
-                                    'ip': '0.0.0.0/0'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_mgmt['fvTenant']['children'].append(oob_external)
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', syslog_grp.json())
+print(resp.json())
+assert resp.ok
 
 
-# Generate management addresses for apics, leafs, and spines
+# Configure monitoring Policy
+mon_snmp = GenericClass(apic_class='snmpSrc', name='HCA-SNMP')
+mon_sysl = GenericClass(apic_class='syslogSrc', name='Syslog-Source')
+mon_snmp_grp = GenericClass(apic_class='snmpRsDestGroup', tDn='uni/fabric/snmpgroup-SNMP_Dest')
+mon_sysl_grp = GenericClass(apic_class='syslogRsDestGroup', tDn='uni/fabric/slgroup-Syslog-Destination')
+mon_pol = GenericClass(apic_class='monCommonPol', name='default', status='modified')
+
+mon_snmp.children = [mon_snmp_grp]
+mon_sysl.children = [mon_sysl_grp]
+mon_pol.children = [mon_snmp, mon_sysl]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', mon_pol.json())
+print(resp.json())
+assert resp.ok
+
+
+# NTP Configuration
+oob_epg_rel = GenericClass(apic_class='datetimeRsNtpProvToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+ntp_prov1 = GenericClass(apic_class='datetimeNtpProv', name='10.90.10.100',
+                         preferred=('yes' if env.PreferredNTP == '10.90.10.100' else 'no'))
+ntp_prov2 = GenericClass(apic_class='datetimeNtpProv', name='10.26.10.100',
+                         preferred=('yes' if env.PreferredNTP == '10.26.10.100' else 'no'))
+ntp_prov3 = GenericClass(apic_class='datetimeNtpProv', name='10.154.10.100',
+                         preferred=('yes' if env.PreferredNTP == '10.154.10.100' else 'no'))
+ntp_prov1.children = [oob_epg_rel]
+ntp_prov2.children = [oob_epg_rel]
+ntp_prov3.children = [oob_epg_rel]
+ntp_pol = GenericClass(apic_class='datetimePol', adminSt='enabled', masterMode='disabled', name='default', status=MOD)
+ntp_pol.children = [ntp_prov1, ntp_prov2, ntp_prov3]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', ntp_pol.json())
+print(resp.json())
+assert resp.ok
+
+
+# Set Time Zone
+time_zone = GenericClass(apic_class='datetimeFormat', displayFormat='local', name='default', showOffset='enabled',
+                         tz='n300_America-Chicago', status='modified')
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', time_zone.json())
+print(resp.json())
+assert resp.ok
+
+
+# Configure Voyence remote path
+remote_epg = GenericClass(apic_class='fileRsARemoteHostToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+remote_path = GenericClass(apic_class='fileRemotePath', name='Voyence', host='10.26.31.85', protocol='scp',
+                           remotePath=f'/opt/Juniper_Backups/ACI_Fabric/{env.Name}', userName=os.getenv('voyenceuser'),
+                           userPasswd=os.getenv('voyencepass'), remotePort='22', status='created,modified')
+remote_path.children = [remote_epg]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', remote_path.json())
+print(resp.json())
+assert resp.ok
+
+
+# Setup Nightly Backup Scheduler
+trig_window = GenericClass(apic_class='trigRecurrWindowP', day='every-day', hour='2', minute='0', name='Morning-2AM',
+                           procBreak='none', procCap='unlimited', timeCap='unlimited', concurCap='unlimited')
+trig_schedule = GenericClass(apic_class='trigSchedP', name='Nightly-Backup')
+trig_schedule.children = [trig_window]
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', trig_schedule.json())
+print(resp.json())
+assert resp.ok
+
+
+# Configure Nightly Config Export
+rp = GenericClass(apic_class='configRsRemotePath', tnFileRemotePathName=remote_path.attributes.name)
+sched = GenericClass(apic_class='configRsExportScheduler', tnTrigSchedPName=trig_schedule.attributes.name)
+config_export_prof = GenericClass(apic_class='configExportP', format='json', includeSecureFields='yes',
+                                  maxSnapshotCount='global-limit', name='Nightly-Offsite-Config-Export', snapshot='no',
+                                  status='created,modified')
+
+resp = session.post(f'{URL}/api/mo/uni/fabric.json', config_export_prof.json())
+print(resp.json())
+assert resp.ok
+
+
+# TACACS configuration appends to uni/  # Not setting to be default auth as part of this  # Enable manually
+prov_epg = GenericClass(apic_class='aaaRsSecProvToEpg', tDn='uni/tn-mgmt/mgmtp-default/oob-default')
+prov1 = GenericClass(apic_class='aaaTacacsPlusProvider', name='10.27.21.99', key='fYiqjiaw', status=CR)
+prov2 = GenericClass(apic_class='aaaTacacsPlusProvider', name='10.90.42.49', key='fYiqjiaw', status=CR)
+prov_grp = GenericClass(apic_class='aaaTacacsPlusProviderGroup', name='TACACS-Group', status=CR)
+prov1_att = GenericClass(apic_class='aaaProviderRef', name=prov1.attributes.name, order='1')
+prov2_att = GenericClass(apic_class='aaaProviderRef', name=prov2.attributes.name, order='2')
+tacacs_ep = GenericClass(apic_class='aaaTacacsPlusEp', dn='uni/userext/tacacsext', status=MOD)
+tacacs = GenericClass(apic_class='aaaUserEp', dn='uni/userext', status=MOD)
+prov1.children = [prov_epg]
+prov2.children = [prov_epg]
+prov_grp.children = [prov1_att, prov2_att]
+tacacs_ep.children = [prov1, prov2, prov_grp]
+tacacs.children = [tacacs_ep]
+
+resp = session.post(f'{URL}/api/mo/uni.json', tacacs.json())
+print(resp.json())
+assert resp.ok
+
+
+# Create Out-of-Band contract
+oob_contract = GenericClass(apic_class='vzOOBBrCP', name='c-oob-default', scope='context')
+oob_subj = GenericClass(apic_class='vzSubj', name='s-oob-default')
+oob_filter = GenericClass(apic_class='vzRsSubjFiltAtt', tnVzFilterName='default')
+
+oob_subj.children = [oob_filter]
+oob_contract.children = [oob_subj]
+
+resp = session.post(f'{URL}/api/mo/uni/tn-mgmt.json', oob_contract.json())
+print(resp.json())
+assert resp.ok
+
+
+# Apply OOB Contract to OOB EPG
+oob_epg = GenericClass(apic_class='mgmtOoB', name='default')
+oob_epg_prov = GenericClass(apic_class='mgmtRsOoBProv', tnVzOOBBrCPName='c-oob-default')
+
+oob_epg.children = [oob_epg_prov]
+
+resp = session.post(f'{URL}/api/mo/uni/tn-mgmt/mgmtp-default.json', oob_epg.json())
+print(resp.json())
+assert resp.ok
+
+
+# Apply Contract to OOB External EPG and define OOB subnets as quad-0
+oob_ext_epg = GenericClass(apic_class='mgmtExtMgmtEntity', name='default')
+mgmt_inst_p = GenericClass(apic_class='mgmtInstP', name='oob-mgmt-ext')
+oob_ext_cons = GenericClass(apic_class='mgmtRsOoBCons', tnVzOOBBrCPName='c-oob-default')
+oob_subnet = GenericClass(apic_class='mgmtSubnet', ip='0.0.0.0/0')
+
+mgmt_inst_p.children = [oob_ext_cons, oob_subnet]
+oob_ext_epg.children = [mgmt_inst_p]
+
+resp = session.post(f'{URL}/api/mo/uni/tn-mgmt.json', oob_ext_epg.json())
+print(resp.json())
+assert resp.ok
+
+
+# Generate management addresses for apics, leafs, and spines; required for syslog and SNMP
 net = network(env.OOBLeafIPRange)
 base_address = address(net.network_address)
 
 for node, num in zip(['1', '2', '3', '101', '102', '201', '202'], [11, 12, 13, 6, 7, 4, 5]):
-    node_config = {
-        'mgmtRsOoBStNode': {
-            'attributes': {
-                'addr': f'{base_address + num}/{net.prefixlen}',
-                'dn': f'uni/tn-mgmt/mgmtp-default/oob-default/rsooBStNode-[topology/pod-1/node-{node}]',
-                'gw': f'{base_address + 1}',
-                'tDn': f'topology/pod-1/node-{node}'
-            }
-        }
-    }
-    oob_epg['mgmtOoB']['children'].append(node_config)
+    node_config = GenericClass(apic_class='mgmtRsOoBStNode', addr=f'{base_address + num}/{net.prefixlen}',
+                               dn=f'uni/tn-mgmt/mgmtp-default/oob-default/rsooBStNode-[topology/pod-1/node-{node}]',
+                               gw=f'{base_address + 1}')
+
+    resp = session.post(f'{URL}/api/mo/uni.json', node_config.json())
+    print(resp.json())
+    assert resp.ok
 
 
-'''
-Create HCA Tenant Base Configurations:
-c-Any contract  √
-HCA VRF with c-Any provided and consumed  √
-Not-Routed VRF  √
-L3Outs  √
-OSPF Interface Policy  √
-'''
+# Create tenants
+hca = Tenant(name=env.Tenant)
+hcadr = Tenant(name='tn-HCADR')
+admz = Tenant(name=env.ADMZTenant)
 
-f_any = {  # Removed dn to allow consumption by any tenant
-    'vzFilter': {
-        'attributes': {
-            'name': 'f-any',
-            'status': CR
-        },
-        'children': [{
-                'vzEntry': {
-                    'attributes': {
-                        'applyToFrag': 'no',
-                        'arpOpc': 'unspecified',
-                        'dFromPort': 'unspecified',
-                        'dToPort': 'unspecified',
-                        'etherT': 'unspecified',
-                        'icmpv4T': 'unspecified',
-                        'icmpv6T': 'unspecified',
-                        'matchDscp': 'unspecified',
-                        'name': 'any',
-                        'prot': 'unspecified',
-                        'sFromPort': 'unspecified',
-                        'sToPort': 'unspecified',
-                        'stateful': 'no',
-                        'tcpRules': ''
-                    }
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(f_any)
-tn_hcadr['fvTenant']['children'].append(f_any)
+resp = session.post(f'{URL}/api/mo/uni.json', hca.json())
+print(resp.json())
+assert resp.ok
 
-c_any = {  # Remove dn to be consumable by multiple tenants
-    'vzBrCP': {
-        'attributes': {
-            'name': 'c-Any',
-            'prio': 'unspecified',
-            'scope': 'context',
-            'targetDscp': 'unspecified',
-            'status': CR
-        },
-        'children': [{
-                'vzSubj': {
-                    'attributes': {
-                        'consMatchT': 'AtleastOne',
-                        'name': 's-Any',
-                        'prio': 'unspecified',
-                        'provMatchT': 'AtleastOne',
-                        'revFltPorts': 'yes',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'vzRsSubjFiltAtt': {
-                                'attributes': {
-                                    'action': 'permit',
-                                    'directives': '',
-                                    'priorityOverride': 'default',
-                                    'tnVzFilterName': 'f-any'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(c_any)
-tn_hcadr['fvTenant']['children'].append(c_any)
+resp = session.post(f'{URL}/api/mo/uni.json', hcadr.json())
+print(resp.json())
+assert resp.ok
 
-vrf_hca = {
-    'fvCtx': {
-        'attributes': {
-            'bdEnforcedEnable': 'no',
-            'dn': 'uni/tn-tn-HCA/ctx-vrf-hca',
-            'knwMcastAct': 'permit',
-            'name': 'vrf-hca',
-            'pcEnfDir': 'ingress',
-            'pcEnfPref': 'enforced',
-            'status': CR
-        },
-        'children': [{
-                'fvRsVrfValidationPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnL3extVrfValidationPolName': ''
-                    }
-                }
-            }, {
-                'vzAny': {
-                    'attributes': {
-                        'matchT': 'AtleastOne',
-                        'prefGrMemb': 'disabled'
-                    },
-                    'children': [{
-                            'vzRsAnyToProv': {
-                                'attributes': {
-                                    'matchT': 'AtleastOne',
-                                    'prio': 'unspecified',
-                                    'tnVzBrCPName': 'c-Any'
-                                }
-                            }
-                        }, {
-                            'vzRsAnyToCons': {
-                                'attributes': {
-                                    'prio': 'unspecified',
-                                    'tnVzBrCPName': 'c-Any'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(vrf_hca)
+resp = session.post(f'{URL}/api/mo/uni.json', admz.json())
+print(resp.json())
+assert resp.ok
 
-vrf_not_routed = {
-    'fvCtx': {
-        'attributes': {
-            'bdEnforcedEnable': 'no',
-            'dn': 'uni/tn-tn-HCA/ctx-vrf-Not-Routed',
-            'knwMcastAct': 'permit',
-            'name': 'vrf-Not-Routed',
-            'pcEnfDir': 'ingress',
-            'pcEnfPref': 'enforced',
-            'status': CR
-        }
-    }
-}
-tn_hca['fvTenant']['children'].append(vrf_not_routed)
 
-ospf_core_if_policy = {
-    'ospfIfPol': {
-        'attributes': {
-            'cost': 'unspecified',
-            'ctrl': '',
-            'deadIntvl': '40',
-            'helloIntvl': '10',
-            'name': 'OSPF-Core',
-            'nwT': 'p2p',
-            'pfxSuppress': 'inherit',
-            'prio': '1',
-            'rexmitIntvl': '5',
-            'xmitDelay': '1',
-            'status': CR
-        }
-    }
-}
-tn_hca['fvTenant']['children'].append(ospf_core_if_policy)  # Omitted dn so it could be used in both tenants
-tn_hcadr['fvTenant']['children'].append(ospf_core_if_policy)
+# Create universal filter
+f_any = GenericClass(apic_class='vzFilter', name='f-any', status=CR)
+f_entry = GenericClass(apic_class='vzEntry', name='any', stateful='no')
+f_any.children = [f_entry]
 
-ospf_passive_if_policy = {
-    'ospfIfPol': {
-        'attributes': {
-            'cost': 'unspecified',
-            'ctrl': 'passive',
-            'deadIntvl': '40',
-            'helloIntvl': '10',
-            'name': 'OSPF-Passive',
-            'nwT': 'bcast',
-            'pfxSuppress': 'inherit',
-            'prio': '1',
-            'rexmitIntvl': '5',
-            'xmitDelay': '1',
-            'status': CR
-        }
-    }
-}
-tn_hca['fvTenant']['children'].append(ospf_passive_if_policy)  # Omitted dn so it could be used in both tenants
-# tn_hcadr['fvTenant']['children'].append(ospf_passive_if_policy)
+resp = session.post(f'{URL}/api/mo/uni/tn-{env.Tenant}.json', f_any.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-HCADR.json', f_any.json())
+print(resp.json())
+assert resp.ok
+
+
+# Create universal contract
+c_any = GenericClass(apic_class='vzBrCP', name='c-Any', prio='unspecified', scope='context', targetDscp='unspecified')
+c_subj = GenericClass(apic_class='vzSubj', name='s-Any', revFltPorts='yes', consMatchT='AtleastOne',
+                      provMatchT='AtleastOne')
+filter_rel = GenericClass(apic_class='vzRsSubjFiltAtt', action='permit', tnVzFilterName='f-any')
+
+c_subj.children = [filter_rel]
+c_any.children = [c_subj]
+
+resp = session.post(f'{URL}/api/mo/uni/tn-{env.Tenant}.json', c_any.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-tn-HCADR.json', c_any.json())
+print(resp.json())
+assert resp.ok
+
+
+# Universal VzAny
+vz_prov = GenericClass(apic_class='vzBrCP', tnVzBrCPName='c-Any')
+vz_cons = GenericClass(apic_class='vzSubj', tnVzBrCPName='c-Any')
+vz_any = GenericClass(apic_class='vzAny', matchT='AtleastOne', prefGrMemb='disabled')
+
+vz_any.children = [vz_prov, vz_cons]
+
+
+# Create VRFs for tn-HCA, tn-HCADR, tn-ADMZ
+vrf_hca = Context(name=env.VRF)
+vrf_hcadr = Context(name='vrf-hcadr')
+vrf_admz = Context(name=env.ADMZVRF)
+vrf_not_routed = Context(name='vrf-Not-Routed')
+
+vrf_hca.children = [vz_any]
+vrf_hcadr.children = [vz_any]
+
+resp = session.post(f'{URL}/api/mo/uni/tn-{env.Tenant}.json', vrf_hca.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-{env.Tenant}.json', vrf_not_routed.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-tn-HCADR.json', vrf_hcadr.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-{env.ADMZTenant}.json', vrf_admz.json())
+print(resp.json())
+assert resp.ok
+
+
+# Create OSPF Interface policies
+ospf_if_pol = GenericClass(apic_class='ospfIfPol', name='OSPF-Core', nwT='p2p')
+ospf_pif_pol = GenericClass(apic_class='ospfIfPol', name='OSPF-Passive', ctrl='passive', nwT='bcast')
+
+resp = session.post(f'{URL}/api/mo/uni/tn-common.json', ospf_if_pol.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/tn-common.json', ospf_pif_pol.json())
+print(resp.json())
+assert resp.ok
+
 
 ospf_area = network(env.IPSupernet)
 location_1 = env.BLF101Location
 location_2 = env.BLF102Location
 
-hca_core_l3out = {
-    'l3extOut': {
-        'attributes': {
-            'descr': 'Routed networks to Core',
-            'enforceRtctrl': 'export',
-            'name': 'L3Out-Core',
-            'targetDscp': 'unspecified',
-            'status': CR
-        },
-        'children': [{
-                'ospfExtP': {
-                    'attributes': {
-                        'areaCost': '1',
-                        'areaCtrl': 'redistribute',
-                        'areaId': f'{ospf_area.network_address}',
-                        'areaType': 'nssa',
-                        'multipodInternal': 'no'
-                    }
-                }
-            }, {
-                'l3extRsL3DomAtt': {
-                    'attributes': {
-                        'tDn': f'uni/l3dom-l3-dom-{data_center}'
-                    }
-                }
-            }, {
-                'l3extRsEctx': {
-                    'attributes': {
-                        'tnFvCtxName': 'vrf-hca'
-                    }
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': f'{location_1}-101',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 10}',
-                                    'rtrIdLoopBack': 'yes',
-                                    'tDn': 'topology/pod-1/node-101'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'{location_1}-101-47-48',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'annotation': '',
-                                                'authKeyId': '1',
-                                                'authType': 'none',
-                                                'descr': '',
-                                                'name': '',
-                                                'nameAlias': ''
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Core'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': f'{location_2}-102',
-                        'tag': 'yellow-green',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 11}',
-                                    'rtrIdLoopBack': 'yes',
-                                    'tDn': 'topology/pod-1/node-102'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'{location_2}-102-47-48',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'annotation': '',
-                                                'authKeyId': '1',
-                                                'authType': 'none',
-                                                'descr': '',
-                                                'name': '',
-                                                'nameAlias': ''
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Core'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extInstP': {
-                    'attributes': {
-                        'floodOnEncap': 'disabled',
-                        'matchT': 'AtleastOne',
-                        'name': 'epg-External-Networks',
-                        'prefGrMemb': 'exclude',
-                        'prio': 'unspecified',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extSubnet': {
-                                'attributes': {
-                                    'aggregate': '',
-                                    'annotation': '',
-                                    'descr': '',
-                                    'ip': '0.0.0.0/0',
-                                    'scope': 'export-rtctrl,import-security'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(hca_core_l3out)
-
-hca_admz_l3out = {
-    'l3extOut': {
-        'attributes': {
-            'dn': 'uni/tn-tn-HCA/out-L3Out-ADMZ',
-            'enforceRtctrl': 'export',
-            'name': 'L3Out-ADMZ',
-            'targetDscp': 'unspecified',
-            'status': CR
-        },
-        'children': [{
-                'l3extRsL3DomAtt': {
-                    'attributes': {
-                        'tDn': f'uni/l3dom-l3-dom-{data_center}'
-                    }
-                }
-            }, {
-                'l3extRsEctx': {
-                    'attributes': {
-                        'tnFvCtxName': 'vrf-hca'
-                    }
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': 'BLF-101-102-FW-ADMZ-Frontside',
-                        'tag': 'yellow-green',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 11}',
-                                    'rtrIdLoopBack': 'no',
-                                    'tDn': 'topology/pod-1/node-102'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 10}',
-                                    'rtrIdLoopBack': 'no',
-                                    'tDn': 'topology/pod-1/node-101'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'BLF-101-102-FW-ADMZ-Uplinks',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'authKeyId': '1',
-                                                'authType': 'none'
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Passive'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extInstP': {
-                    'attributes': {
-                        'floodOnEncap': 'disabled',
-                        'matchT': 'AtleastOne',
-                        'name': 'epg-ADMZ-Networks',
-                        'prefGrMemb': 'exclude',
-                        'prio': 'unspecified',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': []
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(hca_admz_l3out)
-
-hca_f5_l3out = {
-    'l3extOut': {
-        'attributes': {
-            'dn': 'uni/tn-tn-HCA/out-L3Out-F5',
-            'enforceRtctrl': 'export',
-            'name': 'L3Out-F5',
-            'targetDscp': 'unspecified',
-            'status': CR
-        },
-        'children': [{
-                'l3extRsL3DomAtt': {
-                    'attributes': {
-                        'tDn': f'uni/l3dom-l3-dom-{data_center}'
-                    }
-                }
-            }, {
-                'l3extRsEctx': {
-                    'attributes': {
-                        'tnFvCtxName': 'vrf-hca'
-                    }
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': f'BLF-101-102-F5-Frontside',
-                        'tag': 'yellow-green',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 10}',
-                                    'rtrIdLoopBack': 'no',
-                                    'tDn': 'topology/pod-1/node-101'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 11}',
-                                    'rtrIdLoopBack': 'no',
-                                    'tDn': 'topology/pod-1/node-102'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'BLF-101-102-F5-Uplinks',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'authKeyId': '1',
-                                                'authType': 'none'
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Passive'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extInstP': {
-                    'attributes': {
-                        'floodOnEncap': 'disabled',
-                        'matchT': 'AtleastOne',
-                        'name': 'epg-F5-QA-VIPs',
-                        'prefGrMemb': 'exclude',
-                        'prio': 'unspecified',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': []
-                }
-            }, {
-                'l3extInstP': {
-                    'attributes': {
-                        'floodOnEncap': 'disabled',
-                        'matchT': 'AtleastOne',
-                        'name': 'epg-F5-Prod-VIPs',
-                        'prefGrMemb': 'exclude',
-                        'prio': 'unspecified',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': []
-                }
-            }
-        ]
-    }
-}
-tn_hca['fvTenant']['children'].append(hca_f5_l3out)
-
-'''
-Create HCADR Tenant Base Configurations:
-c-Any contract  √
-HCADR VRF with c-Any provided and consumed  √
-Data Replication BD (no subnet)  √
-Data Replication AP and EPG  √
-'''
-
-vrf_hcadr = {
-    'fvCtx': {
-        'attributes': {
-            'bdEnforcedEnable': 'no',
-            'dn': 'uni/tn-tn-HCADR/ctx-vrf-hcadr',
-            'knwMcastAct': 'permit',
-            'name': 'vrf-hcadr',
-            'pcEnfDir': 'ingress',
-            'pcEnfPref': 'enforced',
-            'status': CR
-        },
-        'children': [{
-                'fvRsVrfValidationPol': {
-                    'attributes': {
-                        'annotation': '',
-                        'tnL3extVrfValidationPolName': ''
-                    }
-                }
-            }, {
-                'vzAny': {
-                    'attributes': {
-                        'matchT': 'AtleastOne',
-                        'prefGrMemb': 'disabled'
-                    },
-                    'children': [{
-                            'vzRsAnyToProv': {
-                                'attributes': {
-                                    'matchT': 'AtleastOne',
-                                    'prio': 'unspecified',
-                                    'tnVzBrCPName': 'c-Any'
-                                }
-                            }
-                        }, {
-                            'vzRsAnyToCons': {
-                                'attributes': {
-                                    'prio': 'unspecified',
-                                    'tnVzBrCPName': 'c-Any'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hcadr['fvTenant']['children'].append(vrf_hcadr)
-
-hcadr_bd = {
-    'fvBD': {
-        'attributes': {
-            'OptimizeWanBandwidth': 'no',
-            'arpFlood': 'no',
-            'dn': 'uni/tn-tn-HCADR/BD-bd-Data-Replication',
-            'epClear': 'no',
-            'epMoveDetectMode': '',
-            'ipLearning': 'yes',
-            'limitIpLearnToSubnets': 'yes',
-            'mcastAllow': 'no',
-            'multiDstPktAct': 'bd-flood',
-            'name': 'bd-Data-Replication',
-            'type': 'regular',
-            'unicastRoute': 'yes',
-            'unkMacUcastAct': 'proxy',
-            'unkMcastAct': 'flood',
-            'status': CR
-        },
-        'children': [{
-                'fvRsCtx': {
-                    'attributes': {
-                        'tnFvCtxName': 'vrf-hcadr'
-                    }
-                }
-            }, {
-                'fvRsBDToOut': {
-                    'attributes': {
-                        'tnL3extOutName': 'L3Out-Core-HCADR'
-                    }
-                }
-            }
-        ]
-    }
-}
-tn_hcadr['fvTenant']['children'].append(hcadr_bd)
-
-hcadr_epg = {
-    'fvAp': {
-        'attributes': {
-            'dn': 'uni/tn-tn-HCADR/ap-ap-Data-Replication',
-            'name': 'ap-Data-Replication',
-            'status': CR
-        },
-        'children': [{
-                'fvAEPg': {
-                    'attributes': {
-                        'name': 'epg-Data-Replication'
-                    },
-                    'children': [{
-                            'fvRsDomAtt': {
-                                'attributes': {
-                                    'tDn': f'uni/phys-phy-dom-{data_center}'
-                                }
-                            }
-                        }, {
-                            'fvRsBd': {
-                                'attributes': {
-                                    'tnFvBDName': 'bd-Data-Replication'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hcadr['fvTenant']['children'].append(hcadr_epg)
-
-hcadr_core_l3out = {
-    'l3extOut': {
-        'attributes': {
-            'descr': 'Routed networks to Core',
-            'enforceRtctrl': 'export',
-            'name': 'L3Out-Core-HCADR',
-            'targetDscp': 'unspecified',
-            'status': CR
-        },
-        'children': [{
-                'ospfExtP': {
-                    'attributes': {
-                        'areaCost': '1',
-                        'areaCtrl': 'redistribute',
-                        'areaId': f'{ospf_area.network_address}',
-                        'areaType': 'nssa',
-                        'multipodInternal': 'no'
-                    }
-                }
-            }, {
-                'l3extRsL3DomAtt': {
-                    'attributes': {
-                        'tDn': f'uni/l3dom-l3-dom-{data_center}'
-                    }
-                }
-            }, {
-                'l3extRsEctx': {
-                    'attributes': {
-                        'tnFvCtxName': 'vrf-hcadr'
-                    }
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': f'{location_1}-101',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 10}',
-                                    'rtrIdLoopBack': 'yes',
-                                    'tDn': 'topology/pod-1/node-101'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'{location_1}-101-45-46',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'annotation': '',
-                                                'authKeyId': '1',
-                                                'authType': 'none',
-                                                'descr': '',
-                                                'name': '',
-                                                'nameAlias': ''
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Core'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extLNodeP': {
-                    'attributes': {
-                        'name': f'{location_2}-102',
-                        'tag': 'yellow-green',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extRsNodeL3OutAtt': {
-                                'attributes': {
-                                    'rtrId': f'{ospf_area.network_address + 11}',
-                                    'rtrIdLoopBack': 'yes',
-                                    'tDn': 'topology/pod-1/node-102'
-                                },
-                                'children': []
-                            }
-                        }, {
-                            'l3extLIfP': {
-                                'attributes': {
-                                    'name': f'{location_2}-102-45-46',
-                                    'tag': 'yellow-green'
-                                },
-                                'children': [{
-                                        'ospfIfP': {
-                                            'attributes': {
-                                                'annotation': '',
-                                                'authKeyId': '1',
-                                                'authType': 'none',
-                                                'descr': '',
-                                                'name': '',
-                                                'nameAlias': ''
-                                            },
-                                            'children': [{
-                                                    'ospfRsIfPol': {
-                                                        'attributes': {
-                                                            'tnOspfIfPolName': 'OSPF-Core'
-                                                        }
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }, {
-                'l3extInstP': {
-                    'attributes': {
-                        'floodOnEncap': 'disabled',
-                        'matchT': 'AtleastOne',
-                        'name': 'epg-External-Networks',
-                        'prefGrMemb': 'exclude',
-                        'prio': 'unspecified',
-                        'targetDscp': 'unspecified'
-                    },
-                    'children': [{
-                            'l3extSubnet': {
-                                'attributes': {
-                                    'aggregate': '',
-                                    'annotation': '',
-                                    'descr': '',
-                                    'ip': '0.0.0.0/0',
-                                    'scope': 'export-rtctrl,import-security'
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-}
-tn_hcadr['fvTenant']['children'].append(hcadr_core_l3out)
 
 # Create any switch profiles that can logically be determined
-nodes = session.get(f'{url}/api/mo/fabricNode.json').json()['imdata']
+nodes = session.get(f'{URL}/api/class/fabricNode.json').json()['imdata']
 nodes = [FabricNode.load(n) for n in nodes]
 blf_nodes = [n for n in nodes if n.attributes.id in ['101', '102']]
 data_leaf_nodes = [n for n in nodes if 102 < int(n.attributes.id) < 200]
 oob_leaf_nodes = [n for n in nodes if 300 < int(n.attributes.id) < 400]
 
+blf_nodes.sort(key=lambda _: int(_.attributes.id))
+data_leaf_nodes.sort(key=lambda _: int(_.attributes.id))
+oob_leaf_nodes.sort(key=lambda _: int(_.attributes.id))
+
+
 # Create OOB Leaf Profile
 oob_profile = SwitchProfile()
-oob_profile.attributes.name = f'{env.Name}-OOB-Leafs'
-for oob_leaf in oob_leaf_nodes:
-    oob_profile.create_switch_profile(name=f'{env.Name}-OOB-Leafs', nodes=[int(oob_leaf.attributes.id)])
+oob_profile.attributes.name = OOBPROFILENAME
+oob_profile.create_switch_profile(name=OOBPROFILENAME, nodes=[int(_.attributes.id) for _ in oob_leaf_nodes])
 
-session.post(f'{url}/api/mo/uni/infra.json', oob_profile.json())
+session.post(f'{URL}/api/mo/uni/infra.json', oob_profile.json())
 
 # Create Border Leaf Profile
 rack = set([re.search(r'[A-Z]\d\d', n.attributes.name).group() for n in blf_nodes])
@@ -2400,13 +565,16 @@ rack = set([re.search(r'[A-Z]\d\d', n.attributes.name).group() for n in blf_node
 blf_sw_profile = SwitchProfile()
 blf_sw_profile.create_switch_profile(name=f'{env.Name}-{"-".join(rack)}-BLF-101-102', nodes=[101, 102])
 
+print(json.dumps(blf_sw_profile.json()))
+resp = session.post(f'{URL}/api/mo/uni/infra.json', blf_sw_profile.json())
+print(resp.json())
+
+# Create VPC for border leafs
 vpc_profile = FabricProtPol()
 vpc_profile.add_new_vpc_pair([101, 102])
-
-session.post(f'{url}{blf_sw_profile.post_uri}', vpc_profile.json())
+session.post(f'{URL}{vpc_profile.post_uri}', vpc_profile.json())
 
 # Create Data Leaf Profiles
-data_leaf_nodes.sort(key=lambda z: z.attributes.id)
 if data_leaf_nodes:
     for x in range(0, len(data_leaf_nodes), 2):
         leaf_1 = data_leaf_nodes[x]
@@ -2420,32 +588,12 @@ if data_leaf_nodes:
                                                 f'{leaf_2.attributes.id}',
                                            nodes=[leaf_1.attributes.id, leaf_2.attributes.id])
 
-        session.post(f'{url}{leaf_profile.post_uri}', leaf_profile.json())
+        session.post(f'{URL}{leaf_profile.post_uri}', leaf_profile.json())
 
         vpc_profile = FabricProtPol()
         vpc_profile.add_new_vpc_pair([leaf_1.attributes.id, leaf_2.attributes.id])
 
-        session.post(f'{url}{leaf_profile.post_uri}', vpc_profile.json())
-
-# Add all leaf nodes to a maintenance group
-for node in itertools.chain(blf_nodes, data_leaf_nodes, oob_leaf_nodes):
-    if 300 < int(node.attributes.id) < 400:
-        node_block = FabricNodeBlock(int(node.attributes.id))
-        node_block.attributes.dn = f'uni/fabric/maintgrp-OOB/nodeblk-blk{node}-{node}'
-
-        session.post(f'{url}/api/mo/uni.json', node_block.json())
-
-    elif 100 < int(node.attributes.id) < 200:
-        if int(node.attributes.id) % 2:
-            node_block = FabricNodeBlock(int(node.attributes.id))
-            node_block.attributes.dn = f'uni/fabric/maintgrp-Odds/nodeblk-blk{node}-{node}'
-        else:
-            node_block = FabricNodeBlock(int(node.attributes.id))
-            node_block.attributes.dn = f'uni/fabric/maintgrp-Evens/nodeblk-blk{node}-{node}'
-
-            session.post(f'{url}/api/mo/uni.json', node_block.json())
-
-        session.post(f'{url}/api/mo/uni.json', node_block.json())
+        session.post(f'{URL}{vpc_profile.post_uri}', vpc_profile.json())
 
 # Create Interface Profiles and Policy Groups for OOB Management
 
@@ -2453,15 +601,16 @@ aep = AEP()
 aep.attributes.name = 'aep-OOB-Management'
 aep.attributes.__delattr__('dn')
 aep.infra_generic = InfraGeneric()
-aep.create()
-response = session.post(f'{url}{aep.post_uri}', json=aep.json())
+aep.create_modify()
+aep.use_domain(env.PhysicalDomain)
+response = session.post(f'{URL}{aep.post_uri}', json=aep.json())
 assert response.ok
 
 oob_pg = InterfacePolicyGroup()
 oob_pg.create()
 oob_pg.attributes.name = 'acc-OOB-Management'
 oob_pg.use_aep(aep_name='aep-OOB-Management')
-response = session.post(f'{url}{oob_pg.post_uri}', json=oob_pg.json())
+response = session.post(f'{URL}{oob_pg.post_uri}', json=oob_pg.json())
 assert response.ok
 
 attach_policy_group = GenericClass('infraRsAccBaseGrp')
@@ -2481,51 +630,15 @@ oob_selector.children = [attach_policy_group, oob_block]
 
 oob_prof = InterfaceProfile()
 oob_prof.create()
-oob_prof.attributes.name = f'{env.Name}-OOB-Leafs'
+oob_prof.attributes.name = OOBPROFILENAME
 oob_prof.children = [oob_selector]
-response = session.post(f'{url}{oob_prof.post_uri}', json=oob_prof.json())
+response = session.post(f'{URL}{oob_prof.post_uri}', json=oob_prof.json())
 assert response.ok
 
 attach_i_profile = GenericClass('infraRsAccPortP')
 attach_i_profile.attributes.dn = f'uni/infra/nprof-{oob_profile.attributes.name}/' \
                                  f'rsaccPortP-[uni/infra/accportprof-{oob_prof.attributes.name}]'
 attach_i_profile.create()
-response = session.post(f'{url}/api/mo/uni.json', json=attach_i_profile.json())
+response = session.post(f'{URL}/api/mo/uni.json', json=attach_i_profile.json())
 assert response.ok
-
-# Create aep-Placeholders
-aep = AEP()
-aep.attributes.__setattr__('name', 'aep-Placeholders')
-aep.attributes.__delattr__('dn')
-aep.infra_generic = InfraGeneric()
-aep.create()
-response = session.post(f'{url}{aep.post_uri}', json=aep.json())
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=infra)
-print(json.dumps(infra))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=fabric)
-print(json.dumps(fabric))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=uni)
-print(json.dumps(uni))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=tn_mgmt)
-print(json.dumps(tn_mgmt))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=tn_hca)
-print(json.dumps(tn_hca))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=tn_hcadr)
-print(json.dumps(tn_hcadr))
-assert response.ok
-
-response = session.post(f'{url}/api/mo/uni.json', json=tn_admz)
-print(json.dumps(tn_admz))
-assert response.ok
+print(response.json())
