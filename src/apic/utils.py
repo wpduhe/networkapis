@@ -1082,6 +1082,7 @@ class APIC:
         encap_blocks = self.get(f'/api/mo/{rs_vlp["infraRsVlanNs"]["attributes"]["tDn"]}.json?'
                                 f'query-target=subtree&target-subtree-class=fvnsEncapBlk').json()['imdata']
         encap_blocks = [EncapBlock.load(_) for _ in encap_blocks]
+        encap_blocks.sort(key=lambda x: x.attributes.to)
         vlan_range = [
             '{}-{}'.format(re.search(r"\d+$", _.attributes.__getattribute__("from")).group(),
                            re.search(r"\d+$", _.attributes.to).group())
