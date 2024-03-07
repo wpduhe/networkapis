@@ -497,9 +497,9 @@ vz_any.children = [vz_prov, vz_cons]
 
 
 # Create VRFs for tn-HCA, tn-HCADR, tn-ADMZ
-vrf_hca = Context(name=env.VRF)
-vrf_hcadr = Context(name='vrf-hcadr')
-vrf_admz = Context(name=env.ADMZVRF)
+vrf_hca = Context(name=env.VRF, annotation='primary_vrf:True')
+vrf_hcadr = Context(name='vrf-hcadr', annotation='primary_vrf:True')
+vrf_admz = Context(name=env.ADMZVRF, annotation='primary_vrf:True')
 vrf_not_routed = Context(name='vrf-Not-Routed')
 
 vrf_hca.children = [vz_any]
