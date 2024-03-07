@@ -704,6 +704,9 @@ class Context(APICObject):
     }
     tf_resource = 'aci_vrf'
 
+    _dn_attributes = ['tenant', 'name']
+    _dn_template = 'uni/tn-{tenant}/ctx-{name}'
+
     def __init__(self, **kwargs):
         self.children = []
         self.attributes = Attributes(**self.attrs)
