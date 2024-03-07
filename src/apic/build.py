@@ -216,7 +216,7 @@ dns_epg = GenericClass(apic_class='dnsRsProfileToEpg', tDn='uni/tn-mgmt/mgmtp-de
 dns_prov1 = GenericClass(apic_class='dnsProv', addr=env.PrimaryDNS, preferred='yes')
 dns_prov2 = GenericClass(apic_class='dnsProv', addr=env.SecondaryDNS, preferred='no')
 
-dns_pol.children = [dns_epg, dns_prov1, dns_prov2, dns_prov3]
+dns_pol.children = [dns_epg, dns_prov1, dns_prov2]
 
 resp = session.post(f'{URL}/api/mo/uni/fabric.json', dns_pol.json())
 print(resp.json())
