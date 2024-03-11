@@ -13,7 +13,7 @@ from job_handler import run_job_handler
 from checkpoint.CheckpointUtilities import CheckpointAPI, generate_policy_list
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from apic import utils as apic_utils
-from apic.classes import EPG, AEP
+from apic.classes import EPG, AEP, InfraGeneric
 from apic import sviToBd
 from apic.intfConfig import intf_profile
 from bigip.utils import LTM
@@ -1589,6 +1589,7 @@ def create_new_aep(request: Request, req_data: CreateNewAEP):
     aep = AEP()
     aep.attributes.name = (f'aep-{name}' if not name.startswith('aep-') else name)
     aep.use_domain(env.PhysicalDomain)
+    aep.children = [InfraGeneric()]
 
     with apic_utils.APIC(env=env.Name) as apic_api:
         resp = apic_api.post(aep.json(), uri=aep.post_uri)
