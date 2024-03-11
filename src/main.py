@@ -1588,8 +1588,8 @@ def create_new_aep(request: Request, req_data: CreateNewAEP):
 
     aep = AEP()
     aep.attributes.name = (f'aep-{name}' if not name.startswith('aep-') else name)
-    aep.use_domain(env.PhysicalDomain)
     aep.children = [InfraGeneric()]
+    aep.use_domain(env.PhysicalDomain)
 
     with apic_utils.APIC(env=env.Name) as apic_api:
         resp = apic_api.post(aep.json(), uri=aep.post_uri)
