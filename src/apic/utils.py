@@ -2937,8 +2937,8 @@ class AppInstance:
 
         self.__activate()
 
-        if not self.name.startswith(f'{self.originAZ.env.DataCenter}_'.lower()):
-            self.name = f'{self.originAZ.env.DataCenter}_{self.name}'.lower()
+        if not self.name.startswith(f'{self.format_name(self.originAZ.env.Name)}_'.lower()):
+            self.name = f'{self.format_name(self.originAZ.env.Name)}_{self.name}'.lower()
 
     def __str__(self):
         self.__activate()
@@ -2992,6 +2992,18 @@ class AppInstance:
             gh.update_file(file_path=self.path(), message=f'{self}_update', content=self.content())
         else:
             gh.add_file(file_path=self.path(), message=f'{self}_add', content=self.content())
+
+    def refactor(self):
+        gh = GithubAPI()
+        original_path = f'{self.GITHUB_PATH}/{self.application}/' \
+                        f'{self.originAZ.env.DataCenter}_{self.base_name()}'.lower()
+        self.name = f'{self.format_name(self.originAZ.env.Name)}_{self.base_name()}'
+        try:
+            gh.delete_file(file_path=original_path, message=f'{self.name}_refactor')
+        except StopIteration:
+            # Original path does not exist, next step would be an update
+            pass
+        self.store()
 
     def remove(self):
         gh = GithubAPI()
@@ -3053,6 +3065,10 @@ class AppInstance:
 
     def ap_name(self):
         return self.apName if self.apName else self.application
+
+    def base_name(self):
+        return re.sub(f'({self.format_name(self.originAZ.env.Name)}_|{self.originAZ.env.DataCenter}_)+', '', self.name,
+                      flags=re.IGNORECASE)
 
     def placeholder_mapping(self) -> dict:
         self.__activate()
