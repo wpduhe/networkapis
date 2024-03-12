@@ -3447,7 +3447,7 @@ class AppInstance:
                         # Update BD settings
                         inst.bdSettings = bd.attributes.json()
 
-                    # TODO: Check that all networks are found within the BD
+                    # Check that all networks are found within the BD
                     bd_subnets = bd.get_child_class_iter(Subnet.class_)
                     bd_subnets_set = {_.attributes.ip for _ in bd_subnets}
 
@@ -4231,7 +4231,7 @@ def create_new_epg(env: str, req_data: dict):
         if not bd_name.startswith('bd-'):
             bd_name = f'bd-{bd_name}'
 
-        # TODO: Create process to check if EPG exists prior to assigning a network
+        # Check if EPG exists prior to assigning a network
         if apic.dn_exists(fvAEPg=f'uni/tn-{apic.env.Tenant}/ap-{ap_name}/epg-{epg_name}'):
             return 400, {'message': 'The requested EPG already exists'}
 
