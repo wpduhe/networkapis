@@ -2994,6 +2994,7 @@ class AppInstance:
             gh.add_file(file_path=self.path(), message=f'{self}_add', content=self.content())
 
     def refactor(self):
+        """Renames an instance using Availability Zone"""
         gh = GithubAPI()
         original_path = f'{self.GITHUB_PATH}/{self.application}/' \
                         f'{self.originAZ.env.DataCenter}_{self.base_name()}'.lower()
@@ -4433,7 +4434,18 @@ def create_custom_epg(env: str, req_data: dict):
         # POST the AEP configuration to APIC
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
-    # TODO: Add processes to update CMDB or Waterpark
+    # Add the instance to Github
+    inst = AppInstance(application=ap.attributes.name,
+                       name=epg.attributes.name,
+                       apName=ap.attributes.name,
+                       bdName=bd.attributes.name,
+                       epgName=epg.attributes.name,
+                       bdSettings=bd.attributes.json(),
+                       tenant=next(_ for _ in dir(apic.env)
+                                   if apic.env.__getattribute__(_) == tn.attributes.name),
+                       networks={n.attributes.ip: n.attributes.json() for n in bd.get_child_class_iter(Subnet.class_)},
+                       currentAZ=str(apic))
+    inst.store()
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan}
 
@@ -4528,7 +4540,20 @@ def create_custom_epg_v2(env: str, req_data: dict):
         # POST the AEP configuration to APIC
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
-    # TODO: Add processes to update CMDB or Waterpark
+        # Only document the instance IF the EPG is being created in a production Tenant
+        if tn.attributes.name in [apic.env.__getattribute__('ADMZTenant'), apic.env.__getattribute__('Tenant')]:
+            inst = AppInstance(application=ap.attributes.name,
+                               name=epg.attributes.name,
+                               apName=ap.attributes.name,
+                               bdName=bd.attributes.name,
+                               epgName=epg.attributes.name,
+                               bdSettings=bd.attributes.json(),
+                               tenant=next(_ for _ in dir(apic.env)
+                                           if apic.env.__getattribute__(_) == tn.attributes.name),
+                               networks={n.attributes.ip: n.attributes.json() for n in
+                                         bd.get_child_class_iter(Subnet.class_)},
+                               currentAZ=str(apic))
+            inst.store()
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan,
                  'Message': f'Please add the appropriate L3Out profile to {bd_name}'}
