@@ -4231,9 +4231,12 @@ def create_new_epg(env: str, req_data: dict):
         if not bd_name.startswith('bd-'):
             bd_name = f'bd-{bd_name}'
 
-        # Check if EPG exists prior to assigning a network
+        # Check if EPG/BD exists prior to assigning a network
         if apic.dn_exists(fvAEPg=f'uni/tn-{apic.env.Tenant}/ap-{ap_name}/epg-{epg_name}'):
             return 400, {'message': 'The requested EPG already exists'}
+
+        if apic.bd_exists(tn=apic.env.Tenant, bd_name=bd_name):
+            return 400, {'message': 'The requested bridge domain already exists'}
 
         subnet = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips, name=epg_name,
                                                    coid=int(apic.env.COID), asn=int(apic.env.ASN))
@@ -4261,26 +4264,17 @@ def create_new_epg(env: str, req_data: dict):
         epg.attributes.status = 'created'
         epg.domain(name=apic.env.PhysicalDomain)
 
-        # Check to see if BD already exists
-        bd_exists = apic.bd_exists(tn=apic.env.Tenant, bd_name=bd_name)
-
-        if bool(bd_exists):
-            bd = BD.load(bd_exists)
-            bd.add_subnet(subnet=f'{gateway}/{network.prefixlen}')
-            bd.children[0].attributes.descr = description
-            bd.attributes.status = 'modified'
-        else:
-            bd = BD()
-            bd.layer3()
-            # Add Subnet to Bridge Domain and set Description on Subnet
-            bd.add_subnet(subnet=f'{gateway}/{network.prefixlen}')
-            bd.children[0].attributes.descr = description
-            # Configure the bridge domain to use the environment VRF
-            bd.use_vrf(name=apic.env.VRF)
-            # Attach the Core L3Out to the Bridge Domain
-            bd.to_l3_out(name=apic.env.L3OutCore)
-            bd.attributes.name = bd_name
-            bd.attributes.status = 'created,modified'
+        bd = BD()
+        bd.layer3()
+        # Add Subnet to Bridge Domain and set Description on Subnet
+        bd.add_subnet(subnet=f'{gateway}/{network.prefixlen}')
+        bd.children[0].attributes.descr = description
+        # Configure the bridge domain to use the environment VRF
+        bd.use_vrf(name=apic.env.VRF)
+        # Attach the Core L3Out to the Bridge Domain
+        bd.to_l3_out(name=apic.env.L3OutCore)
+        bd.attributes.name = bd_name
+        bd.attributes.status = 'created,modified'
 
         # Assign BD to EPG
         epg.assign_bd(bd.attributes.name)
@@ -4336,11 +4330,10 @@ def create_new_epg(env: str, req_data: dict):
                        bdSettings=bd.attributes.json(),
                        tenant=next(_ for _ in dir(apic.env)
                                    if apic.env.__getattribute__(_) == tn.attributes.name),
-                       networks={f'{gateway}/{network.prefixlen}': {}},
+                       networks={n.attributes.ip: n.attributes.json() for n in bd.get_child_class_iter(Subnet.class_)},
                        currentAZ=str(apic))
 
-    gh = GithubAPI()
-    gh.add_file(file_path=inst.path(), message=f'{inst.__str__()}_add', content=inst.content())
+    inst.store()
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
 
@@ -4434,7 +4427,7 @@ def create_custom_epg(env: str, req_data: dict):
         # POST the AEP configuration to APIC
         apic.post(configuration=aep.json(), uri=aep.post_uri)
 
-    # Add the instance to Github
+    # Add the instance to GitHub
     inst = AppInstance(application=ap.attributes.name,
                        name=epg.attributes.name,
                        apName=ap.attributes.name,
