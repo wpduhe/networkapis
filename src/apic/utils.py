@@ -50,6 +50,8 @@ ODDS = 'Odds'
 EVENS = 'Evens'
 OOB = 'OOB'
 STAGING = 'Staging'
+DRT_TENANT = 'tn-DRTEST'
+DRT_VRF = 'vrf-drtest'
 
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
 BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
@@ -898,12 +900,13 @@ class APIC:
 
         return response
     
-    def get_vlan_data(self, vlan=None, epg=None, aep=None):
+    def get_vlan_data(self, vlan=None, epg=None, aep=None, dn=None):
         """
         :rtype: dict if vlan is not None: list
         :param vlan:
         :param epg:
         :param aep:
+        :param dn:
         :return:
         """
         if_conn = [APICObject.load(_) for _ in self.get('/api/class/fvIfConn.json').json()['imdata']]
@@ -960,6 +963,9 @@ class APIC:
                              if aep in entry))
             except StopIteration:
                 return ['No VLANs Not Found on Port Template']
+        elif dn is not None:
+            return list(({key: vlan_dict[key]} for key in vlan_dict
+                         if dn in vlan_dict[key]['Consumers']))
         else:
             return vlan_dict
 
@@ -2150,7 +2156,8 @@ class APIC:
             if ap not in epg_data.attributes.dn:
                 return 500, ['EPG lookup error']
 
-            epg_vlan_data = apic.get_vlan_data(epg=epg)
+            # epg_vlan_data = apic.get_vlan_data(epg=epg)
+            epg_vlan_data = apic.get_vlan_data(dn=f'uni/tn-{tenant}/ap-{ap}/epg-{epg}')
 
             if epg_vlan_data == list():
                 vlan = apic.get_next_vlan()
@@ -2993,18 +3000,34 @@ class AppInstance:
         else:
             gh.add_file(file_path=self.path(), message=f'{self}_add', content=self.content())
 
-    def refactor(self):
-        """Renames an instance using Availability Zone"""
+    def refactor(self, new_application: str=None, new_name: str=None):
+        """Renames and/or Moves an instance within GitHub based on the provided criteria"""
         gh = GithubAPI()
-        original_path = f'{self.GITHUB_PATH}/{self.application}/' \
-                        f'{self.originAZ.env.DataCenter}_{self.base_name()}'.lower()
-        self.name = f'{self.format_name(self.originAZ.env.Name)}_{self.base_name()}'
-        try:
-            gh.delete_file(file_path=original_path, message=f'{self.name}_refactor')
-        except StopIteration:
-            # Original path does not exist, next step would be an update
-            pass
-        self.store()
+
+        # Get original values
+        original_path = self.path()
+        original_dn = self.epg_dn()
+        orig_tn, orig_ap, orig_epg = EPG_DN_SEARCH.search(original_dn).groups()
+
+        if new_application:
+            self.application = self.format_name(new_application)
+
+        if new_name:
+            if not new_name.startswith(f'{self.format_name(self.originAZ.env.Name)}_'.lower()):
+                self.name = f'{self.format_name(self.originAZ.env.Name)}_{new_name}'.lower()
+            else:
+                self.name = new_name
+
+        # Check to see if the new generated dn will be different from the current generated dn. Set attributes to keep
+        # original dn for APIC tasks, if so.
+        if self.epg_dn() != original_dn:
+            self.epgName = orig_epg
+            self.apName = orig_ap
+
+        # Delete current file and store in new location
+        if original_path != self.path():
+            gh.delete_file(original_path, message=f'{self.name}_refactor_to_{self.path()}')
+            self.store()
 
     def remove(self):
         gh = GithubAPI()
@@ -3071,16 +3094,17 @@ class AppInstance:
         return re.sub(f'({self.format_name(self.originAZ.env.Name)}_|{self.originAZ.env.DataCenter}_)+', '', self.name,
                       flags=re.IGNORECASE)
 
-    def placeholder_mapping(self) -> dict:
+    def placeholder_mapping(self, drt: bool=False) -> dict:
         self.__activate()
         t, a, e = EPG_DN_SEARCH.search(self.epg_dn()).groups()
-        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=t, AP=a, EPG=e)
+        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=(DRT_TENANT if drt else t), AP=a, EPG=e)
         return mapping
 
-    def generate_config(self, origin_az: bool=False, defaults: bool=False, delete: bool=False):
-        az = (self.originAZ if origin_az else self.currentAZ)
+    def generate_config(self, origin_az: bool=False, defaults: bool=False, delete: bool=False, drt: bool=False,
+                        custom_az: str=False):
+        az = (APIC(env=custom_az) if custom_az else self.originAZ if origin_az else self.currentAZ)
 
-        tenant = Tenant(name=az.env.__getattribute__(self.tenant))
+        tenant = Tenant(name=(az.env.__getattribute__(self.tenant) if not drt else DRT_TENANT))
         tenant.create_modify()
 
         bd = (BD(**self.bdSettings) if self.bdSettings else BD())
@@ -3088,8 +3112,8 @@ class AppInstance:
             # Configure BD settings if none presently exist
             bd.layer3()
         bd.attributes.name = (str(self) if defaults else self.bd_name())
-        bd.use_vrf((az.env.VRF if self.tenant == self.TENANT else az.env.ADMZVRF))
-        if self.tenant == self.TENANT:
+        bd.use_vrf((DRT_VRF if drt else az.env.VRF if self.tenant == self.TENANT else az.env.ADMZVRF))
+        if self.tenant == self.TENANT and not drt:
             bd.to_l3_out(name=az.env.L3OutCore)
         bd.create_modify()
 
@@ -3099,6 +3123,9 @@ class AppInstance:
         epg = EPG(name=(str(self) if defaults else self.epg_name()))
         epg.domain(az.env.PhysicalDomain)
         epg.assign_bd(name=bd.attributes.name)
+        if drt:
+            contract_cons = GenericClass('fvRsCons', tnVzBrCPName='c-drtest-advertise')
+            epg.children += [contract_cons]
         if delete:
             epg.delete()
         else:
@@ -3108,6 +3135,8 @@ class AppInstance:
             subnet = Subnet()
             subnet.attributes = (Attributes(**settings) if settings else Attributes(**subnet.attributes.json()))
             subnet.attributes.ip = prefix
+            if drt:
+                subnet.attributes.__setattr__('scope', 'public,shared')
             if delete:
                 subnet.delete()
             else:
@@ -3415,6 +3444,18 @@ class AppInstance:
         inst.remove()
 
         return 200, inst.json()
+
+    def create_drt_instance(self, drenv: str=None):
+        apic = APIC(env=(drenv if drenv else self.originAZ.env.DREnv))
+
+        configs = self.generate_config(custom_az=apic.env.Name, drt=True)
+        snapshot = apic.snapshot(descr=f'pre-{self}-drt-inst-creation')
+        _ = apic.post(configs.json())
+
+        mapping = self.placeholder_mapping(drt=True)
+        _, vlan_info = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
+
+        return snapshot, configs, mapping, vlan_info
 
     @classmethod
     def discovery(cls):
