@@ -562,7 +562,7 @@ def collect_aeps(request: Request, az: str):
 
 @app.get('/apis/aci/{az}/{aep}/usage', tags=['ACI'])
 def get_aep_usage(request: Request, az: str, aep: str):
-    """Returns a list of AEPs (aka Port Templates) found in the specified environment"""
+    """Returns a series of leaf switches and interfaces used by the specified AEP"""
     req_logit(collect_aeps, request, az)
 
     with apic_utils.APIC(env=az) as apic_api:
