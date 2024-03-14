@@ -356,3 +356,18 @@ class VlanAssignment(BaseModel):
 class AssignVlanToAep(BaseModel):
     APIKey: str
     assignments: List[VlanAssignment]
+
+
+class CreateNewAppInstance(BaseModel):
+    APIKey: str
+    az: str
+    no_of_ips: int
+    application: str
+    instance_name: str
+    dmz: bool
+    aeps: list
+
+
+class CreateDRTAppInstance(BaseModel):
+    APIKey: str
+    dr_environment: str
