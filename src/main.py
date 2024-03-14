@@ -560,6 +560,17 @@ def collect_aeps(request: Request, az: str):
     return aeps
 
 
+@app.get('/apis/aci/{az}/{aep}/usage', tags=['ACI'])
+def get_aep_usage(request: Request, az: str, aep: str):
+    """Returns a list of AEPs (aka Port Templates) found in the specified environment"""
+    req_logit(collect_aeps, request, az)
+
+    with apic_utils.APIC(env=az) as apic_api:
+        usage = apic_api.get_aep_usage(aep_name=aep)
+
+    return usage
+
+
 @app.get('/apis/aci/{az}/switch_profiles', tags=['ACI'])
 def collect_switch_profiles(request: Request, az: str):
     """Returns a list of switch profiles found in the specified environment"""
