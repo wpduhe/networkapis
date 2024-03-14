@@ -841,7 +841,7 @@ def get_vlan_data(request: Request, az: str, vlan: Optional[str or int]=None, ep
 
 @app.get('/apis/v2/aci/{az}/get_vlan_data', tags=['ACI'])
 def get_vlan_data_v2(request: Request, az: str, VLAN: Optional[str or int]=None, EPG: Optional[str]=None,
-                     AEP: Optional[str]=None):
+                     AEP: Optional[str]=None, DN: Optional[str]=None):
     """Returns VLAN information for specified environment.  Can be queried for specific information using documented
     parameters."""
     try:
@@ -851,7 +851,7 @@ def get_vlan_data_v2(request: Request, az: str, VLAN: Optional[str or int]=None,
         req_logit(get_vlan_data, request, az)
 
         with apic_utils.APIC(env=az) as apic_api:
-            response = apic_api.get_vlan_data(vlan=VLAN, epg=EPG, aep=AEP)
+            response = apic_api.get_vlan_data(vlan=VLAN, epg=EPG, aep=AEP, dn=DN)
 
         new_response = []
 
@@ -1147,6 +1147,46 @@ def get_application_instance(request: Request, application: str, instance: str):
     content = json.loads(gh.get_file_content(f'applications/{application}/{instance}'))
 
     return content
+
+
+@app.post('/apis/appinst/{application}/{instance}/create', tags=['AppInstance'])
+def create_new_app_instance(request: Request, req_data: CreateNewAppInstance):
+    """Creates disaster recovery testing instance of an AppInstance"""
+    req_data_dict = req_data.dict()
+
+    if not validate_api_key(req_data_dict.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(create_drt_app_instance, request, req_data_dict)
+
+    status, data = apic_utils.AppInstance.create_new_instance(az=req_data.az, application=req_data.application,
+                                                              inst_name=req_data.instance_name,
+                                                              no_of_ips=req_data.no_of_ips,
+                                                              dmz=req_data.dmz)
+
+    res_logit(create_drt_app_instance, request)
+
+    return Response(status_code=status, content=json.dumps(data), media_type='application/json')
+
+
+@app.post('/apis/appinst/{application}/{instance}/create_drt', tags=['AppInstance'])
+def create_drt_app_instance(request: Request, application: str, instance:str, req_data: CreateDRTAppInstance):
+    """Creates disaster recovery testing instance of an AppInstance"""
+    req_data_dict = req_data.dict()
+
+    if not validate_api_key(req_data_dict.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(create_drt_app_instance, request)
+
+    inst = apic_utils.AppInstance.load(f'{application}/{instance}')
+    vlan_info = inst.create_drt_instance(drenv=inst.originAZ.env.DREnv)
+
+    res_logit(create_drt_app_instance, request)
+
+    response_data = {'app_instance': inst.json(), 'vlan': vlan_info, 'epg_dn': inst.epg_dn(drt=True)}
+
+    return Response(status_code=200, content=json.dumps(response_data), media_type='application/json')
 
 
 @app.get('/apis/f5/vip_clone', tags=['F5'])
