@@ -2839,7 +2839,7 @@ class APIC:
                 for attr in ['dn']:
                     subnet.attributes.__delattr__(attr)
 
-                inst = AppInstance(epgName=epg_name, epgDn=orig_dn, application=application, currentAZ=self.__str__(),
+                inst = AppInstance(epgName=epg_name, application=application, currentAZ=self.__str__(),
                                    bdName=bd.attributes.name, apName=epg_ap, name=inst_name,
                                    tenant=next(_ for _ in dir(self.env)
                                                if self.env.__getattribute__(_) == epg_tenant),
@@ -2976,7 +2976,7 @@ class AppInstance:
         pot_inst = AppInstance(**kwargs)
         if pot_inst.epg_dn(override=True) != self.epg_dn(override=True):
             raise NameError('The EPG distinguished name in the update data is not consistent with the AppInstance EPG '
-                            'distinguished name: %s != %s' % (kwargs['epgDn'], self.epg_dn()))
+                            'distinguished name: %s != %s' % (pot_inst.epg_dn(), self.epg_dn()))
 
         for k, v in kwargs.items():
             if k not in self.__all_attrs:
@@ -3060,26 +3060,29 @@ class AppInstance:
         name = re.sub(r'\W+', '_', name)
         return name
 
-    def epg_dn(self, override: bool=False) -> str:
+    def epg_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
-        if not override:
+        if drt:
+            return f'uni/tn-{DRT_TENANT}/ap-{self.ap_name()}/epg-{self.epg_name()}'
+        elif not override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.ap_name()}/' \
                    f'epg-{self.epg_name()}'
         else:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/' \
-                   f'ap-{self.application}/epg-{self.__str__()}'
+            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.application}/epg-{self}'
 
-    def bd_dn(self, override: bool=False) -> str:
+    def bd_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
-        if override:
+        if drt:
+            return f'uni/tn-{DRT_TENANT}/BD-{self.bd_name()}'
+        elif override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self}'
         else:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self.bd_name()}'
 
-    def subnet_dn(self, network: str):
-        return f'{self.bd_dn()}/subnet-[{network}]'
+    def subnet_dn(self, network: str, drt: bool=False):
+        return f'{self.bd_dn(drt=drt)}/subnet-[{network}]'
 
     def bd_name(self):
         return self.bdName if self.bdName else str(self)
@@ -3193,13 +3196,14 @@ class AppInstance:
             app_inst.networks[subnet.attributes.ip] = subnet.attributes.json()
 
         # Store instance before implementing in the fabric
-        gh.add_file(file_path=app_inst.path(), message=f'{app_inst}_add', content=app_inst.content())
+        app_inst.store()
 
         # Create the APIC objects
         r = apic.post(tenant.json())
 
         if not r.ok:
-            return r.status_code, {'message': 'EPG creation failed',
+            return r.status_code, {'message': 'EPG creation failed, but instance creation succeeded',
+                                   'instance_path': app_inst.path(),
                                    'epg_dn': app_inst.epg_dn(),
                                    'apic_status': r.status_code,
                                    'apic_json': r.json(),
@@ -3209,7 +3213,9 @@ class AppInstance:
 
         return 200, {'message': 'Application Instance creation successful',
                      'epg_dn': app_inst.epg_dn(),
-                     'application': app_inst.application}
+                     'application': app_inst.application,
+                     'instance_path': app_inst.path(),
+                     'vlan': vlan['VLAN']}
 
     @classmethod
     def expand_instance(cls, application: str, inst_name: str, no_of_ips: int) -> Tuple[int, dict]:
@@ -3449,13 +3455,13 @@ class AppInstance:
         apic = APIC(env=(drenv if drenv else self.originAZ.env.DREnv))
 
         configs = self.generate_config(custom_az=apic.env.Name, drt=True)
-        snapshot = apic.snapshot(descr=f'pre-{self}-drt-inst-creation')
+        _ = apic.snapshot(descr=f'pre-{self}-drt-inst-creation')
         _ = apic.post(configs.json())
 
         mapping = self.placeholder_mapping(drt=True)
         _, vlan_info = apic.assign_epg_to_aep(env=apic.env.Name, mapping=mapping)
 
-        return snapshot, configs, mapping, vlan_info
+        return vlan_info
 
     @classmethod
     def discovery(cls):
@@ -4376,7 +4382,8 @@ def create_new_epg(env: str, req_data: dict):
 
     inst.store()
 
-    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
+    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan,
+                 'AppInstance': inst.json(), 'InstancePath': f'{inst.application}/{inst}'}
 
 
 def create_custom_epg(env: str, req_data: dict):
@@ -4481,7 +4488,8 @@ def create_custom_epg(env: str, req_data: dict):
                        currentAZ=str(apic))
     inst.store()
 
-    return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan}
+    return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan,
+                 'AppInstance': inst.json(), 'InstancePath': f'{inst.application}/{inst}'}
 
 
 def create_custom_epg_v2(env: str, req_data: dict):
@@ -4590,7 +4598,8 @@ def create_custom_epg_v2(env: str, req_data: dict):
             inst.store()
 
     return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan,
-                 'Message': f'Please add the appropriate L3Out profile to {bd_name}'}
+                 'Message': f'Please add the appropriate L3Out profile to {bd_name}',
+                 'AppInstance': inst.json(), 'InstancePath': f'{inst.application}/{inst}'}
 
 
 def create_new_admz_epg(env: str, req_data: dict):
