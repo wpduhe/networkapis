@@ -370,4 +370,3 @@ class CreateNewAppInstance(BaseModel):
 
 class CreateDRTAppInstance(BaseModel):
     APIKey: str
-    dr_environment: str
