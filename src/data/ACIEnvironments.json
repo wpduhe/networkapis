@@ -338,7 +338,7 @@
         },
         {
             "Name": "QOL-AZ1",
-            "DREnv": null,
+            "DREnv": "QOL-AZ2",
             "DataCenter": "BDG4",
             "F5ProdEnvironment": "XRDC QOL",
             "F5QAEnvironment": "XRDC QOL",
@@ -434,7 +434,7 @@
         },
         {
             "Name": "QOL-AZ2",
-            "DREnv": null,
+            "DREnv": "QOL-AZ1",
             "DataCenter": "BDG4",
             "F5ProdEnvironment": "XRDC QOL",
             "F5QAEnvironment": "XRDC QOL",
