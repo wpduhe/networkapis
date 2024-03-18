@@ -1168,14 +1168,14 @@ def create_new_app_instance(request: Request, req_data: CreateNewAppInstance):
     if not validate_api_key(req_data_dict.pop('APIKey')):
         return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
 
-    req_logit(create_drt_app_instance, request, req_data_dict)
+    req_logit(create_new_app_instance, request, req_data_dict)
 
     status, data = apic_utils.AppInstance.create_new_instance(az=req_data.az, application=req_data.application,
                                                               inst_name=req_data.instance_name,
                                                               no_of_ips=req_data.no_of_ips,
                                                               dmz=req_data.dmz)
 
-    res_logit(create_drt_app_instance, request)
+    res_logit(create_new_app_instance, request)
 
     return Response(status_code=status, content=json.dumps(data), media_type='application/json')
 
@@ -1195,7 +1195,7 @@ def create_drt_app_instance(request: Request, application: str, instance:str, re
 
     res_logit(create_drt_app_instance, request)
 
-    response_data = {'app_instance': inst.json(), 'vlan': vlan_info, 'epg_dn': inst.epg_dn(drt=True)}
+    response_data = {'app_instance': inst.json(), 'vlan_info': vlan_info, 'epg_dn': inst.epg_dn(drt=True)}
 
     return Response(status_code=200, content=json.dumps(response_data), media_type='application/json')
 
