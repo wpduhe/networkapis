@@ -308,6 +308,12 @@ class RebrandEpgBd(BaseModel):
     new_bd_name: Optional[str]
 
 
+class CloneAEP(BaseModel):
+    APIKey: str
+    aep_name: str
+    new_aep_name: str
+
+
 class RebrandAEP(BaseModel):
     APIKey: str
     old_aep_name: str
