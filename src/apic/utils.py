@@ -1868,6 +1868,19 @@ class APIC:
         return 200, {'message': 'Old AEP has been replaced by new AEP',
                      'details': return_data}
 
+    def clone_aep(self, aep_name, new_aep_name) -> Tuple[int, dict]:
+        # Check if requested AEP exists first
+        exists = self.collect_aeps(aep=new_aep_name)
+        if exists:
+            return 400, {'message': 'The requested aep name already exists'}
+
+        aep = AEP.load(self.collect_aeps(aep_name))
+        aep.attributes.__delattr__('dn')
+        aep.attributes.name = new_aep_name
+        resp = self.post(aep.json(), aep.post_uri)
+
+        return resp.status_code, resp.json()
+
     def rebrand_epg_bd(self, old_epg_dn: str, new_epg_dn: str, new_bd_name: str=None):
         if not old_epg_dn.startswith('uni/'):
             old_epg_dn = f'uni/{old_epg_dn}'
