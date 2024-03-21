@@ -726,6 +726,25 @@ def rebrand_epg_bd(request: Request, az: str, req_data: RebrandEpgBd):
     return Response(status_code=200, content=json.dumps(result), media_type='application/json')
 
 
+@app.post('/apis/aci/{az}/clone_aep', tags=['ACI'])
+def clone_aep(request: Request, az: str, req_data: CloneAEP):
+    """Renames an AEP.  Can be used to merge one AEP into another when specifying an existing AEP as the new AEP name.
+    Requests to this API will delete the old AEP.  This API will not proceed if there is a conflicting VLAN to EPG
+    association amongst the two specified AEPs."""
+    req_data = req_data.dict()
+
+    if not validate_api_key(req_data.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps({'message': 'Not Authorized'}),
+                        media_type='application/json')
+
+    req_logit(clone_aep, request, req_data)
+
+    with apic_utils.APIC(env=az) as apic_api:
+        status, result = apic_api.clone_aep(**req_data)
+
+    return Response(status_code=status, content=json.dumps(result), media_type='application/json')
+
+
 @app.post('/apis/aci/{az}/rebrand_aep', tags=['ACI'])
 def rebrand_aep(request: Request, az: str, req_data: RebrandAEP):
     """Renames an AEP.  Can be used to merge one AEP into another when specifying an existing AEP as the new AEP name.
