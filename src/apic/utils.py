@@ -2033,6 +2033,11 @@ class APIC:
                 # Expect Response(400)
                 self.post(configuration=attach.json())
 
+    def get_leaf_mgmt_addresses(self) -> Tuple[int, dict]:
+        tops = [APICObject.load(_) for _ in self.get('/api/class/topSystem.json').json()['imdata']]
+        data = {int(re.search(r'node-(\d+)', top.attributes.dn).group(1)): top.attributes.oobMgmtAddr for top in tops}
+        return 200, data
+
     @classmethod
     def move_to_dr(cls, epg: str):
         """Class method used only in SEDC environment.  Migrates an EPG that is typically in tn-HCA into a DR testing
