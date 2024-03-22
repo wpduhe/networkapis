@@ -647,6 +647,16 @@ def collect_snmp_clients(request: Request):
     return Response(status_code=status, content=client_response, media_type='text/plain')
 
 
+@app.get('/apis/aci/{az}/get_mgmt_addresses', tags=['ACI'], include_in_schema=False)
+def get_mgmt_addresses(request: Request, az: str):
+    req_logit(get_mgmt_addresses, request, None)
+
+    with apic_utils.APIC(env=az) as apic:
+        status, data = apic.get_leaf_mgmt_addresses()
+
+    return json.loads(json.dumps(data, sort_keys=True))
+
+
 @app.post('/apis/aci/add_new_leaf_pair', tags=['ACI'])
 def add_new_leaf_pair(request: Request, req_data: AddNewLeafPair):
     """Configures the specified switch serial numbers as a new VPC leaf pair in the specified environment"""
