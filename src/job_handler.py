@@ -12,6 +12,7 @@ from ipam.utils import ManagementJob, BIG
 from githubapi.utils import GithubAPI
 from checkpoint.CheckpointUtilities import CheckpointAPI
 from comms import email_notification, DESIGN_AND_DELIVERY_DL, NETWORK_ADVANCED_SUPPORT_DL
+from nexus.utils import NXOS
 import logging
 import sys
 
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('github').setLevel(logging.WARNING)
+logging.getLogger('netmiko').setLevel(logging.WARNING)
+logging.getLogger('paramiko').setLevel(logging.WARNING)
 
 
 class JobHandler:
@@ -275,12 +278,44 @@ class JobHandler:
                 email_notification(receivers=recipients,
                                    subject='Fabric Node Flash Lifetime Warnings', msg_text=data)
 
+    @staticmethod
+    def prefix_cache(force: bool=False):
+        dt = datetime.now()
+        if 0 <= dt.minute <= 5 or force:
+            logger.debug(f'Updating route cache')
+
+            xr = NXOS('10.0.255.19')  # XRDC Core-1
+            fw = NXOS('10.64.255.72')  # FWDC Core-1
+
+            # Get only routes that have AS paths
+            xr_bgp_output = xr.exec_command('show ip bgp regexp "[0-9]$" | include / | no-more')
+            fw_bgp_output = fw.exec_command('show ip bgp regexp "[0-9]$" | include / | no-more')
+
+            xr_bgp_output = xr_bgp_output.split('\n')
+            fw_bgp_output = fw_bgp_output.split('\n')
+
+            xr_bgp_output.remove('')
+            fw_bgp_output.remove('')
+
+            xr_bgp_routes = set(re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}).*?(\d+)\D+$', line).groups()
+                                for line in xr_bgp_output)
+            fw_bgp_routes = set(re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}).*?(\d+)\D+$', line).groups()
+                                for line in fw_bgp_output)
+
+            prefixes = xr_bgp_routes.union(fw_bgp_routes)
+
+            g_gh.update_file('datacenter/prefix_cache.json', message='prefix_cache_update',
+                             content=json.dumps(list(x for x in prefixes), indent=2))
+
+        return
+
 
 if __name__ == '__main__':
     g_gh = GithubAPI()
     JobHandler.process_aci_jobs()
     JobHandler.process_mgmt_jobs()
     JobHandler.process_fw_policy_push()
+    JobHandler.prefix_cache()
     # JobHandler.completed_job_cleanup()
     JobHandler.check_fabric_supervisor_lifetimes()
 
@@ -295,5 +330,6 @@ def run_job_handler():
         JobHandler.process_aci_jobs()
         JobHandler.process_mgmt_jobs()
         JobHandler.process_fw_policy_push()
+        JobHandler.prefix_cache()
         # JobHandler.completed_job_cleanup()
         JobHandler.check_fabric_supervisor_lifetimes()
