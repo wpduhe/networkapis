@@ -2,7 +2,6 @@ import json
 import time
 import os
 import re
-# import requests
 import socket
 from typing import List
 from datetime import datetime
@@ -13,6 +12,22 @@ from ipam.utils import ManagementJob, BIG
 from githubapi.utils import GithubAPI
 from checkpoint.CheckpointUtilities import CheckpointAPI
 from comms import email_notification, DESIGN_AND_DELIVERY_DL, NETWORK_ADVANCED_SUPPORT_DL
+import logging
+import sys
+
+
+formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03dZ - %(name)s - %(levelname)s - %(message)s',
+                              datefmt='%Y-%m-%dT%H:%M:%S')
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+
+logging.basicConfig(level=logging.DEBUG, handlers=[handler])
+logger = logging.getLogger(__name__)
+
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('github').setLevel(logging.WARNING)
 
 
 class JobHandler:
@@ -22,8 +37,9 @@ class JobHandler:
     def process_aci_jobs():
         # Check to ensure there are files
         if not g_gh.file_exists(ACIJob.queue_path):
-            print('No ACI jobs are queued')
             return None
+
+        logger.debug(f'Processing ACI jobs on {socket.gethostname()}')
 
         def AND(bool_list: List[bool]):
             """Compares a list of Booleans and returns True if none are False.  Asserts that all values are True"""
@@ -70,12 +86,15 @@ class JobHandler:
                                   content=json.dumps(job.__dict__, indent=4))
                     g_gh.delete_file(file_path=f'{ACIJob.completed_jobs}/{file}', message='Completed ACIJob')
 
+        logger.debug(f'ACI jobs completed by {socket.gethostname()}')
+
     @staticmethod
     def process_mgmt_jobs():
         # Check to ensure there are management jobs
         if not g_gh.file_exists(ManagementJob.queue_path):
-            print('No management jobs are queued')
             return None
+
+        logger.debug(f'Processing Management Jobs on {socket.gethostname()}')
 
         def check_record(args: list):
             try:
@@ -133,20 +152,17 @@ class JobHandler:
                 else:
                     continue
 
+        logger.debug(f'Management jobs completed by {socket.gethostname()}')
+
     @staticmethod
     def process_fw_policy_push():
         # Check to ensure there are pending policy pushes
         if not g_gh.file_exists('pyapis/checkpoint/policy_push_queue'):
-            print('No Checkpoint policy pushes are queued')
             return None
         files = g_gh.list_dir('pyapis/checkpoint/policy_push_queue')
 
         if files:
-
-            print(f'Checking for pending policy installs.')
-
             for policy in files:
-                print(f'Found {policy}')
                 # TODO: Add Checkpoint change freeze check
                 # if change_freeze():
                 #     continue
@@ -206,6 +222,7 @@ class JobHandler:
     def check_fabric_supervisor_lifetimes(run_now: bool=False, force: bool=False, score: int=90,
                                           recipients: List[str]=None):
         def check_fabrics():
+            logger.debug('Checking Fabric Lifetimes')
             environments = json.load(open('data/ACIEnvironments.json'))
 
             d = ''
@@ -230,6 +247,9 @@ class JobHandler:
                                  f'<tr><td>{"Node Serial:":<22}</td><td>{node.attributes.serial}</td></tr>' \
                                  f'<tr><td>{"Flash Lifetime:":<22}</td><td>{flash.attributes.lifetime}</td></tr>' \
                                  f'</table>\n'
+
+                            logger.debug(f'Fabric flash lifetime reached: {apic.env.Name} {node.attributes.name} '
+                                         f'{node.attributes.serial}')
             return d
 
         if force:
@@ -272,10 +292,8 @@ def run_job_handler():
         time.sleep(300)
         global g_gh
         g_gh = GithubAPI()
-        print('JobHandler Starting...')
         JobHandler.process_aci_jobs()
         JobHandler.process_mgmt_jobs()
         JobHandler.process_fw_policy_push()
         # JobHandler.completed_job_cleanup()
         JobHandler.check_fabric_supervisor_lifetimes()
-        print('JobHandler Finished.')
