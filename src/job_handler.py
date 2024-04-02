@@ -288,8 +288,8 @@ class JobHandler:
             fw = NXOS('10.64.255.72')  # FWDC Core-1
 
             # Get only routes that have AS paths
-            xr_bgp_output = xr.exec_command('show ip bgp regexp "[0-9]$" | include / | no-more')
-            fw_bgp_output = fw.exec_command('show ip bgp regexp "[0-9]$" | include / | no-more')
+            xr_bgp_output = xr.exec_command('show ip bgp regexp "[0-9]$" | include / | exclude 0.0.0.0/0 | no-more')
+            fw_bgp_output = fw.exec_command('show ip bgp regexp "[0-9]$" | include / | exclude 0.0.0.0/0 | no-more')
 
             xr_bgp_output = xr_bgp_output.split('\n')
             fw_bgp_output = fw_bgp_output.split('\n')
