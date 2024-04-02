@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from iosxr.utils import IOSXR
 from iosxe.utils import IOSXE
 from nexus.utils import NXOS, mac_lookup as n_mac_lookup
-from data.environments import ACIEnvironment, NexusEnvironment
+from data.environments import ACIEnvironment, NexusEnvironment, DataCenter
 from ipam.utils import BIG, valid_ip
 from job_handler import run_job_handler
 from checkpoint.CheckpointUtilities import CheckpointAPI, generate_policy_list
@@ -21,7 +21,6 @@ from githubapi.utils import GithubAPI
 from ncm.utils import NCMIntegration
 from wsa.pac_gen_v2 import pac_gen
 from wsa import wsaBuild
-# from data.environments import FirewallPolicy
 from datetime import datetime
 import json
 import time
@@ -1842,23 +1841,36 @@ def get_subnet_information(request: Request, ip: str=None):
 
 
 @app.get('/apis/nexus/resolve_ip_to_datacenter', tags=['Nexus'])
-def resolve_ip_to_datacenter(request: Request, ip: str=None):
+def resolve_ip_to_datacenter(request: Request, ip: str=None) -> DataCenter or list:
     """This API looks for the subnet of the queried IP and attempts to login to the gateway device.  If successful,
     information about the device and subnet is returned."""
-    req_logit(resolve_ip_to_datacenter, request, ip)
-
     if ip is None:
         ip = request.query_params.get('ip')
 
+    req_logit(resolve_ip_to_datacenter, request, ip)
+
     try:
-        ip = IPv4Address(ip)
+        ip = IPv4Network(ip)
     except AddressValueError:
         return Response(status_code=400, content=json.dumps({'error': 'The supplied value is not a valid IP address'}),
                         media_type='application/json')
 
-    status, response = IOSXR.resolve_ip_to_datacenter(ip=ip.exploded)
+    gh = GithubAPI()
 
-    return Response(status_code=status, content=json.dumps(response), media_type='application/json')
+    data = json.loads(gh.get_file_content('datacenter/prefix_cache.json'))
+
+    data = [(IPv4Network(prefix), int(asn)) for prefix, asn in data]
+
+    candidates = [x for x in data if x[0].overlaps(ip)]
+    # Sort candidates by prefixlen, closest match is in last position
+    candidates.sort(key=lambda x: x[0].prefixlen)
+
+    prefix, asn = candidates[-1]
+
+    if dc := DataCenter.get_dc_by_asn(asn=asn):
+        return dc
+    else:
+        return []
 
 
 @app.get('/apis/nexus/{env}/get_vlan_information/{vlan}', tags=['Nexus'])
