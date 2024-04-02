@@ -1,6 +1,8 @@
 import json
+import yaml
 from ipaddress import IPv4Network
 from typing import List
+from githubapi.utils import GithubAPI
 
 
 class ACIEnvironment:
@@ -197,3 +199,48 @@ class FirewallPolicy:
                     policy_list.append([policy.Domain, policy.SecurityPolicy])
 
         return list(policy_list)
+
+
+class DataCenter:
+    name: str
+    city: str
+    state: str
+    market: str
+    alphacoid: str
+    dc: str
+    coid: int
+    asn: int
+
+    def __init__(self, name: str=None, environment: dict=None):
+        if name:
+            gh = GithubAPI()
+            content = gh.get_file_content('datacenter/datacenters.yaml')
+            data = yaml.load(content, yaml.Loader)
+
+            try:
+                environment = next(e for e in data['environments'] if e['name'].lower() == name.lower())
+            except StopIteration:
+                raise ValueError(f'{name} not a valid DataCenter')
+
+        if environment:
+            for key, value in environment.items():
+                self.__setattr__(key, value)
+
+    @staticmethod
+    def get_dc_by_asn(asn: int):
+        gh = GithubAPI()
+        content = gh.get_file_content('datacenter/datacenters.yaml')
+        data = yaml.load(content, yaml.Loader)
+
+        try:
+            env = next(e for e in data['environments'] if e['asn'].lower() == asn)
+        except StopIteration:
+            raise ValueError(f'{asn} not a used by any DataCenter')
+
+        return DataCenter(environment=env)
+
+    def json(self, indent: int=None):
+        return json.dumps(self.__dict__, indent=(indent if indent else indent))
+
+    def yaml(self):
+        return yaml.dump(self.__dict__)
