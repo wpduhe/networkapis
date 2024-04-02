@@ -1868,7 +1868,7 @@ def resolve_ip_to_datacenter(request: Request, ip: str=None):
     prefix, asn = candidates[-1]
 
     if dc := DataCenter.get_dc_by_asn(asn=asn):
-        return dc.json()
+        return dc.__dict__
     else:
         return []
 
