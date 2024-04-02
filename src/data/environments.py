@@ -233,9 +233,9 @@ class DataCenter:
         data = yaml.load(content, yaml.Loader)
 
         try:
-            env = next(e for e in data['environments'] if e['asn'].lower() == asn)
+            env = next(e for e in data['environments'] if e['asn'] == asn)
         except StopIteration:
-            raise ValueError(f'{asn} not a used by any DataCenter')
+            return None
 
         return DataCenter(environment=env)
 
