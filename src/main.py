@@ -156,7 +156,8 @@ tags_metadata = [
 tags_metadata.sort(key=lambda x: x['name'])
 
 # Instantiate Application
-app = FastAPI(openapi_tags=tags_metadata, title='PyAPIs Network Services API')
+app = FastAPI(openapi_tags=tags_metadata, title='PyAPIs Network Services API',
+              swagger_ui_parameters={'docExpansion': 'none'})
 
 # Enable CORS
 origins = [
