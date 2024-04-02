@@ -1841,7 +1841,7 @@ def get_subnet_information(request: Request, ip: str=None):
 
 
 @app.get('/apis/nexus/resolve_ip_to_datacenter', tags=['Nexus'])
-def resolve_ip_to_datacenter(request: Request, ip: str=None) -> DataCenter or list:
+def resolve_ip_to_datacenter(request: Request, ip: str=None):
     """This API looks for the subnet of the queried IP and attempts to login to the gateway device.  If successful,
     information about the device and subnet is returned."""
     if ip is None:
@@ -1868,7 +1868,7 @@ def resolve_ip_to_datacenter(request: Request, ip: str=None) -> DataCenter or li
     prefix, asn = candidates[-1]
 
     if dc := DataCenter.get_dc_by_asn(asn=asn):
-        return dc
+        return dc.json()
     else:
         return []
 
