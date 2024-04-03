@@ -1842,38 +1842,34 @@ def get_subnet_information(request: Request, ip: str=None):
 
 @app.get('/apis/nexus/resolve_ip_to_datacenter', tags=['Nexus'])
 def resolve_ip_to_datacenter(request: Request, ip: str=None):
-    """This API looks for the subnet of the queried IP and attempts to login to the gateway device.  If successful,
-    information about the device and subnet is returned."""
+    """This API looks up the origin ASN of a comma separated list of IP addresses using a list of cached prefixes to
+    determine the originating data center"""
     if ip is None:
         ip = request.query_params.get('ip')
 
     req_logit(resolve_ip_to_datacenter, request, ip)
 
-    try:
-        ip = IPv4Network(ip)
-    except AddressValueError:
-        return Response(status_code=400, content=json.dumps({'error': 'The supplied value is not a valid IP address'}),
-                        media_type='application/json')
+    ips = ip.split(',')
+    ips = [IPv4Network(ip) for ip in ips]
 
     gh = GithubAPI()
-
     data = json.loads(gh.get_file_content('datacenter/prefix_cache.json'))
-
     data = [(IPv4Network(prefix), int(asn)) for prefix, asn in data]
 
-    candidates = [x for x in data if x[0].overlaps(ip)]
-    # Sort candidates by prefixlen, closest match is in last position
-    candidates.sort(key=lambda x: x[0].prefixlen)
+    results = {}
 
-    if candidates:
-        prefix, asn = candidates[-1]
-    else:
-        return []
+    for ip in ips:
+        candidates = [x for x in data if x[0].overlaps(ip)]
+        # Sort candidates by prefix length, closest match is in last position after sort
+        candidates.sort(key=lambda x: x[0].prefixlen)
 
-    if dc := DataCenter.get_dc_by_asn(asn=asn):
-        return dc.__dict__
-    else:
-        return []
+        if candidates:
+            prefix, asn = candidates[-1]
+            results.update(**dict(ip=ip.network_address.exploded, datacenter=DataCenter.get_dc_by_asn(asn).__dict__))
+        else:
+            results.update(**dict(ip=ip.network_address.exploded, datacenter=None))
+
+    return results
 
 
 @app.get('/apis/nexus/{env}/get_vlan_information/{vlan}', tags=['Nexus'])
