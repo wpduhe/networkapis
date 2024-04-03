@@ -1,2 +1,0 @@
-APP_MODULE=main:app
-APP_CONFIG=gunicorn_config.py
