@@ -282,7 +282,7 @@ class JobHandler:
     def prefix_cache(force: bool=False):
         dt = datetime.now()
         if 0 <= dt.minute <= 5 or force:
-            logger.debug(f'Updating route cache')
+            logger.debug(f'Updating prefix cache')
 
             xr = NXOS('10.0.255.19')  # XRDC Core-1
             fw = NXOS('10.64.255.72')  # FWDC Core-1
@@ -306,6 +306,7 @@ class JobHandler:
 
             g_gh.update_file('datacenter/prefix_cache.json', message='prefix_cache_update',
                              content=json.dumps(list(x for x in prefixes), indent=2))
+            logger.debug('Prefix cache updated')
 
         return
 
