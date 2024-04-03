@@ -257,7 +257,7 @@ class JobHandler:
 
         if force:
             pass
-        elif not socket.gethostname().lower().startswith('pyapis01'):
+        elif not socket.gethostname().lower().startswith('pyapis-prd'):
             return None
 
         now = datetime.now()
