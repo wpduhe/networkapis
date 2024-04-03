@@ -1865,9 +1865,9 @@ def resolve_ip_to_datacenter(request: Request, ip: str=None):
 
         if candidates:
             prefix, asn = candidates[-1]
-            results.update(**dict(ip=ip.network_address.exploded, datacenter=DataCenter.get_dc_by_asn(asn).__dict__))
+            results.update({f'{ip.network_address}': DataCenter.get_dc_by_asn(asn).__dict__})
         else:
-            results.update(**dict(ip=ip.network_address.exploded, datacenter=None))
+            results.update({f'{ip.network_address}': None})
 
     return results
 
