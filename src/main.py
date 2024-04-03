@@ -1842,14 +1842,14 @@ def get_subnet_information(request: Request, ip: str=None):
 
 @app.get('/apis/nexus/resolve_ip_to_datacenter', tags=['Nexus'])
 def resolve_ip_to_datacenter(request: Request, ip: str=None):
-    """This API looks up the origin ASN of a comma separated list of IP addresses using a list of cached prefixes to
+    """This API looks up the origin ASN of a delimited set of IP addresses using a list of cached prefixes to
     determine the originating data center"""
     if ip is None:
         ip = request.query_params.get('ip')
 
     req_logit(resolve_ip_to_datacenter, request, ip)
 
-    ips = ip.split(',')
+    ips = re.split(r'[^\d.]', ip)
     ips = [IPv4Network(ip) for ip in ips]
 
     gh = GithubAPI()
