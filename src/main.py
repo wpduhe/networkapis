@@ -1865,7 +1865,10 @@ def resolve_ip_to_datacenter(request: Request, ip: str=None):
     # Sort candidates by prefixlen, closest match is in last position
     candidates.sort(key=lambda x: x[0].prefixlen)
 
-    prefix, asn = candidates[-1]
+    if candidates:
+        prefix, asn = candidates[-1]
+    else:
+        return []
 
     if dc := DataCenter.get_dc_by_asn(asn=asn):
         return dc.__dict__
