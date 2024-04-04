@@ -325,7 +325,9 @@ def run_job_handler():
     """Function called upon the instantiation of the application server which recalls itself at completion."""
     # Added while statement so that this function is started in a separate thread that never stops.
     while True:
+        logger.debug('JobHandler sleeping...')
         time.sleep(300)
+        logger.debug('JobHandler waking up...')
         global g_gh
         g_gh = GithubAPI()
         JobHandler.process_aci_jobs()
