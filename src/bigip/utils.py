@@ -629,7 +629,7 @@ class LTM:
         }
 
     @classmethod
-    def vip_clone(cls, vip_address: str, ltm_env: str=None):
+    def vip_clone(cls, vip_address: str, ltm_env: str=None, ltm_pair: list=None):
         def default_rule(irule):
             """Returns True if an iRule is F5 verified, suggesting that it is a system default iRule"""
             if 'apiRawValues' in irule.__dict__.keys():
@@ -656,6 +656,8 @@ class LTM:
 
         if ltm_env:
             ltm = cls.login_to_environment(ltm_env)
+        elif ltm_pair:
+            ltm = cls.login_to_pair(ltm_pair)
         else:
             ltm = cls.get_ltm_by(vip_address)
 
