@@ -7,6 +7,8 @@ from urllib.parse import urlencode, unquote
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from githubapi.utils import GithubAPI
 import urllib3
+from evolve.evolve_util import EvolveMarketplace
+from typing import List, TypedDict
 
 
 urllib3.disable_warnings()
@@ -119,383 +121,6 @@ class BAMObject:
             return x
         else:
             raise TypeError('This method only supports str or dict')
-
-
-class Proteus:
-    def __init__(self, qol=False):
-        self.session = requests.session()
-        self.session.verify = False
-
-        if qol:
-            self.url = 'https://proteus-qol.medcity.net/Services/REST/v1'
-        else:
-            self.url = 'https://proteus.hca.corpad.net/Services/REST/v1'
-
-        params = {
-            'username': os.environ.get('ProteusUsername'),
-            'password': os.environ.get('ProteusPassword')
-        }
-
-        r = self.session.get(f'{self.url}/login?{urlencode(params)}')
-        token = re.search(r'BAMAuthToken: \S+', r.text).group()
-
-        self.session.headers.update({'Authorization': token})
-        self.session.headers.update({'Accept': 'application/json'})
-        self.session.headers.update({'Content-Type': 'application/json'})
-
-        self.hca_internal = self.get('getEntityByName', name='HCA Internal', parentId=0, type='Configuration')
-        self.hca_external = self.get('getEntityByName', name='HCA-External', parentId=0, type='Configuration')
-
-    def __exit__(self):
-        self.logout()
-
-    def login(self):
-        self.session = requests.session()
-        self.session.verify = False
-
-        params = {
-            'username': os.environ.get('ProteusUsername'),
-            'password': os.environ.get('ProteusPassword')
-        }
-
-        r = self.session.get(f'{self.url}/login?{urlencode(params)}')
-        token = re.search(r'BAMAuthToken: \S+', r.text).group()
-
-        self.session.headers.update({'Authorization': token})
-        self.session.headers.update({'Accept': 'application/json'})
-
-    def logout(self):
-        r = self.session.get(f'{self.url}/logout')
-        return r.status_code, r.reason, r.text
-
-    def get(self, api_method: str, **kwargs):
-        params = dict(kwargs)
-
-        r = self.session.get(f'{self.url}/{api_method}?{urlencode(params)}')
-
-        if not r.ok:
-            return r
-
-        try:
-            data = json.loads(r.text)
-        except json.decoder.JSONDecodeError:
-            data = r.text
-
-        if isinstance(data, dict):
-            return self.Object(data)
-        elif isinstance(data, list):
-            if len(data) == 1:
-                return self.Object(data[0])
-            else:
-                return data
-        else:
-            return r
-
-    def update(self, bam_object):
-        api_method = 'update'
-
-        assert type(bam_object) == self.Object, 'Type Proteus.Object required'
-
-        r = self.session.put(f'{self.url}/{api_method}', json=bam_object.output())
-
-        return r
-
-    def get_ip_block(self, cidr: str, external=False):
-        api_method = 'searchByObjectTypes'
-
-        if IPv4Network(cidr, strict=False):
-            cidr = IPv4Network(cidr, strict=False).with_prefixlen
-
-            params = {
-                'containerId': (self.hca_internal.id if external is False else self.hca_external.id),
-                'keyword': cidr,
-                'types': 'IP4Block',
-                'start': 0,
-                'count': 1
-            }
-
-            r = self.session.get(f'{self.url}/{api_method}?{urlencode(params)}')
-
-            if r.ok:
-                r = json.loads(r.text)[0]
-                return self.Object(r)
-            else:
-                raise LookupError('The IP Block for which you searched does not exist')
-        else:
-            raise ValueError('The provided string is not an IP address')
-
-    def get_subnet(self, ip: str, external=False):
-        api_method = 'getIPRangedByIP'
-        if bool(IPv4Address(ip)):
-            params = {
-                'containerId': (self.hca_internal.id if external is False else self.hca_external.id),
-                'address': ip,
-                'type': 'IP4Network'
-            }
-
-            r = self.session.get(f'{self.url}/{api_method}?{urlencode(params)}')
-            r = json.loads(r.text)
-
-            return self.Object(r)
-        else:
-            raise ValueError('The provided string is not an IP address')
-
-    def create_next_subnet(self, from_block: str, ip_count: int, name: str, coid: str, asn: str, external=False):
-        api_method = 'getNextAvailableIPRange'
-        ip_block = self.get_ip_block(from_block, external=external)
-
-        subnet_size = self.calculate_network_size(ip_count)
-
-        params = {
-            'parentId': ip_block.id,
-            'size': subnet_size,
-            'type': 'IP4Network',
-            'properties': {
-                'reuseExisting': 'False',
-                'isLargerAllowed': 'False',
-                'autoCreate': 'True',
-                'traversalMethod': 'NO_TRAVERSAL'
-            }
-        }
-
-        params['properties'] = self.Object.convert_properties(params['properties'])
-
-        r = self.session.get(f'{self.url}/{api_method}?{urlencode(params)}')
-        r = json.loads(r.text)
-
-        subnet = self.Object(r)
-        subnet_addr = IPv4Network(subnet.properties['CIDR']).network_address.exploded
-
-        subnet.name = name
-
-        subnet.properties['COID'] = coid
-        subnet.properties['ASN'] = asn
-        subnet.properties['Network_Location'] = 'Internal'
-
-        self.update(subnet)
-
-        self.assign_next_ip(subnet=subnet_addr, name='Reserved for Network')
-        self.assign_next_ip(subnet=subnet_addr, name='Reserved for Network')
-
-        return subnet
-
-    def get_ip(self, ip: str, external=False):
-        """
-        rtype: Proteus.Object
-
-        :param ip:
-        :param external:
-        :return:
-        """
-        api_method = 'getIP4Address'
-
-        if IPv4Address(ip):
-            params = {
-                'containerId': (self.hca_internal.id if external is False else self.hca_external.id),
-                'address': ip
-            }
-
-            address = self.get(api_method, **params)
-
-            return address
-
-    def get_ip_availability(self, ip: str, external=False):
-        api_method = 'getIP4Address'
-
-        if IPv4Address(ip):
-            params = {
-                'containerId': (self.hca_internal.id if external is False else self.hca_external.id),
-                'address': ip
-            }
-
-            address = self.get(api_method, **params)
-
-            if address.id == 0:
-                return True
-            else:
-                return False
-
-    def get_next_ip(self, subnet: str, external=False):
-        api_method = 'getNextAvailableIP4Address'
-
-        if IPv4Address(IPv4Network(subnet, strict=False).network_address):
-            network = self.get_subnet(IPv4Address(IPv4Network(subnet, strict=False).network_address).exploded, external)
-
-            assert type(network) == self.Object and network.type == 'IP4Network'
-
-            params = {
-                'parentId': network.id
-            }
-
-            address = self.get(api_method, **params)
-            try:
-                address = re.search(r'[.\d]+', address.text).group()
-            except AttributeError:
-                return None
-            return address
-
-    def assign_ip(self, address: str, name: str, external=False):
-        api_method = 'assignIP4Address'
-
-        try:
-            IPv4Address(address)
-        except AddressValueError as e:
-            raise e
-
-        params = {
-            'configurationId': (self.hca_internal.id if external is False else self.hca_external.id),
-            'ip4Address': address,
-            'action': 'MAKE_STATIC',
-            'macAddress': '',
-            'hostInfo': '',
-            'properties': f'name={name}|'
-        }
-
-        r = self.session.post(f'{self.url}/{api_method}?{urlencode(params)}')
-        if r.ok:
-            return self.get_ip(address)
-        else:
-            raise Exception([f'Assignment of {address} failed'])
-
-    def assign_next_ip(self, subnet: str, name: str, external=False):
-        api_method = 'assignNextAvailableIP4Address'
-
-        subnet = self.get_subnet(subnet, external=external)
-
-        assert type(subnet) == self.Object and subnet.type == 'IP4Network', 'IP4Network lookup failed'
-
-        params = {
-            'configurationId': (self.hca_internal.id if external is False else self.hca_external.id),
-            'parentId': subnet.id,
-            'action': 'MAKE_STATIC',
-            'macAddress': '',
-            'hostInfo': '',
-            'properties': f'name={name}|'
-        }
-
-        r = self.session.post(f'{self.url}/{api_method}?{urlencode(params)}')
-        r = json.loads(r.text)
-        r = self.Object(r)
-
-        return r
-
-    def get_record_by_hint(self, hint: str):
-        api_method = 'getHostRecordsByHint'
-
-        params = {
-            'start': 0,
-            'count': 1,
-            'options': f'hint={hint}'
-        }
-
-        r = self.get(api_method, **params)
-
-        return r
-
-    def get_zone(self, zone: str, external=False):
-        api_method = 'getZonesByHint'
-
-        params = {
-            'containerId': (self.hca_internal.id if external is False else self.hca_external.id),
-            'count': 1,
-            'options': f'hint={zone}'
-        }
-
-        r = self.get(api_method, **params)
-
-        if type(r) == self.Object:
-            if r.properties['absoluteName'] == zone:
-                return r
-        else:
-            return r
-
-    @staticmethod
-    def calculate_network_size(num_ips: int):
-        num_ips += 3
-
-        if num_ips <= 6:
-            return 8
-        elif num_ips <= 14:
-            return 16
-        elif num_ips <= 30:
-            return 32
-        elif num_ips <= 62:
-            return 64
-        elif num_ips <= 126:
-            return 128
-        elif num_ips <= 254:
-            return 256
-        elif num_ips <= 510:
-            return 512
-        elif num_ips <= 1022:
-            return 1024
-        elif num_ips <= 2046:
-            return 2048
-        elif num_ips <= 4094:
-            return 4096
-        elif num_ips <= 8190:
-            return 8192
-        else:
-            raise ValueError('Requested network is too large')
-
-    class Object:
-        properties = None
-        id = None
-        type = None
-        name = None
-
-        def __init__(self, json_data: dict):
-            for key in json_data.keys():
-                self.__setattr__(key, json_data[key])
-
-            if self.properties is not None:
-                self.properties = self.convert_properties(self.properties)
-
-        def output(self):
-            output = {}
-
-            for attribute in self.__dict__.keys():
-                if attribute is not None:
-                    output[attribute] = self.__getattribute__(attribute)
-
-            try:
-                if isinstance(output['properties'], dict):
-                    output['properties'] = self.convert_properties(output['properties'])
-            except KeyError:
-                pass
-
-            return output
-
-        def dump_json(self):
-            print(json.dumps(self.__dict__, indent=4))
-
-        @staticmethod
-        def convert_properties(content):
-            """
-            :rtype: dict or str
-            :param content: str or dict
-            :return:
-
-            This method converts the value of the properties attribute from the BAM supplied string to a dict or from
-            a dict to the BAM formatted str.
-            """
-
-            if isinstance(content, dict):
-                content = f'{unquote(urlencode(content).replace("&", "|"))}'
-
-                return content
-
-            elif isinstance(content, str):
-                x = {}
-
-                content = content.split('|')
-                for data in content:
-                    if '=' in data:
-                        x[data.split('=')[0]] = data.split('=')[1]
-
-                return x
-            else:
-                raise TypeError('This method only supports str or dict')
 
 
 class BIG:
@@ -1092,3 +717,70 @@ class ManagementJob:
         job.dns_template = dns_template
         gh.add_file(file_path=f'{job.queue_path}/{job.name}', message='IPAM Job Creation',
                     content=json.dumps(job.__dict__))
+
+
+class AddressMixin:
+    def get_address(self: EvolveMarketplace, address) -> requests.Response:
+        return self.get(f'/networkapis-ipam/api/addresses/get_address/{address}')
+
+    def assign_next_ip(self: EvolveMarketplace, network: str, name: str) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/addresses/assign_next_ip', json=dict(network=network, name=name))
+
+    def assign_address_series(self: EvolveMarketplace, network: str, names: List[str]) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/addresses/assign_address_series', json=dict(network=network,
+                                                                                             names=names))
+
+    def assign_addresses_by_offsets(self: EvolveMarketplace, network: str,
+                                    assignments: List[TypedDict('Offset', {'name': str, 'offset': int})]) -> \
+            requests.Response:
+        return self.post(f'/networkapis-ipam/api/addresses/assign_addresses_by_offsets', json=dict(network=network,
+                                                                                  assignments=assignments))
+
+    def delete_address(self: EvolveMarketplace, addresses: List[str]) -> requests.Response:
+        return self.delete(f'/networkapis-ipam/api/addresses', json=dict(addresses=addresses))
+
+    def bulk_reserve(self: EvolveMarketplace,
+                     assignments: List[TypedDict('A', {'address': str, 'name': str})]) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/addresses/bulk_reserve', json=dict(assignments=assignments))
+
+    def manage_device(self: EvolveMarketplace, address: str, dns_template) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/dns/manage_device', json=dict(address=address,
+                                                                               dns_template=dns_template))
+
+
+class NetworkMixin:
+    def get_network(self: EvolveMarketplace, network) -> requests.Response:
+        return self.get(f'/networkapis-ipam/api/networks/{network}')
+
+    def delete_network(self: EvolveMarketplace, network: str) -> requests.Response:
+        return self.delete(f'/networkapis-ipam/api/networks/{network}')
+
+    def get_network_by_address(self: EvolveMarketplace, address: str) -> requests.Response:
+        return self.get(f'/networkapis-ipam/api/networks/get_network_by_address/{address}')
+
+    def create_next_available_network(self: EvolveMarketplace, no_of_ips: int, name: str, cidr_blocks: List[str],
+                                      coid: str, asn: str, market: str) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/networks/create_next_available_network', json=dict(
+            no_of_ips=no_of_ips, name=name, cidr_blocks=cidr_blocks, coid=coid, asn=asn, market=market
+        ))
+
+    def create_next_routed_network(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
+                                   market: str) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/networks/create_next_routed_network', json=dict(
+            name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market
+        ))
+
+    def create_next_loopback_address(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
+                                     market: str) -> requests.Response:
+        return self.post(f'/networkapis-ipam/api/networks/create_next_loopback_address', json=dict(
+            name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market
+        ))
+
+
+class NetworkAPIIPAM(
+        EvolveMarketplace,
+        AddressMixin,
+        NetworkMixin):
+
+    def __pass__(self):
+        pass
