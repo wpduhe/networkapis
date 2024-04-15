@@ -58,6 +58,8 @@ BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
 MAC_SEARCH = re.compile(r'([a-f0-9]:){5}[a-f0-9]{2}', flags=re.IGNORECASE)
 APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}')
+DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|CPDV|CORP|'
+                        r'HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
 
 
 def format_mac_addresses(mac_addresses: list) -> List:
@@ -4289,8 +4291,12 @@ def create_new_epg(env: str, req_data: dict):
         description = req_data['Description']
         no_of_ips = req_data['NumIPsReqd']
 
+        # Force remove any specific division mnemonics from the application profile name
+        ap_name = DIV_REMOVE.sub('', ap_name)
+
         if not ap_name.startswith('ap-'):
             ap_name = f'ap-{ap_name}'
+
         if not epg_name.startswith('epg-'):
             epg_name = f'epg-{epg_name}'
         if not bd_name.startswith('bd-'):
@@ -4417,6 +4423,9 @@ def create_custom_epg(env: str, req_data: dict):
         tn.attributes.name = apic.env.Tenant
         tn.attributes.status = 'modified'
 
+        # Force remove any specific division mnemonics from the application profile name
+        ap_name = DIV_REMOVE.sub('', ap_name)
+
         # Define Application Profile
         ap = AP()
         ap.attributes.name = ap_name
@@ -4524,6 +4533,9 @@ def create_custom_epg_v2(env: str, req_data: dict):
         tn = Tenant()
         tn.attributes.name = tn_name
         tn.attributes.status = 'modified'
+
+        # Force remove any specific division mnemonics from the application profile name
+        ap_name = DIV_REMOVE.sub('', ap_name)
 
         # Define Application Profile
         ap = AP()
