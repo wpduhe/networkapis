@@ -184,11 +184,6 @@ ne_key_security = APIKeyHeader(name='NE_Key')
 # Create task handler thread pool for background tasks
 task_handler = TaskHandler(name='pyapis')
 
-# Start the Job Handler if instance is the production Openshift instance
-if socket.gethostname().startswith('pyapis-prd'):
-    executor = ThreadPoolExecutor(max_workers=2)
-    executor.submit(run_job_handler)
-
 
 def challenge_request(func):
     @functools.wraps(func)
