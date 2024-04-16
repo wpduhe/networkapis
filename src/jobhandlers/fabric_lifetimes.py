@@ -36,6 +36,8 @@ def main(score: int = 90, recipients: List[str] = None):
             if environment['Name'].lower() != 'parallon-dev':
                 apic = APIC(env=environment['Name'])
 
+                logger.debug(f'Logged into {apic.env.Name}. Checking lifetimes...')
+
                 flashes = apic.get('/api/class/eqptFlash.json').json()['imdata']
                 flashes = [APICObject.load(_) for _ in flashes]
 
@@ -70,5 +72,7 @@ def main(score: int = 90, recipients: List[str] = None):
 
 
 if __name__ == '__main__':
+    logger.debug('Checking fabric lifetimes')
     if socket.gethostname().lower().startswith('networkapis'):
+        logger.debug('Host check passed... proceeding')
         main()
