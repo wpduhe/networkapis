@@ -70,5 +70,5 @@ def main(score: int = 90, recipients: List[str] = None):
 
 
 if __name__ == '__main__':
-    if socket.gethostname().lower().startswith('pyapis-prd'):
+    if socket.gethostname().lower().startswith('networkapis'):
         main()
