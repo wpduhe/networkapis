@@ -26,7 +26,7 @@ def main():
     for application in gh.list_dir('applications'):
         for instance in gh.list_dir(f'applications/{application}'):
             inst = AppInstance.load(f'{application}/{instance}')
-            application += [
+            application_data += [
                 dict(path=inst.path(),
                      epgDn=inst.epg_dn(),
                      networks=list(inst.networks.keys()),
