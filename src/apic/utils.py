@@ -72,6 +72,60 @@ def format_mac_addresses(mac_addresses: list) -> List:
     return mac_addresses
 
 
+def vl_range(vrange: str):
+    """Creates a generator from a string representation of a range of VLANs <=4094 '1-3,5,7-9'"""
+    for r in vrange.split(','):
+        if '-' in r:
+            y = r.split('-')
+            for x in range(int(y[0]), int(y[1]) + 1):
+                if x > 4094:
+                    raise StopIteration('VLAN ID exceeds maximum value: 4094')
+                yield x
+        else:
+            if int(r) > 4094:
+                raise StopIteration('VLAN ID exceeds maximum value: 4094')
+            yield int(r)
+
+
+def port_range(nrange: str):
+    """Generates an iterator from a string representation of a range of interfaces <=52 '1-3,5,7-9'"""
+    for r in nrange.split(','):
+        if '-' in r:
+            y = r.split('-')
+            for x in range(int(y[0]), int(y[1]) + 1):
+                if x > 52:
+                    raise StopIteration('Port value exceeds typical leaf interface value: 52')
+                yield x
+        else:
+            if int(r) > 52:
+                raise StopIteration('Port value exceeds typical leaf interface value: 52')
+            yield int(r)
+
+
+def alpha_range(arange: str):
+    """Creates a generator from a string representation of a range of alphabetic characters 'a-c,f,h-j'"""
+    # Determine if results should be upper or lower-case
+    lower = arange.islower()
+
+    # Convert to uppercase for processing
+    arange = arange.upper()
+
+    for a in arange.split(','):
+        if '-' in a:
+            s, e = a.split('-')
+
+            for i in range(ord(s), ord(e) + 1):
+                if lower:
+                    yield chr(i).lower()
+                else:
+                    yield chr(i)
+        else:
+            if lower:
+                yield a.lower()
+            else:
+                yield a
+
+
 def q_wcard(c, a, v) -> str:
     """Generate query string using wildcard match"""
     return 'query-target-filter=wcard(%s.%s,"%s")' % (c, a, v)
@@ -1085,19 +1139,19 @@ class APIC:
         :rtype: int
         :return:
         """
-        self.clear_vlans_assigned_to_nonexistent_epgs()
+        # self.clear_vlans_assigned_to_nonexistent_epgs()
         rs_vlp = self.get(f'/api/mo/uni/phys-{self.env.PhysicalDomain}/rsvlanNs.json').json()['imdata'][0]
         encap_blocks = self.get(f'/api/mo/{rs_vlp["infraRsVlanNs"]["attributes"]["tDn"]}.json?'
                                 f'query-target=subtree&target-subtree-class=fvnsEncapBlk').json()['imdata']
         encap_blocks = [EncapBlock.load(_) for _ in encap_blocks]
         encap_blocks.sort(key=lambda x: x.attributes.to)
-        vlan_range = [
+        vlan_range = ','.join([
             '{}-{}'.format(re.search(r"\d+$", _.attributes.__getattribute__("from")).group(),
                            re.search(r"\d+$", _.attributes.to).group())
             for _ in encap_blocks
-        ]
+        ])
 
-        vlan_range = intf_range(vlan_range)
+        vlan_range = vl_range(vlan_range)
         vlan_range = [_ for _ in vlan_range if _ > 2000]
         used_vlans = self.get_vlan_data()
         return next(x for x in vlan_range if x not in used_vlans)
@@ -1557,6 +1611,180 @@ class APIC:
         r = self.post(configuration=infra.json(), uri='/api/mo/uni/infra.json')
         # return infra.json()
         return r, infra.json()
+
+    def interface_configuration_v2(self, aep_name: str, infra_info: list):
+        assert self.exists(infraAttEntityP=aep_name), 'The specified AEP does not exist'
+
+        # Get complete list of Interface Policy Group Names
+        acc_pg_list = self.get('/api/class/infraAccPortGrp.json').json()['imdata']
+        pc_pg_list = self.get('/api/class/infraAccBndlGrp.json').json()['imdata']
+        acc_pg_list = list((GenericClass.load(x).attributes.name for x in acc_pg_list))
+        pc_pg_list = list((GenericClass.load(x).attributes.name for x in pc_pg_list))
+        pg_list = acc_pg_list + pc_pg_list
+
+        # Compile complete list of switch profiles that will need to be updated and empty the children containers
+        switch_profiles = list((SwitchProfile.load(x) for x in self.collect_switch_profiles()))
+        for x in switch_profiles:
+            x.attributes.status = 'modified'
+            x.children = []
+
+        # Start compiling JSON POST data
+        infra = Infra()
+
+        infra_funcp = GenericClass('infraFuncP')  # Policy groups will be a child objects of this object
+        infra_funcp.attributes.dn = 'uni/infra/funcprof'
+        infra_funcp.attributes.status = 'modified'
+
+        infra.children.append(infra_funcp)
+
+        for server in infra_info:
+            range_search = re.search(r'([^{]+)\{([A-z]-[A-z])}', server['infra_name'])
+            if range_search:
+                name, ids = range_search.groups()
+            else:
+                name = None
+                ids = None
+            interfaces = server['interfaces']
+            port_channel = server['port_channel']
+            lacp = server['lacp']
+            pg_prefix = None
+
+            policy_group = InterfacePolicyGroup()
+            policy_group.use_aep(aep_name=aep_name)
+            policy_group.create()
+            if port_channel:
+                policy_group.port_channel(lacp=lacp)
+
+            for switch_profile in server['switch_profiles']:
+                nodes = re.findall(r'\d{3}', switch_profile)
+                node_count = len(nodes)
+                s_profile = next(x for x in switch_profiles if switch_profile == x.attributes.name)
+
+                # Process VPC Interface Profile and Selectors
+                if port_channel is True and node_count == 2:
+                    i_profile_name = f'vpc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
+
+                    if i_profile_name not in list((x.attributes.name for x in infra.children
+                                                   if type(x) == InterfaceProfile)):
+                        i_profile = InterfaceProfile()
+                        i_profile.attributes.name = i_profile_name
+                        i_profile.attributes.status = 'created,modified'
+                    else:
+                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
+                                         if x.attributes.name == i_profile_name)
+
+                    policy_group.attributes.name = f'vpc-{server["infra_name"]}'
+                    pg_prefix = 'vpc'
+                    policy_group.attributes.lagT = 'node'
+
+                    selector = InterfaceSelector(name=f'vpc-{server["infra_name"]}', descr=server['infra_name'])
+                    selector.create_modify()
+
+                    i_profile.children.append(selector)
+
+                    for intfs in interfaces.split(','):
+                        ports = intfs.split('-')
+                        block = InterfaceBlock(fromPort=ports[0], toPort=ports[-1], descr=server['infra_name'])
+
+                        selector.children += [block]
+
+                elif port_channel is True and node_count == 1:
+                    i_profile_name = f'pc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
+                    if i_profile_name not in list((x.attributes.name for x in infra.children
+                                                   if type(x) == InterfaceProfile)):
+                        i_profile = InterfaceProfile(name=i_profile_name)
+                        i_profile.create_modify()
+                    else:
+                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
+                                         if x.attributes.name == i_profile_name)
+
+                    pg_prefix = 'pc'
+                    policy_group.attributes.lagT = 'link'
+
+                    selector = InterfaceSelector(name=f'pc-{server["infra_name"]}', descr=server['infra_name'])
+                    selector.create_modify()
+
+                    i_profile.children.append(selector)
+
+                    for intfs in interfaces.split(','):
+                        ports = intfs.split('-')
+                        block = InterfaceBlock(fromPort=ports[0], toPort=ports[-1], descr=server['infra_name'])
+
+                        selector.children.append(block)
+
+                # Process access ports (non-channeled)
+                elif port_channel is False:
+                    i_profile_name = f'acc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
+                    if i_profile_name not in list((x.attributes.name for x in infra.children
+                                                   if type(x) == InterfaceProfile)):
+                        i_profile = InterfaceProfile(name=i_profile_name)
+                        i_profile.create_modify()
+                    else:
+                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
+                                         if x.attributes.name == i_profile_name)
+
+                    pg_prefix = 'acc'
+
+                    if name and ids:
+                        for ident, port in zip(alpha_range(ids), port_range(interfaces)):
+                            selector = InterfaceSelector(name=f'acc-{name}{ident}', descr=f'{name}{ident}')
+                            selector.create_modify()
+
+                            i_profile.children.append(selector)
+
+                            block = InterfaceBlock(fromPort=str(port), toPort=str(port),descr=f'{name}{ident}')
+                            selector.children += [block]
+                    else:
+                        selector = InterfaceSelector(name=f'acc-{server["infra_name"]}', descr=server['infra_name'])
+                        selector.create_modify()
+    
+                        i_profile.children.append(selector)
+    
+                        for intfs in interfaces.split(','):
+                            ports = intfs.split('-')
+                            block = InterfaceBlock(fromPort=ports[0] , toPort=ports[-1] , descr=server['infra_name'])
+
+                            selector.children += [block]
+                else:
+                    raise Exception('The Request could not be processed')
+
+                attach_i_profile = GenericClass('infraRsAccPortP',
+                                                tDn=f'uni/infra/accportprof-{i_profile.attributes.name}')
+                attach_i_profile.create_modify()
+
+                if attach_i_profile.attributes.tDn not in list((x.attributes.tDn for x in s_profile.children)):
+                    s_profile.children.append(attach_i_profile)
+
+                if i_profile not in infra.children:
+                    infra.children.append(i_profile)
+
+                for selector in i_profile.get_child_class_iter(InterfaceSelector.class_):
+                    if selector.get_child_class('infraRsAccBaseGrp'):
+                        continue
+                    attach_policy_group = GenericClass('infraRsAccBaseGrp')
+                    if pg_prefix == 'vpc' or pg_prefix == 'pc':
+                        tdn_path = 'uni/infra/funcprof/accbundle-'
+                    else:
+                        tdn_path = 'uni/infra/funcprof/accportgrp-'
+                    attach_policy_group.attributes.tDn = f'{tdn_path}{pg_prefix}-{(server["infra_name"] if port_channel else aep_name.replace("aep-", ""))}'
+                    attach_policy_group.create_modify()
+
+                    selector.children.append(attach_policy_group)
+
+            # policy_group.attributes.name = f'{pg_prefix}-{(name if name else server["infra_name"])}'
+            policy_group.attributes.name = f'{pg_prefix}-{(server["infra_name"] if port_channel else aep_name.replace("aep-", ""))}'
+
+            if policy_group.attributes.name not in pg_list and \
+                    policy_group.attributes.name not in \
+                    (x.attributes.name for x in infra_funcp.children if type(x) is InterfacePolicyGroup):
+                infra_funcp.children.append(policy_group)
+        for x in switch_profiles:
+            if not x.children == list():
+                infra.children.append(x)
+
+        # r = self.post(configuration=infra.json(), uri='/api/mo/uni/infra.json')
+        return infra.json()
+        # return r, infra.json()
 
     def update_snmp_strings(self):
         new_communities = requests.post('https://pyapis.ocp.app.medcity.net/apis/admin/get_current_snmp_strings',
@@ -2428,7 +2656,9 @@ class APIC:
         return None
 
     def reclaim_interfaces(self, profile_name: str, interfaces: str):
-        interfaces = intf_range(interfaces.split(','))
+        # TODO: - Trying to get rid of intf_range in separate file :
+        #  interfaces = intf_range(interfaces.split(','))
+        interfaces = list(port_range(interfaces))
         proceed = True
         active_interfaces = []
 
@@ -2489,9 +2719,13 @@ class APIC:
         for block in blocks:
             sel = re.search(r'hports-([^/]*)-typ-', block.attributes.dn).group(1)
             if sels_ranges.get(sel):
-                sels_ranges[sel] += intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
+                # TODO: Verify - Trying to get rid of intf_range in separate file :
+                #  sels_ranges[sel] += intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
+                sels_ranges[sel] += list(port_range(f'{block.attributes.fromPort}-{block.attributes.toPort}'))
             else:
-                sels_ranges[sel] = intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
+                # TODO: Verify - Trying to get rid of intf_range in separate file :
+                #  sels_ranges[sel] = intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
+                sels_ranges[sel] = list(port_range(f'{block.attributes.fromPort}-{block.attributes.toPort}'))
 
         for k in sels_ranges:
             sels_ranges[k].sort()
