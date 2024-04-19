@@ -719,59 +719,62 @@ class ManagementJob:
                     content=json.dumps(job.__dict__))
 
 
+EVOLVE_PATH = '/networkapis-ipam/v/1.0.0'
+
+
 class AddressMixin:
     def get_address(self: EvolveMarketplace, address) -> requests.Response:
-        return self.get(f'/networkapis-ipam/api/addresses/get_address/{address}')
+        return self.get(f'{EVOLVE_PATH}/api/addresses/get_address/{address}')
 
     def assign_next_ip(self: EvolveMarketplace, network: str, name: str) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/addresses/assign_next_ip', json=dict(network=network, name=name))
+        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_next_ip', json=dict(network=network, name=name))
 
     def assign_address_series(self: EvolveMarketplace, network: str, names: List[str]) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/addresses/assign_address_series',
+        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_address_series',
                          json=dict(network=network, names=names))
 
     def assign_addresses_by_offsets(self: EvolveMarketplace, network: str,
                                     assignments: List[TypedDict('Offset', {'name': str, 'offset': int})]) -> \
             requests.Response:
-        return self.post(f'/networkapis-ipam/api/addresses/assign_addresses_by_offsets',
+        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_addresses_by_offsets',
                          json=dict(network=network, assignments=assignments))
 
     def delete_address(self: EvolveMarketplace, addresses: List[str]) -> requests.Response:
-        return self.delete(f'/networkapis-ipam/api/addresses', json=dict(addresses=addresses))
+        return self.delete(f'{EVOLVE_PATH}/api/addresses', json=dict(addresses=addresses))
 
     def bulk_reserve(self: EvolveMarketplace,
                      assignments: List[TypedDict('A', {'address': str, 'name': str})]) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/addresses/bulk_reserve', json=dict(assignments=assignments))
+        return self.post(f'{EVOLVE_PATH}/api/addresses/bulk_reserve', json=dict(assignments=assignments))
 
     def manage_device(self: EvolveMarketplace, address: str, dns_template) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/dns/manage_device',
+        return self.post(f'{EVOLVE_PATH}/api/dns/manage_device',
                          json=dict(address=address, dns_template=dns_template))
 
 
 class NetworkMixin:
     def get_network(self: EvolveMarketplace, network) -> requests.Response:
-        return self.get(f'/networkapis-ipam/api/networks/{network}')
+        return self.get(f'{EVOLVE_PATH}/api/1.0.0/api/networks/{network}')
 
     def delete_network(self: EvolveMarketplace, network: str) -> requests.Response:
-        return self.delete(f'/networkapis-ipam/api/networks/{network}')
+        return self.delete(f'{EVOLVE_PATH}/api/networks/{network}')
 
     def get_network_by_address(self: EvolveMarketplace, address: str) -> requests.Response:
-        return self.get(f'/networkapis-ipam/api/networks/get_network_by_address/{address}')
+        return self.get(f'{EVOLVE_PATH}/api/networks/get_network_by_address/{address}')
 
     def create_next_available_network(self: EvolveMarketplace, no_of_ips: int, name: str, cidr_blocks: List[str],
                                       coid: str, asn: str, market: str) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/networks/create_next_available_network',
+        return self.post(f'{EVOLVE_PATH}/api/networks/create_next_available_network',
                          json=dict(no_of_ips=no_of_ips, name=name, cidr_blocks=cidr_blocks, coid=coid, asn=asn,
                                    market=market))
 
     def create_next_routed_network(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
                                    market: str) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/networks/create_next_routed_network',
+        return self.post(f'{EVOLVE_PATH}/api/networks/create_next_routed_network',
                          json=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
 
     def create_next_loopback_address(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
                                      market: str) -> requests.Response:
-        return self.post(f'/networkapis-ipam/api/networks/create_next_loopback_address',
+        return self.post(f'{EVOLVE_PATH}/api/networks/create_next_loopback_address',
                          json=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
 
 
