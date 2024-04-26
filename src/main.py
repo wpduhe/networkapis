@@ -3,13 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials, APIKeyHeader
 from schemas import *
 from task_handler import TaskHandler, Task
-from concurrent.futures import ThreadPoolExecutor
 from iosxr.utils import IOSXR
 from iosxe.utils import IOSXE
 from nexus.utils import NXOS, mac_lookup as n_mac_lookup
 from data.environments import ACIEnvironment, NexusEnvironment, DataCenter
 from ipam.utils import BIG, valid_ip
-from job_handler import run_job_handler
 from checkpoint.CheckpointUtilities import CheckpointAPI, generate_policy_list
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from apic import utils as apic_utils
