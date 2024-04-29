@@ -827,22 +827,22 @@ def get_status(request: Request):
     return response
 
 
-@app.get('/apis/aci/updateVlanSpreadsheets', tags=['ACI'])
-def update_vlan_spreadsheet(request: Request):
-    """Updates the VLAN spreadsheet found at this location:
-    //corpdpt01/telshare/Network_Engineering/Network_Design_and_Delivery/Py_ACI_VLANs.xlsx"""
-    req_logit(update_vlan_spreadsheet, request)
-    status, response = apic_utils.update_vlan_spreadsheet()
-    return Response(status_code=status, content=json.dumps(response, indent=2), media_type='application/json')
+# @app.get('/apis/aci/updateVlanSpreadsheets', tags=['ACI'])
+# def update_vlan_spreadsheet(request: Request):
+#     """Updates the VLAN spreadsheet found at this location:
+#     //corpdpt01/telshare/Network_Engineering/Network_Design_and_Delivery/Py_ACI_VLANs.xlsx"""
+#     req_logit(update_vlan_spreadsheet, request)
+#     status, response = apic_utils.update_vlan_spreadsheet()
+#     return Response(status_code=status, content=json.dumps(response, indent=2), media_type='application/json')
 
 
-@app.get('/apis/aci/fabricInventory', tags=['ACI'])
-def fabric_inventory(request: Request):
-    """Updates the ACI serial numbers spreadsheet found at this location:
-    //corpdpt01/telshare/Network_Engineering/ACI/ACI_Serial_Numbers/Py_ACI_Serials.xlsx"""
-    req_logit(fabric_inventory, request)
-    status, response = apic_utils.fabric_inventory()
-    return Response(status_code=status, content=json.dumps(response, indent=2), media_type='application/json')
+# @app.get('/apis/aci/fabricInventory', tags=['ACI'])
+# def fabric_inventory(request: Request):
+#     """Updates the ACI serial numbers spreadsheet found at this location:
+#     //corpdpt01/telshare/Network_Engineering/ACI/ACI_Serial_Numbers/Py_ACI_Serials.xlsx"""
+#     req_logit(fabric_inventory, request)
+#     status, response = apic_utils.fabric_inventory()
+#     return Response(status_code=status, content=json.dumps(response, indent=2), media_type='application/json')
 
 
 @app.get('/apis/aci/{az}/get_next_vlan', tags=['ACI'])
