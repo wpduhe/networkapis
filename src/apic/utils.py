@@ -1,15 +1,15 @@
 from typing import Tuple, List
 from base64 import b64encode
 from datetime import datetime
-from openpyxl.writer.excel import save_virtual_workbook
+# from openpyxl.writer.excel import save_virtual_workbook
 from copy import deepcopy
 from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 from apic.classes import *
 from ipam.utils import BIG, ManagementJob
 from data.environments import ACIEnvironment
-from smb.SMBConnection import SMBConnection
-from smb.base import OperationFailure
+# from smb.SMBConnection import SMBConnection
+# from smb.base import OperationFailure
 from apic.exceptions import *
 from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
@@ -20,9 +20,9 @@ import json
 import requests
 import random
 import os
-import openpyxl
+# import openpyxl
 import socket
-import io
+# import io
 import urllib3
 import logging
 import string
@@ -3777,52 +3777,52 @@ class AppInstance:
                 inst.store()
 
 
-def update_vlan_spreadsheet():
-    envs = json.load(open('data/ACIEnvironments.json'))
-
-    wb = openpyxl.Workbook()
-
-    for env in envs['Environments']:
-        if env['Name'] == 'Parallon-Dev':
-            continue
-        with APIC(env=env['Name']) as apic:
-            vlan_data = apic.get_vlan_data()
-
-        vlan_data = json.loads(json.dumps(vlan_data, sort_keys=True))
-
-        xl_data = [['VLAN', 'Consumers', 'AEPs']]
-
-        sheet = wb.create_sheet(env['Name'])
-
-        for key in vlan_data:
-            xl_data.append([
-                key,
-                '\n'.join(vlan_data[key]['Consumers']),
-                '\n'.join(vlan_data[key]['AEPs'])
-            ])
-
-            for item in xl_data:
-                for entry in item:
-                    sheet.cell(xl_data.index(item) + 1, item.index(entry) + 1, entry)
-
-        sheet.column_dimensions['B'].width = 96
-        sheet.column_dimensions['C'].width = 96
-
-    wb.remove_sheet(wb['Sheet'])
-
-    try:
-        smb = SMBConnection(os.getenv('netmgmtuser'), os.getenv('netmgmtpass'), socket.gethostname(),
-                            remote_name='corpdpt01.hca.corpad.net', is_direct_tcp=True)
-        smb.connect(socket.gethostbyname('corpdpt01.hca.corpad.net'), port=445)
-
-        temp_file = io.BytesIO(save_virtual_workbook(wb))
-        smb.storeFile('TELShare',
-                      '/Network_Engineering/Network_Design_And_Delivery/Py_ACI_VLANs.xlsx',
-                      temp_file)
-        del temp_file
-        return 200, ['VLAN spreadsheets have been updated.']
-    except OperationFailure as e:
-        return 500, [f'VLAN spreadsheet Not Updated.  The file is most likely open:  {e}']
+# def update_vlan_spreadsheet():
+#     envs = json.load(open('data/ACIEnvironments.json'))
+#
+#     wb = openpyxl.Workbook()
+#
+#     for env in envs['Environments']:
+#         if env['Name'] == 'Parallon-Dev':
+#             continue
+#         with APIC(env=env['Name']) as apic:
+#             vlan_data = apic.get_vlan_data()
+#
+#         vlan_data = json.loads(json.dumps(vlan_data, sort_keys=True))
+#
+#         xl_data = [['VLAN', 'Consumers', 'AEPs']]
+#
+#         sheet = wb.create_sheet(env['Name'])
+#
+#         for key in vlan_data:
+#             xl_data.append([
+#                 key,
+#                 '\n'.join(vlan_data[key]['Consumers']),
+#                 '\n'.join(vlan_data[key]['AEPs'])
+#             ])
+#
+#             for item in xl_data:
+#                 for entry in item:
+#                     sheet.cell(xl_data.index(item) + 1, item.index(entry) + 1, entry)
+#
+#         sheet.column_dimensions['B'].width = 96
+#         sheet.column_dimensions['C'].width = 96
+#
+#     wb.remove_sheet(wb['Sheet'])
+#
+#     try:
+#         smb = SMBConnection(os.getenv('netmgmtuser'), os.getenv('netmgmtpass'), socket.gethostname(),
+#                             remote_name='corpdpt01.hca.corpad.net', is_direct_tcp=True)
+#         smb.connect(socket.gethostbyname('corpdpt01.hca.corpad.net'), port=445)
+#
+#         temp_file = io.BytesIO(save_workbook(wb))
+#         smb.storeFile('TELShare',
+#                       '/Network_Engineering/Network_Design_And_Delivery/Py_ACI_VLANs.xlsx',
+#                       temp_file)
+#         del temp_file
+#         return 200, ['VLAN spreadsheets have been updated.']
+#     except OperationFailure as e:
+#         return 500, [f'VLAN spreadsheet Not Updated.  The file is most likely open:  {e}']
 
 
 def create_dr_env(src_env, dst_env):
@@ -4440,58 +4440,58 @@ def find_subnet(req_data):
         return resp
 
 
-def fabric_inventory():
-    try:
-        envs = json.load(open('data/ACIEnvironments.json', 'r'))
-        data = []
-
-        for env in envs['Environments']:
-            with APIC(env=env['Name']) as apic:
-                invs = apic.collect_inventory()
-
-            for inv in invs:
-                if 'error' not in inv.keys():
-                    data.append(inv)
-
-        fabrics = list(set((x['topSystem']['attributes']['fabricDomain'] for x in data)))
-        fabrics = {each: [] for each in fabrics}
-
-        for inv in data:
-            assignment = inv['topSystem']['attributes']['fabricDomain']
-            fabrics[assignment].append(inv['topSystem']['attributes'])
-
-        wb = openpyxl.Workbook()
-
-        for fabric in fabrics:
-            xl_data = [['SwitchID', 'Serial Number', 'Name', 'OOB IP']]
-            for node in fabrics[fabric]:
-                xl_data.append([
-                    int(re.search('[0-9]+', re.search('node-[0-9]+', node['dn']).group()).group()),
-                    node['serial'],
-                    node['name'],
-                    node['oobMgmtAddr']
-                ])
-
-            sheet = wb.create_sheet(fabric)
-
-            for item in xl_data:
-                for entry in item:
-                    sheet.cell(xl_data.index(item) + 1, item.index(entry) + 1, entry)
-
-        wb.remove_sheet(wb['Sheet'])
-
-        smb = SMBConnection(os.getenv('netmgmtuser'), os.getenv('netmgmtpass'), socket.gethostname(),
-                            remote_name='corpdpt01.hca.corpad.net', is_direct_tcp=True)
-        smb.connect(socket.gethostbyname('corpdpt01.hca.corpad.net'), port=445)
-        temp_file = io.BytesIO(save_virtual_workbook(wb))
-        smb.storeFile('TELShare',
-                      '/Network_Engineering/ACI/ACI_Serial_Numbers/Py_ACI_Serials.xlsx',
-                      temp_file)
-        del temp_file
-        return 200, fabrics
-
-    except OperationFailure as e:
-        return 500, [f'Inventory Not Updated.  The file is most likely open:  {e}']
+# def fabric_inventory():
+#     try:
+#         envs = json.load(open('data/ACIEnvironments.json', 'r'))
+#         data = []
+#
+#         for env in envs['Environments']:
+#             with APIC(env=env['Name']) as apic:
+#                 invs = apic.collect_inventory()
+#
+#             for inv in invs:
+#                 if 'error' not in inv.keys():
+#                     data.append(inv)
+#
+#         fabrics = list(set((x['topSystem']['attributes']['fabricDomain'] for x in data)))
+#         fabrics = {each: [] for each in fabrics}
+#
+#         for inv in data:
+#             assignment = inv['topSystem']['attributes']['fabricDomain']
+#             fabrics[assignment].append(inv['topSystem']['attributes'])
+#
+#         wb = openpyxl.Workbook()
+#
+#         for fabric in fabrics:
+#             xl_data = [['SwitchID', 'Serial Number', 'Name', 'OOB IP']]
+#             for node in fabrics[fabric]:
+#                 xl_data.append([
+#                     int(re.search('[0-9]+', re.search('node-[0-9]+', node['dn']).group()).group()),
+#                     node['serial'],
+#                     node['name'],
+#                     node['oobMgmtAddr']
+#                 ])
+#
+#             sheet = wb.create_sheet(fabric)
+#
+#             for item in xl_data:
+#                 for entry in item:
+#                     sheet.cell(xl_data.index(item) + 1, item.index(entry) + 1, entry)
+#
+#         wb.remove_sheet(wb['Sheet'])
+#
+#         smb = SMBConnection(os.getenv('netmgmtuser'), os.getenv('netmgmtpass'), socket.gethostname(),
+#                             remote_name='corpdpt01.hca.corpad.net', is_direct_tcp=True)
+#         smb.connect(socket.gethostbyname('corpdpt01.hca.corpad.net'), port=445)
+#         temp_file = io.BytesIO(save_virtual_workbook(wb))
+#         smb.storeFile('TELShare',
+#                       '/Network_Engineering/ACI/ACI_Serial_Numbers/Py_ACI_Serials.xlsx',
+#                       temp_file)
+#         del temp_file
+#         return 200, fabrics
+#
+#     except OperationFailure as e:
+#         return 500, [f'Inventory Not Updated.  The file is most likely open:  {e}']
 
 
 def configure_interfaces(env: str, req_data: dict):
