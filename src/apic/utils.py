@@ -190,6 +190,7 @@ class APIC:
             self.pkey = None
             self.login(username=username, password=password)
         else:
+            self.pkey = None
             self.login(username=os.getenv('netmgmtuser'), password=os.getenv('netmgmtpass'))
 
         self.version = GenericClass.load(json.loads(self.get('/api/class/firmwareCtrlrFwP.json').text)['imdata'][0])
@@ -4114,7 +4115,7 @@ def create_dr_env(src_env, dst_env):
                     logging.warning(f'Mapping failed: {mapping}')
 
         logging.info(f'DR Environment creation completed in {drenv.env.Name}')
-        requests.get('https://pyapis.ocp.app.medcity.net/apis/aci/updateVlanSpreadsheets', verify=False)
+        # requests.get('https://pyapis.ocp.app.medcity.net/apis/aci/updateVlanSpreadsheets', verify=False)
 
         return 200, [f'DR Environment creation completed']
 
