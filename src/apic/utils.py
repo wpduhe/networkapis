@@ -3,7 +3,6 @@ from base64 import b64encode
 from datetime import datetime
 from openpyxl.writer.excel import save_virtual_workbook
 from copy import deepcopy
-from apic.apic_tools import intf_range
 from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 from apic.classes import *
@@ -16,7 +15,6 @@ from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
 from itertools import groupby
 from operator import itemgetter
-from terraform.utils import Resource
 import time
 import json
 import requests
@@ -28,6 +26,7 @@ import io
 import urllib3
 import logging
 import string
+import yaml
 
 
 urllib3.disable_warnings()
@@ -187,9 +186,11 @@ class APIC:
         self.url = f'https://{self.ip}'
         if use_key:
             self.pkey = load_privatekey(FILETYPE_PEM, open(use_key).read())
-        else:
+        elif username and password:
             self.pkey = None
             self.login(username=username, password=password)
+        else:
+            self.login(username=os.getenv('netmgmtuser'), password=os.getenv('netmgmtpass'))
 
         self.version = GenericClass.load(json.loads(self.get('/api/class/firmwareCtrlrFwP.json').text)['imdata'][0])
         self.version = self.version.attributes.version.replace('apic-', '')
@@ -1732,7 +1733,7 @@ class APIC:
 
                             i_profile.children.append(selector)
 
-                            block = InterfaceBlock(fromPort=str(port), toPort=str(port),descr=f'{name}{ident}')
+                            block = InterfaceBlock(fromPort=str(port), toPort=str(port), descr=f'{name}{ident}')
                             selector.children += [block]
                     else:
                         selector = InterfaceSelector(name=f'acc-{server["infra_name"]}', descr=server['infra_name'])
@@ -1742,7 +1743,7 @@ class APIC:
     
                         for intfs in interfaces.split(','):
                             ports = intfs.split('-')
-                            block = InterfaceBlock(fromPort=ports[0] , toPort=ports[-1] , descr=server['infra_name'])
+                            block = InterfaceBlock(fromPort=ports[0], toPort=ports[-1], descr=server['infra_name'])
 
                             selector.children += [block]
                 else:
@@ -1762,17 +1763,21 @@ class APIC:
                     if selector.get_child_class('infraRsAccBaseGrp'):
                         continue
                     attach_policy_group = GenericClass('infraRsAccBaseGrp')
-                    if pg_prefix == 'vpc' or pg_prefix == 'pc':
-                        tdn_path = 'uni/infra/funcprof/accbundle-'
-                    else:
-                        tdn_path = 'uni/infra/funcprof/accportgrp-'
-                    attach_policy_group.attributes.tDn = f'{tdn_path}{pg_prefix}-{(server["infra_name"] if port_channel else aep_name.replace("aep-", ""))}'
+                    # if pg_prefix == 'vpc' or pg_prefix == 'pc':
+                    #     tdn_path = 'uni/infra/funcprof/accbundle-'
+                    # else:
+                    #     tdn_path = 'uni/infra/funcprof/accportgrp-'
+                    tdn_path = ('uni/infra/funcprof/accbundle-' if pg_prefix in ['vpc', 'pc'] else 'uni/infra/funcprof'
+                                                                                                   '/accportgrp')
+                    pgname = (server["infra_name"] if port_channel else aep_name.replace("aep-", ""))
+
+                    attach_policy_group.attributes.tDn = f'{tdn_path}{pg_prefix}-{pgname}'
                     attach_policy_group.create_modify()
 
                     selector.children.append(attach_policy_group)
 
-            # policy_group.attributes.name = f'{pg_prefix}-{(name if name else server["infra_name"])}'
-            policy_group.attributes.name = f'{pg_prefix}-{(server["infra_name"] if port_channel else aep_name.replace("aep-", ""))}'
+            pgname = (server["infra_name"] if port_channel else aep_name.replace("aep-", ""))
+            policy_group.attributes.name = f'{pg_prefix}-{pgname}'
 
             if policy_group.attributes.name not in pg_list and \
                     policy_group.attributes.name not in \
@@ -3348,7 +3353,7 @@ class AppInstance:
         return self.apName if self.apName else self.application
 
     def base_name(self):
-        return re.sub(f'({self.format_name(self.originAZ.env.Name)}_|{self.originAZ.env.DataCenter}_)+', '', self.name,
+        return re.sub(f'(({self.format_name(self.originAZ.env.Name)}|{self.originAZ.env.DataCenter})_)+', '', self.name,
                       flags=re.IGNORECASE)
 
     def placeholder_mapping(self, drt: bool=False) -> dict:
