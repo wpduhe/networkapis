@@ -1443,7 +1443,7 @@ class APIC:
         else:
             return False
 
-    def interface_configuration(self, aep_name: str, infra_info: list):
+    def interface_configuration_old(self, aep_name: str, infra_info: list):
         assert self.exists(infraAttEntityP=aep_name), 'The specified AEP does not exist'
 
         # Get complete list of Interface Policy Group Names
@@ -1614,7 +1614,7 @@ class APIC:
         # return infra.json()
         return r, infra.json()
 
-    def interface_configuration_v2(self, aep_name: str, infra_info: list):
+    def interface_configuration(self, aep_name: str, infra_info: list):
         assert self.exists(infraAttEntityP=aep_name), 'The specified AEP does not exist'
 
         # Get complete list of Interface Policy Group Names
@@ -1769,7 +1769,7 @@ class APIC:
                     # else:
                     #     tdn_path = 'uni/infra/funcprof/accportgrp-'
                     tdn_path = ('uni/infra/funcprof/accbundle-' if pg_prefix in ['vpc', 'pc'] else 'uni/infra/funcprof'
-                                                                                                   '/accportgrp')
+                                                                                                   '/accportgrp-')
                     pgname = (server["infra_name"] if port_channel else aep_name.replace("aep-", ""))
 
                     attach_policy_group.attributes.tDn = f'{tdn_path}{pg_prefix}-{pgname}'
@@ -1788,9 +1788,8 @@ class APIC:
             if not x.children == list():
                 infra.children.append(x)
 
-        # r = self.post(configuration=infra.json(), uri='/api/mo/uni/infra.json')
-        return infra.json()
-        # return r, infra.json()
+        r = self.post(configuration=infra.json(), uri='/api/mo/uni/infra.json')
+        return r, infra.json()
 
     def update_snmp_strings(self):
         new_communities = requests.post('https://pyapis.ocp.app.medcity.net/apis/admin/get_current_snmp_strings',
