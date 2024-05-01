@@ -299,7 +299,7 @@
             "ADMZPolicy": "HODC-ADMZ",
             "IPAddress": "10.192.209.11",
             "DNSName": "hodc-apic.app.medcity.net",
-            "L3OutCore": "L3Out-Core",
+            "L3OutCore": "area_10.192.208.0",
             "L3OutCore_EPG": "epg-External-Networks",
             "L3OutADMZ": "L3Out-ADMZ",
             "L3OutADMZ_EPG": "epg-ADMZ-Networks",
