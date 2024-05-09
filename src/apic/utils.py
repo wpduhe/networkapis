@@ -184,11 +184,11 @@ class APIC:
 
         self.session = None
         self.url = f'https://{self.ip}'
-        if use_key:
-            self.pkey = load_privatekey(FILETYPE_PEM, open(use_key).read())
-        elif username and password:
+        if username and password:
             self.pkey = None
             self.login(username=username, password=password)
+        elif use_key:
+            self.pkey = load_privatekey(FILETYPE_PEM, open(use_key).read())
         else:
             self.pkey = None
             self.login(username=os.getenv('netmgmtuser'), password=os.getenv('netmgmtpass'))
@@ -4533,7 +4533,7 @@ def create_new_epg(env: str, req_data: dict):
         # Force remove any specific division mnemonics from the application profile name
         ap_name = DIV_REMOVE.sub('', ap_name)
 
-        if not ap_name.startswith('ap-'):
+        if not re.search(r'^ap[\W_]', ap_name):
             ap_name = f'ap-{ap_name}'
 
         if not epg_name.startswith('epg-'):
