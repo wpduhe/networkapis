@@ -727,7 +727,7 @@ class AddressMixin:
         return self.get(f'{EVOLVE_PATH}/api/addresses/get_address/{address}')
 
     def assign_next_ip(self: EvolveMarketplace, network: str, name: str) -> requests.Response:
-        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_next_ip', json=dict(network=network, name=name))
+        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_next_ip', data=dict(network=network, name=name))
 
     def assign_address_series(self: EvolveMarketplace, network: str, names: List[str]) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/assign_address_series',
@@ -744,7 +744,7 @@ class AddressMixin:
 
     def bulk_reserve(self: EvolveMarketplace,
                      assignments: List[TypedDict('A', {'address': str, 'name': str})]) -> requests.Response:
-        return self.post(f'{EVOLVE_PATH}/api/addresses/bulk_reserve', json=dict(assignments=assignments))
+        return self.post(f'{EVOLVE_PATH}/api/addresses/bulk_reserve', data=dict(assignments=assignments))
 
     def manage_device(self: EvolveMarketplace, address: str, dns_template) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/dns/manage_device',
