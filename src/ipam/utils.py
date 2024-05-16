@@ -731,16 +731,16 @@ class AddressMixin:
 
     def assign_address_series(self: EvolveMarketplace, network: str, names: List[str]) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/assign_address_series',
-                         json=dict(network=network, names=names))
+                         data=dict(network=network, names=names))
 
     def assign_addresses_by_offsets(self: EvolveMarketplace, network: str,
                                     assignments: List[TypedDict('Offset', {'name': str, 'offset': int})]) -> \
             requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/assign_addresses_by_offsets',
-                         json=dict(network=network, assignments=assignments))
+                         data=dict(network=network, assignments=assignments))
 
     def delete_address(self: EvolveMarketplace, addresses: List[str]) -> requests.Response:
-        return self.delete(f'{EVOLVE_PATH}/api/addresses', json=dict(addresses=addresses))
+        return self.delete(f'{EVOLVE_PATH}/api/addresses', data=dict(addresses=addresses))
 
     def bulk_reserve(self: EvolveMarketplace,
                      assignments: List[TypedDict('A', {'address': str, 'name': str})]) -> requests.Response:
@@ -748,12 +748,12 @@ class AddressMixin:
 
     def manage_device(self: EvolveMarketplace, address: str, dns_template) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/dns/manage_device',
-                         json=dict(address=address, dns_template=dns_template))
+                         data=dict(address=address, dns_template=dns_template))
 
 
 class NetworkMixin:
     def get_network(self: EvolveMarketplace, network) -> requests.Response:
-        return self.get(f'{EVOLVE_PATH}/api/1.0.0/api/networks/{network}')
+        return self.get(f'{EVOLVE_PATH}/api/networks/{network}')
 
     def delete_network(self: EvolveMarketplace, network: str) -> requests.Response:
         return self.delete(f'{EVOLVE_PATH}/api/networks/{network}')
@@ -764,18 +764,18 @@ class NetworkMixin:
     def create_next_available_network(self: EvolveMarketplace, no_of_ips: int, name: str, cidr_blocks: List[str],
                                       coid: str, asn: str, market: str) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/networks/create_next_available_network',
-                         json=dict(no_of_ips=no_of_ips, name=name, cidr_blocks=cidr_blocks, coid=coid, asn=asn,
+                         data=dict(no_of_ips=no_of_ips, name=name, cidr_blocks=cidr_blocks, coid=coid, asn=asn,
                                    market=market))
 
     def create_next_routed_network(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
                                    market: str) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/networks/create_next_routed_network',
-                         json=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
+                         data=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
 
     def create_next_loopback_address(self: EvolveMarketplace, name: str, cidr_block: str, coid: str, asn: str,
                                      market: str) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/networks/create_next_loopback_address',
-                         json=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
+                         data=dict(name=name, cidr_block=cidr_block, coid=coid, asn=asn, market=market))
 
 
 class NetworkAPIIPAM(
