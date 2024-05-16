@@ -532,7 +532,6 @@ class BIG:
                 return False
 
         elif bam_object.type == 'IP4Network':
-            # TODO: This endpoint does not yet exist.  Update it once available
             # This endpoint doesn't actually exist yet
             path = f'/api/v1/ip4networks/{(self.internal.name if internal else self.external.name)}/' \
                    f'{bam_object.properties["CIDR"]}'
@@ -649,7 +648,6 @@ class BIG:
             raise ValueError('Invalid IP address provided')
 
     def delete_host_record(self, fqdn: str, internal=True):
-        # TODO: Complete testing of this method.  Currently testing removal from QA
         # tptdc-aclf-36-b-h.tdc.tp.mgmt.medcity.net  from QA
         record = self.get_host_record(fqdn=fqdn, internal=internal)
 
