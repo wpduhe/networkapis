@@ -45,6 +45,10 @@ class Attributes:
                 # else:
                 self.__setattr__(arg, kwargs[arg])
 
+    def __iter__(self) -> tuple:
+        for k in self.__dict__:
+            yield k, self.__getattribute__(k)
+
     def __hasattr__(self, attribute: str):
         if attribute in self.__dict__.keys():
             return True
