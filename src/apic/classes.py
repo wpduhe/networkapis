@@ -93,6 +93,10 @@ class APICObject:
     _dn_template: str
     tf_resource: str
 
+    def __iter__(self):
+        for k in self.attributes.__dict__:
+            yield k, self.attributes.__getattribute__(k)
+
     @classmethod
     def load(cls, json_data: dict or list):
         if isinstance(json_data, dict):
@@ -210,6 +214,10 @@ class GenericClass:
         self.children = []
         self.class_ = apic_class
         self.attributes = Attributes(**kwargs)
+
+    def __iter__(self):
+        for k in self.attributes.__dict__:
+            yield k, self.attributes.__getattribute__(k)
 
     def json(self, empty_fields: bool=False):
         if self.children == list():
