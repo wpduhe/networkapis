@@ -430,7 +430,7 @@ class NXOS:
     def get_vlan_information(cls, env, vlan: str or int):
         vlan = str(vlan)
         host = cls.login_to_environment(env)
-        subnets = [subnet.network.with_prefixlen for subnet in host.subnets if vlan == subnet.vlan]
+        subnets = [subnet.network.with_prefixlen for subnet in host.subnets if vlan == str(subnet.vlan)]
         try:
             vlan = host.vlans.__getattribute__(f'vlan{vlan}')
         except AttributeError:
