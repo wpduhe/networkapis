@@ -46,8 +46,8 @@ class Attributes:
                 self.__setattr__(arg, kwargs[arg])
 
     def __iter__(self) -> tuple:
-        for k in self.__dict__:
-            yield k, self.__getattribute__(k)
+        for k,v  in self.__dict__.items():
+            yield k, v
 
     def __hasattr__(self, attribute: str):
         if attribute in self.__dict__.keys():
@@ -94,8 +94,8 @@ class APICObject:
     tf_resource: str
 
     def __iter__(self):
-        for k in self.attributes.__dict__:
-            yield k, self.attributes.__getattribute__(k)
+        for k, v in self.attributes.__dict__.items():
+            yield k, v
 
     @classmethod
     def load(cls, json_data: dict or list):
@@ -216,8 +216,8 @@ class GenericClass:
         self.attributes = Attributes(**kwargs)
 
     def __iter__(self):
-        for k in self.attributes.__dict__:
-            yield k, self.attributes.__getattribute__(k)
+        for k, v in self.attributes.__dict__.items():
+            yield k, v
 
     def json(self, empty_fields: bool=False):
         if self.children == list():
