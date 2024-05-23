@@ -29,11 +29,12 @@ import string
 import yaml
 
 
+# TODO : moquery -c ethpmFcot : APICObject where transceiver type can be retrieved
+#  Example: https://192.168.1.10/api/mo/topology/pod-1/node-101/sys/phys-[eth1/1]/phys/fcot.json
+
+
 urllib3.disable_warnings()
 urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
-
-# TODO: Create a way to check interface usage and status for reclaiming interfaces in the fabric
-# TODO: Potentially require the inclusion of the interface profile name
 
 OSP_AUTOMATION_KEY = os.getenv('aci_automation_path')
 SUBTREE = 'query-target=subtree'
@@ -2103,6 +2104,170 @@ class APIC:
         return 200, {'message': 'Old AEP has been replaced by new AEP',
                      'details': return_data}
 
+    def rebrand_epg_bd_new(self, old_epg_dn: str, new_epg_dn: str, new_bd_name: str=None):
+        if not old_epg_dn.startswith('uni/'):
+            old_epg_dn = f'uni/{old_epg_dn}'
+        if not new_epg_dn.startswith('uni/'):
+            new_epg_dn = f'uni/{new_epg_dn}'
+
+        # TODO: Add ability to update Github AppInstance data along with this
+        old_tenant, old_ap_name, old_epg_name = EPG_DN_SEARCH.search(old_epg_dn).groups()
+        new_tenant, new_ap_name, new_epg_name = EPG_DN_SEARCH.search(new_epg_dn).groups()
+
+        # TODO: Create table for all application instances to make querying faster
+        gh = GithubAPI()
+        table = yaml.load(gh.get_file_content('pyapis/appinst_index.yaml'), yaml.Loader)
+
+        # Load AppInstance based on name
+        try:
+            old_inst_path = next(_['path'] for _ in table if _['epgDn'] == old_epg_dn)
+            inst = AppInstance.load(old_inst_path)
+        except (StopIteration, NameError):
+            inst = None
+            old_inst_path = None
+
+        # tenant = old_epg_dn.split('/')[1][3:]
+        # new_tenant = new_epg_dn.split('/')[1][3:]
+        # epg_name = old_epg_dn.split('/')[-1][4:]
+
+        # Get the primary VRF for the destination tenant.  It may be different that the origin tenant
+        ctx = self.get_primary_vrf(tenant=new_tenant)
+
+        # # Determine AP name and whether the new AP needs to be created.  Create if needed
+        # new_ap_name = new_epg_dn.split('/')[2][3:]
+
+        # if not new_ap_name.startswith('ap-'):
+        #     new_ap_name = f'ap-{new_ap_name}'
+
+        aps = [AP.load(ap) for ap in self.collect_aps(tn=new_tenant)]
+        if new_ap_name not in [ap.attributes.name for ap in aps]:
+            ap = AP()
+            ap.attributes.dn = f'uni/tn-{new_tenant}/ap-{new_ap_name}'
+            ap.attributes.__setattr__('status', 'created')
+        else:
+            ap = None
+
+        # Check to see if the new EPG name already exists.  Should not continue if it does
+        epg_usage = self.get(f'/api/mo/{new_epg_dn}.json')
+
+        if not epg_usage.ok:
+            return {'message': 'The existence of the new EPG could not be confirmed',
+                    'details': epg_usage.json()}
+
+        if int(epg_usage.json()['totalCount']):
+            return {'message': 'The new EPG name provided already exists.  Automation aborted',
+                    'details': epg_usage.json()}
+
+        # Collect existing EPG
+        epg = EPG.load(self.collect_epgs(tn=old_tenant, epg=old_epg_name))
+
+        bd_name = next(child.attributes.tnFvBDName for child in epg.children if child.class_ == 'fvRsBd')
+
+        # Collect all BDs from the new tenant.  May or may not be moving to another Tenant
+        bds = [BD.load(_) for _ in self.collect_bds(tn=new_tenant)]
+
+        if new_bd_name and bd_name != new_bd_name:
+
+            # Check to ensure the old BD is not used by multiple EPGs
+            multi_usage = self.get(f'/api/mo/uni/tn-{new_tenant}.json?query-target=subtree&target-subtree-class=fvRsBd'
+                                   f'&query-target-filter=eq(fvRsBd.tnFvBDName,"{bd_name}")')
+            if not multi_usage.ok:
+                # Without a valid response regarding bridge domain usage it would be dangerous to proceed
+                return {'message': 'Bad response from APIC when attempting to get bridge domain usage',
+                        'details': multi_usage.json()}
+
+            if int(multi_usage.json()['totalCount']) > 1:
+                # This scenario could result in outages.  Deleting or changing a bridge domain used by multiple EPGs
+                # can result in the loss of endpoints.  The automation exits if this condition is met.
+                return {'message': 'BD is in use by multiple EPGs. This prevents this automation from running.'}
+
+            # A new BD was specified. Checks will be run to validate the new name against the existing name
+            bd = BD.load(self.collect_bds(tn=old_tenant, bd=bd_name))
+
+            if new_bd_name in [x.attributes.name for x in bds]:
+                # This scenario requires the subnets from the old BD to be put on the existing BD and the old BD be
+                # deleted
+                # No need to change the VRF here.  The BD in the destination tenant already exists
+                new_bd = next(_ for _ in bds if _.attributes.name == new_bd_name)
+                new_bd.attributes.__setattr__('status', 'modified')
+                # This assigns the subnets from the old BD to the new BD without altering the BD configuration
+                new_bd.children = [Subnet.load(child.json()) for child in bd.children if child.class_ == 'fvSubnet']
+                # Prepare the old BD for deletion
+                bd.attributes.__setattr__('status', 'deleted')
+                bd_settings = new_bd.attributes.json()
+            else:
+                # This scenario requires the creation of a new BD.  The old BD will be copied, then deleted assuming it
+                # only has one usage
+                new_bd = BD.load(bd.json())
+                new_bd.attributes.__delattr__('name')
+                new_bd.tenant = new_tenant
+                new_bd.name = new_bd_name
+                print(new_bd.json())
+                # New BD means we need to use the primary VRF, most likely
+                new_bd.use_vrf(name=ctx.attributes.name)
+                print(new_bd.json())
+                new_bd.attributes.__setattr__('status', 'created')
+                # Prepare the old BD for deletion
+                bd.attributes.__setattr__('status', 'deleted')
+                bd_settings = new_bd.attributes.json()
+        else:
+            bd = None
+            new_bd = None
+
+        # Copy existing EPG to new EPG and modify attributes
+        new_epg = EPG.load(epg.json())
+        new_epg.attributes.__setattr__('status', 'created')
+        new_epg.attributes.__delattr__('name')
+        new_epg.attributes.dn = new_epg_dn
+        if new_bd:
+            rs_bd = next(child for child in new_epg.children if child.class_ == 'fvRsBd')
+            rs_bd.attributes.tnFvBDName = new_bd_name
+
+        # Stage existing EPG for deletion
+        epg.attributes.__setattr__('status', 'deleted')
+
+        # Implement the configs
+        if ap:
+            ap_result = self.post(ap.json())
+            print(ap.json())
+            if ap_result.ok:
+                inst.apName = new_ap_name
+        else:
+            ap_result = None
+
+        if bd and new_bd:
+            old_bd_result = self.post(configuration=bd.json())
+            print(bd.json())
+            new_bd_result = self.post(configuration=new_bd.json())
+            print(new_bd.json())
+            if old_bd_result.ok and new_bd_result.ok:
+                inst.bdName = new_bd_name
+        else:
+            new_bd_result = None
+            old_bd_result = None
+
+        old_epg_result = self.post(epg.json())
+        new_epg_result = self.post(new_epg.json())
+        if new_epg_result.ok:
+            inst.epgName = new_epg_name
+
+        self.reassign_encap(old_epg_dn=epg.attributes.dn, new_epg_dn=new_epg.attributes.dn)
+
+        # Everything seems to have worked, now update AppInstance or create new
+        if inst:
+            inst.application = AppInstance.format_name(new_ap_name)
+            name_first = AppInstance.format_name(new_epg_name)
+            inst.name = AppInstance.format_name(f'{self.env.Name}_{name_first}')
+
+            gh = GithubAPI()
+            gh.delete_file(file_path=old_inst_path,
+                           message=f'Rebranded {epg.attributes.name} to {new_epg.attributes.name}')
+            gh.add_file(inst.path(), message=f'Moved {old_epg_dn} to {new_epg_dn}', content=inst.content())
+
+        return {'ap_result': ap_result.reason, 'new_epg_result': new_epg_result.reason,
+                'old_epg_result': old_epg_result.reason, 'old_bd_result': old_bd_result.reason,
+                'new_bd_result': new_bd_result.reason}
+
     def clone_aep(self, aep_name, new_aep_name) -> Tuple[int, dict]:
         # Check if requested AEP exists first
         exists = self.collect_aeps(aep=new_aep_name)
@@ -2661,8 +2826,6 @@ class APIC:
         return None
 
     def reclaim_interfaces(self, profile_name: str, interfaces: str):
-        # TODO: - Trying to get rid of intf_range in separate file :
-        #  interfaces = intf_range(interfaces.split(','))
         interfaces = list(port_range(interfaces))
         proceed = True
         active_interfaces = []
@@ -2724,12 +2887,8 @@ class APIC:
         for block in blocks:
             sel = re.search(r'hports-([^/]*)-typ-', block.attributes.dn).group(1)
             if sels_ranges.get(sel):
-                # TODO: Verify - Trying to get rid of intf_range in separate file :
-                #  sels_ranges[sel] += intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
                 sels_ranges[sel] += list(port_range(f'{block.attributes.fromPort}-{block.attributes.toPort}'))
             else:
-                # TODO: Verify - Trying to get rid of intf_range in separate file :
-                #  sels_ranges[sel] = intf_range(['%s-%s' % (block.attributes.fromPort, block.attributes.toPort)])
                 sels_ranges[sel] = list(port_range(f'{block.attributes.fromPort}-{block.attributes.toPort}'))
 
         for k in sels_ranges:
@@ -4959,10 +5118,6 @@ def create_new_admz_epg(env: str, req_data: dict):
         fw_aep.add_epg(epg_dn=g_epg.attributes.dn, encap=vlan)
         apic.post(configuration=fw_aep.json(), uri=aep.post_uri)
 
-    # TODO: Add a process to configure the VLAN interface on the firewall:  Handle this in main.py
-
-    # TODO: Add processes to update CMDB
-
     return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
 
 
@@ -5184,7 +5339,6 @@ def get_aci_subnet_data(environment, ip: str):
     apic = APIC(env=environment)
 
     subnet = APICObject.load(apic.collect_subnets(ip=ip))
-    # TODO: Add ability to process L3Out networks - l3extSubnet
 
     if subnet.class_ == Subnet.class_:
         network = IPv4Network(subnet.attributes.ip, strict=False)
