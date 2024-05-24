@@ -169,7 +169,7 @@ class NXOS:
     @classmethod
     def login_to_environment(cls, env):
         env = NexusEnvironment(env)
-        host = cls(env.l3switch1)
+        host = cls(env.l3switch2)
         host.env = env
         return host
 
