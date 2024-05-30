@@ -3315,16 +3315,12 @@ class APIC:
                 response = src.post(subnet.self_json())
                 if not response.ok:
                     return f'Failed to delete subnet: \n{subnet.self_json()}\n{response.json()}'
-                # print(subnet.self_json())
-                # input()
 
             for route in routes:
                 route.attributes.status = 'deleted'
                 response = src.post(route.self_json())
                 if not response.ok:
                     return f'Failed to delete route: \n{route.self_json()}\n{response.json()}'
-                # print(route.self_json())
-                # # input()
 
             # Figure out to what logical node profiles the static routes need to be assigned: l3extRsNodeL3OutAtt
             node_p = [APICObject.load(_)
@@ -3342,8 +3338,6 @@ class APIC:
                 response = dst.post(configuration=route.json())
                 if not response.ok:
                     return f'Failed to create static route: \n{response.json()}\n{response.json()}'
-                # print(route.json())
-                # input()
 
             ext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_l3out}/'
                                               f'instP-{external_epg}.json?{CONFIG_ONLY}').json()['imdata'])
@@ -3356,8 +3350,6 @@ class APIC:
             response = dst.post(subnet.json())
             if not response.ok:
                 return f'Failed to create l3extSubnet: \n{subnet.json()}\n{response.json()}'
-            # print(subnet.json())
-            # input()
 
             if dst_admz_l3out and admz_external_epg:
                 aext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_admz_l3out}/'
@@ -3369,8 +3361,6 @@ class APIC:
                 response = dst.post(subnet.json())
                 if not response.ok:
                     return f'Failed to create l3extSubnet: \n{subnet.json()}\n{response.json()}'
-                # print(subnet.json())
-                # input()
 
         return 'Success'
 
