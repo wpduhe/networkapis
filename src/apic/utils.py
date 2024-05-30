@@ -3294,6 +3294,89 @@ class APIC:
 
         return 200, lldp_neigh
 
+    @classmethod
+    def migrate_network(cls, src: str, dst: str, network: str, dst_l3out: str, dst_nodes: list, next_hop: str,
+                        external_epg: str, dst_admz_l3out: str=None, admz_external_epg: str=None):
+        dst_nodes = [str(_) for _ in dst_nodes]
+
+        if dst_admz_l3out:
+            assert admz_external_epg, 'Both values must be set: dst_admz_l3out, admz_external_epg'
+
+        with cls(env=src) as src, cls(env=dst) as dst:
+            # _ = src.snapshot(descr=f'Test Migrate Meditech network {network}')
+            # _ = dst.snapshot(descr=f'Test Migrate Meditech network {network}')
+
+            subnets = [APICObject.load(_) for _ in src.get(f'/api/class/l3extSubnet.json?{CONFIG_ONLY}&'
+                                                           f'query-target-filter='
+                                                           f'eq(l3extSubnet.ip,"{network}")').json()['imdata']]
+            routes = [APICObject.load(_) for _ in src.get(f'/api/class/ipRouteP.json?{FCCO}&'
+                                                          f'query-target-filter='
+                                                          f'eq(ipRouteP.ip,"{network}")').json()['imdata']]
+
+            for subnet in subnets:
+                subnet.attributes.status = 'deleted'
+                response = src.post(subnet.self_json())
+                if not response.ok:
+                    return f'Failed to delete subnet: \n{subnet.self_json()}\n{response.json()}'
+                # print(subnet.self_json())
+                # input()
+
+            for route in routes:
+                route.attributes.status = 'deleted'
+                response = src.post(route.self_json())
+                if not response.ok:
+                    return f'Failed to delete route: \n{route.self_json()}\n{response.json()}'
+                # print(route.self_json())
+                # # input()
+
+            # Figure out to what logical node profiles the static routes need to be assigned: l3extRsNodeL3OutAtt
+            node_p = [APICObject.load(_)
+                      for _ in dst.get(f'/api/class/l3extRsNodeL3OutAtt.json?{CONFIG_ONLY}').json()['imdata']]
+            node_p = [node for node in node_p if re.search(
+                rf'{(dst_admz_l3out if dst_admz_l3out else dst_l3out)}.*?node-({("|".join(dst_nodes))})',
+                node.attributes.dn)]
+
+            for node in node_p:
+                route.create()
+                route.remove_admin_props()
+                route.attributes.dn = f'{node.attributes.dn}/rt-[{route.attributes.ip}]'
+                nexthop = route.get_child_class('ipNexthopP')
+                nexthop.attributes.nhAddr = next_hop
+                response = dst.post(configuration=route.json())
+                if not response.ok:
+                    return f'Failed to create static route: \n{response.json()}\n{response.json()}'
+                # print(route.json())
+                # input()
+
+            ext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_l3out}/'
+                                              f'instP-{external_epg}.json?{CONFIG_ONLY}').json()['imdata'])
+
+            subnet.create_modify()
+            subnet.remove_admin_props()
+            subnet.attributes.dn = f'{ext_epg.attributes.dn}/extsubnet-[{network}]'
+            subnet.attributes.scope = 'export-rtctrl'
+
+            response = dst.post(subnet.json())
+            if not response.ok:
+                return f'Failed to create l3extSubnet: \n{subnet.json()}\n{response.json()}'
+            # print(subnet.json())
+            # input()
+
+            if dst_admz_l3out and admz_external_epg:
+                aext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_admz_l3out}/'
+                                                   f'instP-{admz_external_epg}.json?{CONFIG_ONLY}').json()['imdata'])
+
+                subnet.attributes.dn = f'{aext_epg.attributes.dn}/extsubnet-[{network}]'
+                subnet.attributes.scope = 'import-security'
+
+                response = dst.post(subnet.json())
+                if not response.ok:
+                    return f'Failed to create l3extSubnet: \n{subnet.json()}\n{response.json()}'
+                # print(subnet.json())
+                # input()
+
+        return 'Success'
+
 
 class AppInstance:
     ADMZTENANT = 'ADMZTenant'
