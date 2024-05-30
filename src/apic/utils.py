@@ -3303,9 +3303,6 @@ class APIC:
             assert admz_external_epg, 'Both values must be set: dst_admz_l3out, admz_external_epg'
 
         with cls(env=src) as src, cls(env=dst) as dst:
-            # _ = src.snapshot(descr=f'Test Migrate Meditech network {network}')
-            # _ = dst.snapshot(descr=f'Test Migrate Meditech network {network}')
-
             subnets = [APICObject.load(_) for _ in src.get(f'/api/class/l3extSubnet.json?{CONFIG_ONLY}&'
                                                            f'query-target-filter='
                                                            f'eq(l3extSubnet.ip,"{network}")').json()['imdata']]
