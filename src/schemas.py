@@ -376,3 +376,16 @@ class CreateNewAppInstance(BaseModel):
 
 class CreateDRTAppInstance(BaseModel):
     APIKey: str
+
+
+class ACIMigrateNetwork(BaseModel):
+    APIKey: str
+    src: str
+    dst: str
+    network: str
+    dst_l3out: str
+    dst_nodes: list
+    next_hop: str
+    external_epg: str
+    dst_admz_l3out: str = None
+    admz_external_epg: str = None
