@@ -3296,11 +3296,14 @@ class APIC:
 
     @classmethod
     def migrate_network(cls, src: str, dst: str, network: str, dst_l3out: str, dst_nodes: list, next_hop: str,
-                        external_epg: str, dst_admz_l3out: str=None, admz_external_epg: str=None):
+                        external_epg: str, dst_admz_l3out: str=None, admz_external_epg: str=None) -> str:
         dst_nodes = [str(_) for _ in dst_nodes]
 
         if dst_admz_l3out:
-            assert admz_external_epg, 'Both values must be set: dst_admz_l3out, admz_external_epg'
+            try:
+                assert admz_external_epg, 'Both values must be set: dst_admz_l3out, admz_external_epg'
+            except AssertionError as e:
+                return f'AsssertionError: {e}'
 
         with cls(env=src) as src, cls(env=dst) as dst:
             subnets = [APICObject.load(_) for _ in src.get(f'/api/class/l3extSubnet.json?{CONFIG_ONLY}&'
