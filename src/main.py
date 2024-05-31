@@ -32,6 +32,7 @@ import functools
 import netmiko
 import requests
 import yaml
+import base64
 
 
 # Set Timezone for OpenShift environment
@@ -1142,6 +1143,25 @@ def update_static_route(request: Request, az: str, req_data: UpdateStaticRoute):
     res_logit(update_static_route, request, response)
 
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
+
+
+@app.post('/apis/aci/migrate_network', tags=['ACI'])
+def migrate_network(request: Request, req_data: ACIMigrateNetwork):
+    """Migrates a l3extSubnet and ipRouteP from one ACI fabric to another. The 'next_hop' key is meant to be the next
+    hop firewall address to be used in the new environment for routing. If the target environment has a separate L3Out
+    for the ADMZ, you must provide the ADMZ L3Out name and the ADMZ external EPG name."""
+
+    req_data = req_data.dict()
+
+    if not req_data.pop('APIKey') == base64.b64decode(b'b25seWpvaG5tYXl1c2V0aGlz').decode():
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(migrate_network, request, req_data)
+
+    result = apic_utils.APIC.migrate_network(**req_data)
+
+    return Response(status_code=(200 if result == 'Success' else 400), content=json.dumps({'result': result}),
+                    media_type='application/json')
 
 
 @app.get('/apis/appinst/applications', tags=['AppInstance'])
