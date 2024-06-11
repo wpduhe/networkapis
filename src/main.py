@@ -685,17 +685,6 @@ def add_oob_leaf(request: Request, req_data: AddOOBLeaf):
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
 
 
-@app.get('/apis/aci/{az}/status', tags=['ACI'])
-def fabric_status(request: Request, az: str=None, credentials: HTTPBasicCredentials=Depends(http_basic_security)):
-    """Generates a new status report for the specified fabric and compares it to the previous report.  Then
-    delivers the comparison information"""
-    req_logit(fabric_status, request)
-
-    status, response = apic_utils.fabric_status(env=az, **credentials.dict())
-
-    return Response(status_code=status, content=json.dumps(response), media_type='application/json')
-
-
 @app.get('/apis/aci/update_snmp_strings', tags=['ACI'], include_in_schema=False)
 def update_snmp_strings(request: Request):
     """Updates the SNMP strings for an ACI environment"""
