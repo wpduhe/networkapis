@@ -2529,17 +2529,18 @@ class APIC:
                 return 200, {'environment': apic.env.Name, 'l3out': l3out, 'external_epg': external_epg,
                              'subnet': subnet}
             elif subnet.class_ == 'fvSubnet':
-                bridge_domain = re.search('BD-(.*)', subnet.attributes.dn.split('/')[2])[1]
-                tenant = re.search('tn-(.*)', subnet.attributes.dn.split('/')[1])[1]
-                bd = BD.load(apic.collect_bds(tn=tenant, bd=bridge_domain))
-                rsbds = apic.get(f'/api/class/fvRsBd.json?query-target-filter=eq(fvRsBd.tnFvBDName,'
-                                 f'"{bd.attributes.name}"').json()['imdata']
-                rsbds = [GenericClass.load(rsbd).attributes.dn.strip('/rsbd') for rsbd in rsbds]
+                bridge_domain = BD_DN_SEARCH.search(subnet.attributes.dn)
+                bd = APICObject.load(apic.get(f'/api/mo/{bridge_domain.group()}.json?{FCCO}').json()['imdata'])
+                rsbds = [APICObject.load(_) for _ in apic.get(f'/api/class/fvRsBd.json').json()['imdata']]
+                epgs = [EPG_DN_SEARCH.search(_.attributes.dn).group()
+                        for _ in rsbds if _.attributes.tDn == bridge_domain.group()]
+
                 subnets = [str(IPv4Network(s.attributes.ip, strict=False)) for s in bd.children
                            if s.class_ == Subnet.class_]
                 subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
-                return 200, {'environment': apic.env.Name, 'tenant': tenant, 'bridge_domain': bridge_domain,
-                             'subnet': subnet, 'all_bd_subnets': subnets, 'inuse_by': rsbds}
+                return 200, {'environment': apic.env.Name, 'tenant': bridge_domain.group(1),
+                             'bridge_domain': bridge_domain.group(2),'subnet': subnet, 'all_bd_subnets': subnets,
+                             'inuse_by': epgs}
 
     @classmethod
     def tag_epgs(cls, env: str, epgs: list):
