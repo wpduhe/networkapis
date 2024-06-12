@@ -39,23 +39,23 @@ def annotation_to_string(annotations: dict) -> str:
 class Attributes:
     def __init__(self, **kwargs):
         if not kwargs == {}:
-            for arg in kwargs:
+            for k, v in kwargs.items():
                 # if arg == 'annotation':
-                #     self.__setattr__(arg, Attributes(**annotation_parser(kwargs[arg])))
+                #     self.__setattr__(k, annotation_parser(v))
                 # else:
-                self.__setattr__(arg, kwargs[arg])
+                self.__setattr__(k, v)
 
     def __iter__(self) -> tuple:
-        for k,v  in self.__dict__.items():
+        for k, v in self.__dict__.items():
             yield k, v
 
-    def __hasattr__(self, attribute: str):
+    def __hasattr__(self, attribute: str) -> bool:
         if attribute in self.__dict__.keys():
             return True
         else:
             return False
 
-    def json(self, empty_fields: bool=False):
+    def json(self, empty_fields: bool=False) -> dict:
         json_data = {}
         for attribute in self.__dict__.keys():
             if not self.__getattribute__(attribute) == '':
@@ -98,7 +98,9 @@ class APICObject:
             yield k, v
 
     @classmethod
-    def load(cls, json_data: dict or list):
+    def load(cls, json_data: dict or list) -> object:
+        if not json_data:
+            return None
         if isinstance(json_data, dict):
             pass
         else:
