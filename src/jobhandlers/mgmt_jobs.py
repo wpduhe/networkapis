@@ -2,7 +2,7 @@ from githubapi.utils import GithubAPI
 from job_handler import ManagementJob
 from apic.classes import FabricNode
 from apic.utils import APIC
-from ipam.utils import BIG
+from ipam.utils import NetworkAPIIPAM
 import logging
 import socket
 import json
@@ -83,10 +83,13 @@ def main():
 
         # Validate SSH access to the requested IP address
         if APIC.check_ssh_to_oob(job.ip):
-            with BIG() as big:
-                status, _ = big.manage_device(dns_template=job.dns_template, ip=job.ip, ip_name='Not Provided')
+            # with BIG() as big:
+            #     status, _ = big.manage_device(dns_template=job.dns_template, ip=job.ip, ip_name='Not Provided')
+            ipam = NetworkAPIIPAM()
 
-            if status == 200:
+            r = ipam.manage_device(address=job.ip, dns_template=job.dns_template)
+
+            if r.ok:
                 job.completion = f'{time.asctime()}: Request submitted by automation'
                 gh.add_file(file_path=f'{job.completed_jobs}/{file}', message='Completed ManagementJob',
                             content=json.dumps(job.__dict__, indent=4))
