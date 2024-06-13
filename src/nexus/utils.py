@@ -4,7 +4,7 @@ from nexus import nexus_tools
 from data.information import getNexusEnvironments
 from data.environments import NexusEnvironment
 from netmiko.cisco import CiscoNxosSSH
-from ipam.utils import BIG
+from ipam.utils import NetworkAPIIPAM, BAMObject
 from typing import List
 import pyperclip
 import re
@@ -352,16 +352,20 @@ class NXOS:
         # env.name is being used because there is some dependency on an old process getNexusEnvironments()
         vlan = switch_1.get_next_vlan(env.name)
 
-        big = BIG()
-
-        subnet = big.assign_next_network_from_list(block_list=env.Subnets, name='', no_of_ips=no_of_ips,
-                                                   coid=int(env.COID), asn=int(env.ASN))
-
-        if not subnet:
-            big.logout()
-            return 400, [f'{env.name} has no available network for the required number of IPs.']
-
-        big.logout()
+        # big = BIG()
+        #
+        # subnet = big.assign_next_network_from_list(block_list=env.Subnets, name='', no_of_ips=no_of_ips,
+        #                                            coid=int(env.COID), asn=int(env.ASN))
+        with NetworkAPIIPAM() as ipam:
+            subnet = ipam.create_next_available_network(cidr_blocks=env.Subnets, name=re.sub(r'\W+', '_', name),
+                                                        no_of_ips=no_of_ips, coid=env.COID, asn=env.ASN,
+                                                        market='corp').json()
+            subnet = BAMObject(subnet)
+        # if not subnet:
+        #     big.logout()
+        #     return 400, [f'{env.name} has no available network for the required number of IPs.']
+        #
+        # big.logout()
 
         subnet = IPv4Network(subnet.properties['CIDR'])
 
@@ -819,7 +823,6 @@ def find_hsrp_difference(a: NXOS, b: NXOS):
 
 def compare_static_routes(a: NXOS, b: NXOS):
     """Finds differences in static routes per VRF"""
-    inconsistencies = []
     a_vrf_list = [vrf.name for vrf in a.vrf]
     b_vrf_list = [vrf.name for vrf in b.vrf]
 
