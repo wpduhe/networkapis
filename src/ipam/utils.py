@@ -727,6 +727,10 @@ class AddressMixin:
     def assign_next_ip(self: EvolveMarketplace, network: str, name: str) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/assign_next_ip', data=dict(network=network, name=name))
 
+    def assign_next_ip_from_list(self: EvolveMarketplace, networks: list, name: str) -> requests.Response:
+        return self.post(f'{EVOLVE_PATH}/api/addresses/assign_next_ip_from_list', data=dict(networks=networks,
+                                                                                            name=name))
+
     def assign_address_series(self: EvolveMarketplace, network: str, names: List[str]) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/assign_address_series',
                          data=dict(network=network, names=names))
