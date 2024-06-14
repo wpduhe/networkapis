@@ -6,7 +6,8 @@ from copy import deepcopy
 from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 from apic.classes import *
-from ipam.utils import BIG, ManagementJob
+from ipam.utils import BIG, ManagementJob, NetworkAPIIPAM
+from json_utils.utils import JSONObject
 from data.environments import ACIEnvironment
 # from smb.SMBConnection import SMBConnection
 # from smb.base import OperationFailure
@@ -15,7 +16,6 @@ from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
 from itertools import groupby
 from operator import itemgetter
-from ipam.utils import NetworkAPIIPAM
 import time
 import json
 import requests
@@ -1310,13 +1310,15 @@ class APIC:
         oob_network = IPv4Network(self.env.OOBLeafIPRange, strict=False)
 
         # Reserve IP address in Proteus
-        big = BIG()
-        address = big.assign_next_ip(network_cidr=oob_network.with_prefixlen, name=node_name)
+        # big = BIG()
+        # address = big.assign_next_ip(network_cidr=oob_network.with_prefixlen, name=node_name)
+        with NetworkAPIIPAM() as ipam:
+            address = JSONObject.load(ipam.assign_next_ip(network=oob_network.with_prefixlen, name=node_name).json())
 
-        address_cidr = f'{address.properties["address"]}/{oob_network.prefixlen}'
+        address_cidr = f'{address.address}/{oob_network.prefixlen}'
         gateway = f'{oob_network.network_address + 1}'
 
-        big.logout()
+        # big.logout()
 
         oob_address = OOBAddress()
         oob_address.attributes.addr = address_cidr
@@ -1327,7 +1329,7 @@ class APIC:
 
         # Schedule Queue for Management in 2 hours
         ManagementJob.create_mgmt_job(job_name=f'{self.env.Name}_{node_id}_Mgmt', delay_in_seconds=7200,
-                                      ip=address.properties['address'], dns_template=self.env.LeafDNSTemplate)
+                                      ip=address.address, dns_template=self.env.LeafDNSTemplate)
 
         return oob_address, r
 
