@@ -7,7 +7,7 @@ from iosxr.utils import IOSXR
 from iosxe.utils import IOSXE
 from nexus.utils import NXOS, mac_lookup as n_mac_lookup
 from data.environments import ACIEnvironment, NexusEnvironment, DataCenter
-from ipam.utils import BIG, valid_ip
+from ipam.utils import valid_ip, NetworkAPIIPAM
 from checkpoint.CheckpointUtilities import CheckpointAPI, generate_policy_list
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from apic import utils as apic_utils
@@ -1766,15 +1766,20 @@ def manage_device(request: Request, req_data: ManageDevice):
 
     results = []
 
-    with BIG() as big:
+    # with BIG() as big:
+    #     for ip in req_data['ips']:
+    #         status, response = big.manage_device(dns_template=req_data['dns_template'], ip=ip,
+    #                                              ip_name='Name not provided--Update')
+    #         results.append({'ip': ip, 'status': status, 'result': response})
+    with NetworkAPIIPAM() as ipam:
         for ip in req_data['ips']:
-            status, response = big.manage_device(dns_template=req_data['dns_template'], ip=ip,
-                                                 ip_name='Name not provided--Update')
-            results.append({'ip': ip, 'status': status, 'result': response})
+            r = ipam.manage_device(address=ip, dns_template=req_data['dns_template'])
+
+            results.append(dict(ip=ip, status=r.status_code, result=r.reason))
 
     res_logit(manage_device, request, results)
 
-    return Response(status_code=status, content=json.dumps(results), media_type='application/json')
+    return Response(status_code=200, content=json.dumps(results), media_type='application/json')
 
 
 @app.post('/apis/aci/create_dr_environment', tags=['ACI'])
@@ -2139,18 +2144,24 @@ def update_ips(request: Request, req_data: UpdateIPs):
 
     res_data = {'Assigned': [], 'Updated': []}
 
-    big = BIG()
+    # big = BIG()
+    with NetworkAPIIPAM() as ipam:
+        assignments = [dict(name=_['name'], address=_['ip']) for _ in req_data['Updates'] if valid_ip(_['ip'])]
+        resp = ipam.bulk_reserve(assignments=assignments)
 
-    for ip_address in req_data['Updates']:
-        if not valid_ip(ip_address['ip']):
-            continue
+        # for ip_address in req_data['Updates']:
+        #     if not valid_ip(ip_address['ip']):
+        #         continue
 
-        _ = big.assign_ip(ipaddress=ip_address['ip'], name=ip_address['name'])
-        res_data['Updated'].append(ip_address)
+        # _ = big.assign_ip(ipaddress=ip_address['ip'], name=ip_address['name'])
+        # res_data['Updated'].append(ip_address)
 
-    big.logout()
 
-    res_logit(update_ips, request, res_data)
+    res_data['Updated'] = [_['address'] for _ in resp.json() if _['success']]
+
+    # big.logout()
+
+    res_logit(update_ips, request, resp.json())
 
     return res_data
 
