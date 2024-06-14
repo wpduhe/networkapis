@@ -15,6 +15,7 @@ from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
 from itertools import groupby
 from operator import itemgetter
+from ipam.utils import NetworkAPIIPAM
 import time
 import json
 import requests
@@ -56,8 +57,8 @@ DRT_VRF = 'vrf-drtest'
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
 BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
-MAC_SEARCH = re.compile(r'([a-f0-9]:){5}[a-f0-9]{2}', flags=re.IGNORECASE)
-APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}')
+APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}', flags=re.IGNORECASE)
+MAC_IP_SEARCH = re.compile(r'cep-([^/]+)/ip-\[([^]]+)]')
 DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|CPDV|CORP|'
                         r'HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
 
@@ -1430,6 +1431,7 @@ class APIC:
         self.post(configuration=snap)
         r = self.get(f'/api/class/configExportP?query-target-filter=eq(configExportP.descr,"{descr}")')
         r = json.loads(r.text)
+        time.sleep(3)
 
         if r['totalCount'] == '1':
             return descr
@@ -3367,6 +3369,120 @@ class APIC:
                     return f'Failed to create l3extSubnet: \n{subnet.json()}\n{response.json()}'
 
         return 'Success'
+
+    # def delete_epg(self, epg_dn: str) -> Tuple[int, dict]:
+    #     subnets = None
+    #     bd = None
+    #     delete_bd = False
+    #
+    #     # TODO: Take a fabric snapshot
+    #     snapshot = self.snapshot(descr=f'Delete {epg_dn}')
+    #
+    #     # TODO: Check for endpoints
+    #     eps = int(self.get(f'/api/mo/{epg_dn}.json?'
+    #                        f'query-target=subtree&target-subtree-class=fvCEp').json()['totalCount'])
+    #
+    #     if eps:
+    #         return 400, {'result': 'Deletion aborted', 'reason': 'Endpoints still exist in the EPG'}
+    #
+    #     # TODO: Get the EPG
+    #     epg = APICObject.load(self.get(f'/api/mo/{epg_dn}.json').json()['imdata'])
+    #     if not epg:
+    #         return 404, {'result': 'Deletion aborted', 'reason': f'{epg_dn} does not exist'}
+    #     tn_name, ap_name, epg_name = EPG_DN_SEARCH.search(epg.attributes.dn).groups()
+    #
+    #     # TODO: Determine bridge domain and if it can also be deleted
+    #     rsbd = APICObject.load(self.get(f'/api/mo/{epg.attributes.dn}/rsbd.json').json()['imdata'])
+    #
+    #     if rsbd:
+    #         bd = APICObject.load(self.get(f'/api/mo/{rsbd.attributes.tDn}.json'))
+    #
+    #         bd_used_by = [APICObject.load(_) for _ in self.get(f'/api/class/fvRsBd.json?'
+    #                                                            f'query-target-filter=eq(fvRsBd.tDn,'
+    #                                                            f'"{bd.attributes.dn}")').json()['imdata']]
+    #         bd_used_by = [EPG_DN_SEARCH.search(_.attributes.dn).group() for _ in bd_used_by]
+    #
+    #         if bd_used_by == [epg.attributes.dn]:
+    #             # BD is only assigned to the specified EPG
+    #             delete_bd = True
+    #         else:
+    #             # BD must be used by more than specified EPG
+    #             delete_bd = False
+    #
+    #     # TODO: Delete the EPG if everything looks good
+    #     epg.remove_admin_props()
+    #     epg.delete()
+    #     _ = self.post(epg.self_json())
+    #     if _.ok:
+    #         pass
+    #     else:
+    #         return 400, dict(result='Deletion Aborted', reason='EPG could not be deleted', message=_.json())
+    #
+    #     # TODO: Delete the BD if it was only used by the EPG that was just deleted
+    #     if delete_bd:
+    #         bd.remove_admin_props()
+    #         bd.delete()
+    #         _ = self.post(bd.self_json())
+    #
+    #         if _.ok:
+    #             # Get subnets for IPAM update
+    #             subnets = bd.get_child_class_iter('fvSubnet')
+    #             subnets = [IPv4Network(s.attributes.ip, strict=False) for s in subnets]
+    #
+    #     # TODO: Remove VLAN assignments
+    #     attachments = [APICObject.load(_)
+    #                    for _ in self.get(f'/api/class/infraRsFuncToEpg.json?'
+    #                                      f'query-target-filter='
+    #                                      f'eq(infraRsFuncToEpg.tDn,"{epg.attributes.dn}")').json()['imdata']]
+    #
+    #     for attachment in attachments:
+    #         attachment.remove_admin_props()
+    #         attachment.delete()
+    #         _ = self.post(attachment.json())
+    #
+    #     # TODO: Delete application profile if it is now empty
+    #     ap_dn = f'uni/tn-{tn_name}/ap-{ap_name}'
+    #     ap = APICObject.load(self.get(f'/api/mo/{ap_dn}.json?{FCCO}').json()['imdata'])
+    #
+    #     if len(ap.get_child_class_iter('fvAEPg')) == 0:
+    #         ap.remove_admin_props()
+    #         ap.delete()
+    #         _ = self.post(ap.self_json())
+    #
+    #     # TODO: Clean up IP space that has been removed from ACI
+    #     if subnets:
+    #         api = NetworkAPIIPAM()
+    #
+    #         for subnet in subnets:
+    #             _ = api.delete_network(subnet.with_prefixlen)
+    #
+    #     return 200, {'result': 'EPG Deleted',
+    #                  'deletions': {
+    #                      'epg': epg.self_json(),
+    #                      'bd': (bd.self_json() if bd else None),
+    #                      'encaps': [att.self_json() for att in attachments],
+    #                      'ap': (ap.self_json() if ap else None)
+    #                  }}
+
+    def ipam_update(self):
+        supernet = IPv4Network('10.0.0.0/8')
+
+        # Collect all endpoints
+        eps = [APICObject.load(_) for _ in self.get('/api/class/fvIp.json').json()['imdata']]
+        eps = [(mac, IPv4Network(ip)) for ep in eps for mac, ip in MAC_IP_SEARCH.search(ep.attributes.dn).groups()]
+
+        ipam = NetworkAPIIPAM()
+
+        # Check each IP to see if it is assigned.  Assign if not assigned.
+        while eps:
+            mac, ip = eps.pop()
+            if supernet.overlaps(ip):
+                ipam_ip = ipam.get_address(str(ip.network_address)).json()
+
+                if ipam_ip['state'] == 'UNASSIGNED':
+                    r = ipam.bulk_reserve([dict(name=f'ACI_AUTO_ASSIGN_{mac}', address=ipam_ip['address'])])
+
+        return None
 
 
 class AppInstance:
