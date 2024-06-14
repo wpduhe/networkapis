@@ -61,6 +61,7 @@ APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}', flags=re.IGNORECASE
 MAC_IP_SEARCH = re.compile(r'cep-([^/]+)/ip-\[([^]]+)]')
 DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|CPDV|CORP|'
                         r'HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
+ACI_NAME = re.compile(r'[\W_]+')
 
 
 def format_mac_addresses(mac_addresses: list) -> List:
@@ -4873,9 +4874,9 @@ def create_new_epg(env: str, req_data: dict):
     with APIC(env=env) as apic:
         big = BIG()
 
-        ap_name = req_data['AppProfileName']
-        epg_name = req_data['EPGName']
-        bd_name = req_data['BridgeDomainName']
+        ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
+        epg_name = ACI_NAME.sub('-', req_data['EPGName'])
+        bd_name = ACI_NAME.sub('-', req_data['BridgeDomainName'])
         description = req_data['Description']
         no_of_ips = req_data['NumIPsReqd']
 
@@ -5000,9 +5001,9 @@ def create_new_epg(env: str, req_data: dict):
 
 def create_custom_epg(env: str, req_data: dict):
     with APIC(env=env) as apic:
-        ap_name = req_data['AppProfileName']
-        epg_name = req_data['EPGName']
-        bd_name = req_data['BridgeDomainName']
+        ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
+        epg_name = ACI_NAME.sub('-', req_data['EPGName'])
+        bd_name = ACI_NAME.sub('-', req_data['BridgeDomainName'])
         description = req_data['Description']
         subnets = req_data['Subnets']
 
@@ -5109,9 +5110,9 @@ def create_custom_epg(env: str, req_data: dict):
 
 def create_custom_epg_v2(env: str, req_data: dict):
     with APIC(env=env) as apic:
-        ap_name = req_data['AppProfileName']
-        epg_name = req_data['EPGName']
-        bd_name = req_data['BridgeDomainName']
+        ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
+        epg_name = ACI_NAME.sub('-', req_data['EPGName'])
+        bd_name = ACI_NAME.sub('-', req_data['BridgeDomainName'])
         description = req_data['Description']
         subnets = req_data['Subnets']
         tn_name = req_data['TenantName']
@@ -5224,10 +5225,12 @@ def create_new_admz_epg(env: str, req_data: dict):
     with APIC(env=env) as apic:
         big = BIG()
 
-        ap_name = req_data['AppProfileName']
-        epg_name = req_data['EPGName']
+        ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
+        epg_name = ACI_NAME.sub('-', req_data['EPGName'])
         description = req_data['Description']
         no_of_ips = req_data['NumIPsReqd']
+
+        ap_name = DIV_REMOVE.sub('', ap_name)
 
         subnet = big.assign_next_network_from_list(block_list=apic.env.ADMZSubnets, no_of_ips=no_of_ips, name=epg_name,
                                                    coid=int(apic.env.COID), asn=int(apic.env.ASN))
