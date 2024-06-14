@@ -23,23 +23,26 @@ class JSONObject:
         return json.dumps(r, indent=indent)
 
     @classmethod
-    def load(cls, data: dict):
-        obj = cls()
+    def load(cls, data: dict=None):
+        if data:
+            obj = cls()
 
-        for k, v in data.items():
-            if isinstance(v, dict):
-                obj.__setattr__(k, JSONObject.load(v))
-            elif isinstance(v, list):
-                obj.__setattr__(k, list())
-                for x in v:
-                    if isinstance(x, dict):
-                        obj.__getattribute__(k).append(JSONObject.load(x))
-                    else:
-                        obj.__getattribute__(k).append(x)
-            else:
-                obj.__setattr__(k, v)
+            for k, v in data.items():
+                if isinstance(v, dict):
+                    obj.__setattr__(k, JSONObject.load(v))
+                elif isinstance(v, list):
+                    obj.__setattr__(k, list())
+                    for x in v:
+                        if isinstance(x, dict):
+                            obj.__getattribute__(k).append(JSONObject.load(x))
+                        else:
+                            obj.__getattribute__(k).append(x)
+                else:
+                    obj.__setattr__(k, v)
 
-        return obj
+            return obj
+        else:
+            return data
 
     def dict(self) -> dict:
         return json.loads(self.json())
