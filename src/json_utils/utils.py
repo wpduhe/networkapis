@@ -1,3 +1,5 @@
+from typing import Optional
+import requests
 import json
 
 
@@ -23,7 +25,7 @@ class JSONObject:
         return json.dumps(r, indent=indent)
 
     @classmethod
-    def load(cls, data: dict=None):
+    def load(cls, data: Optional[dict] or None):
         if data:
             obj = cls()
 
@@ -46,3 +48,9 @@ class JSONObject:
 
     def dict(self) -> dict:
         return json.loads(self.json())
+
+
+class JSONResponse(JSONObject):
+    @classmethod
+    def load(cls: JSONObject, data: requests.Response):
+        return JSONObject.load(data=data.json())
