@@ -3845,12 +3845,19 @@ class AppInstance:
         except NameError:
             return 404, {'message': f'Application instance {application}/{inst_name} does not exist'}
 
-        with BIG() as big:
-            network = big.assign_next_network_from_list(block_list=inst.originAZ.env.Subnets, no_of_ips=no_of_ips,
-                                                        name=inst_name, coid=int(inst.originAZ.env.COID),
-                                                        asn=int(inst.originAZ.env.ASN))
+        # with BIG() as big:
+        with NetworkAPIIPAM() as ipam:
+            # network = big.assign_next_network_from_list(block_list=inst.originAZ.env.Subnets, no_of_ips=no_of_ips,
+            #                                             name=inst_name, coid=int(inst.originAZ.env.COID),
+            #                                             asn=int(inst.originAZ.env.ASN))
+            network = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips,
+                                                                           cidr_blocks=inst.originAZ.env.Subnets,
+                                                                           name=inst_name,
+                                                                           coid=inst.originAZ.env.COID,
+                                                                           asn=inst.originAZ.env.ASN,
+                                                                           market='rdc'))
 
-        ipnetwork = IPv4Network(network.properties['CIDR'])
+        ipnetwork = IPv4Network(network.network)
         gateway = f'{ipnetwork.network_address + 1}/{ipnetwork.prefixlen}'
 
         subnet = Subnet(subnet=gateway)
@@ -4047,10 +4054,13 @@ class AppInstance:
             inst.currentAZ.post(subnet.json())
 
             # Mark network to be deleted in Proteus
-            with BIG() as big:
-                ip4network = big.get_network(network_cidr=str(net))
-                ip4network.name = f'{ip4network.name} - DELETED FROM NETWORK'
-                big.update_object(ip4network)
+            # with BIG() as big:
+            with NetworkAPIIPAM() as ipam:
+                # ip4network = big.get_network(network_cidr=str(net))
+                ip4network = JSONResponse.load(ipam.get_network(str(net)))
+                ip4network.name = f'ACI_DELETE_CANDIDATE_{ip4network.name}'
+                # big.update_object(ip4network)
+                ipam.update_network(**ip4network.dict())
 
         # Delete Bridge Domain; if not used elsewhere
         bd = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.bd_dn()}.json').json()['imdata'])
