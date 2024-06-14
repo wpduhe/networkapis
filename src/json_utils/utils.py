@@ -53,4 +53,7 @@ class JSONObject:
 class JSONResponse(JSONObject):
     @classmethod
     def load(cls: JSONObject, data: requests.Response):
-        return JSONObject.load(data=data.json())
+        if data.ok:
+            return JSONObject.load(data=data.json())
+        else:
+            return None
