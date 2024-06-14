@@ -753,8 +753,8 @@ class NetworkMixin:
     def get_network(self: EvolveMarketplace, network) -> requests.Response:
         return self.get(f'{EVOLVE_PATH}/api/networks/{network}')
 
-    def delete_network(self: EvolveMarketplace, network: str) -> requests.Response:
-        return self.delete(f'{EVOLVE_PATH}/api/networks/{network}')
+    def delete_network(self: EvolveMarketplace, network: str, data: dict or list) -> requests.Response:
+        return self.delete(f'{EVOLVE_PATH}/api/networks/{network}', data=data)
 
     def get_network_by_address(self: EvolveMarketplace, address: str) -> requests.Response:
         return self.get(f'{EVOLVE_PATH}/api/networks/get_network_by_address/{address}')
