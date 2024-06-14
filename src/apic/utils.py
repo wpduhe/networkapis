@@ -7,7 +7,7 @@ from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 from apic.classes import *
 from ipam.utils import BIG, ManagementJob, NetworkAPIIPAM
-from json_utils.utils import JSONObject
+from json_utils.utils import JSONResponse, JSONObject
 from data.environments import ACIEnvironment
 # from smb.SMBConnection import SMBConnection
 # from smb.base import OperationFailure
@@ -1313,7 +1313,7 @@ class APIC:
         # big = BIG()
         # address = big.assign_next_ip(network_cidr=oob_network.with_prefixlen, name=node_name)
         with NetworkAPIIPAM() as ipam:
-            address = JSONObject.load(ipam.assign_next_ip(network=oob_network.with_prefixlen, name=node_name).json())
+            address = JSONResponse.load(ipam.assign_next_ip(network=oob_network.with_prefixlen, name=node_name))
 
         address_cidr = f'{address.address}/{oob_network.prefixlen}'
         gateway = f'{oob_network.network_address + 1}'
@@ -3784,14 +3784,21 @@ class AppInstance:
         if gh.file_exists(file_path=app_inst.path()):
             return 400, {'message': 'The specified application instance already exists'}
 
-        with BIG() as big:
-            network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
-                                                        name=inst_name, coid=int(apic.env.COID), asn=int(apic.env.ASN))
+    # with BIG() as big:
+    #     network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
+    #                                                 name=inst_name, coid=int(apic.env.COID), asn=int(apic.env.ASN))
+        with NetworkAPIIPAM() as ipam:
+            network = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips, name=inst_name,
+                                                                           cidr_blocks=apic.env.Subnets,
+                                                                           coid=apic.env.COID,
+                                                                           asn=apic.env.ASN, market='rdc'))
 
-        if not network:
+        if network:
+            network = JSONResponse.load(ipam.get_network(network.network))
+        else:
             return 400, {'message': f'{apic.env.Name} has no available network for the required number of IPs.'}
 
-        ipnetwork = IPv4Network(network.properties['CIDR'])
+        ipnetwork = IPv4Network(network.range)
         gateway = ipnetwork.network_address + 1
 
         n = {f'{gateway}/{ipnetwork.prefixlen}': {}}
