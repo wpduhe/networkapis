@@ -1,9 +1,8 @@
 import requests
 import os
 import json
-import re
 import time
-from urllib.parse import urlencode, unquote
+from urllib.parse import urlencode
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from githubapi.utils import GithubAPI
 import urllib3
