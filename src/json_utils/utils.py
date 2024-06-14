@@ -2,21 +2,10 @@ import json
 
 
 class JSONObject:
-    def __init__(self, data: dict):
-        for key, value in data.items():
-            if isinstance(value, dict):
-                self.__setattr__(key, JSONObject(value))
-            elif isinstance(value, list):
-                self.__setattr__(key, list())
-                for x in value:
-                    if isinstance(x, dict):
-                        self.__getattribute__(key).append(JSONObject(x))
-                    else:
-                        self.__getattribute__(key).append(x)
-            else:
-                self.__setattr__(key, value)
+    def __init__(self):
+        pass
 
-    def json(self):
+    def json(self, indent: int=None) -> str:
         r = {}
         for attr in self.__dict__:
             if type(self.__getattribute__(attr)) is type(self):
@@ -31,7 +20,26 @@ class JSONObject:
             else:
                 r[attr] = self.__getattribute__(attr)
 
-        return json.dumps(r, indent=4)
+        return json.dumps(r, indent=indent)
 
-    def dict(self):
+    @classmethod
+    def load(cls, data: dict):
+        obj = cls()
+
+        for k, v in data.items():
+            if isinstance(v, dict):
+                obj.__setattr__(k, JSONObject.load(v))
+            elif isinstance(v, list):
+                obj.__setattr__(k, list())
+                for x in v:
+                    if isinstance(x, dict):
+                        obj.__getattribute__(k).append(JSONObject.load(x))
+                    else:
+                        obj.__getattribute__(k).append(x)
+            else:
+                obj.__setattr__(k, v)
+
+        return obj
+
+    def dict(self) -> dict:
         return json.loads(self.json())
