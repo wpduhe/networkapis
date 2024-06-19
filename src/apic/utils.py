@@ -6,8 +6,8 @@ from copy import deepcopy
 from ipaddress import IPv4Address
 from ipaddress import AddressValueError
 from apic.classes import *
-from ipam.utils import BIG, ManagementJob, NetworkAPIIPAM
-from json_utils.utils import JSONResponse, JSONObject
+from ipam.utils import ManagementJob, NetworkAPIIPAM
+from json_utils.utils import JSONResponse
 from data.environments import ACIEnvironment
 # from smb.SMBConnection import SMBConnection
 # from smb.base import OperationFailure
@@ -4060,7 +4060,7 @@ class AppInstance:
                 ip4network = JSONResponse.load(ipam.get_network(str(net)))
                 ip4network.name = f'ACI_DELETE_CANDIDATE_{ip4network.name}'
                 # big.update_object(ip4network)
-                ipam.update_network(**ip4network.dict())
+                ipam.update_network(data=dict(network=ip4network.range, keyvalues=dict(name=ip4network.name)))
 
         # Delete Bridge Domain; if not used elsewhere
         bd = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.bd_dn()}.json').json()['imdata'])
@@ -4891,7 +4891,7 @@ def configure_interfaces(env: str, req_data: dict):
 
 def create_new_epg(env: str, req_data: dict):
     with APIC(env=env) as apic:
-        big = BIG()
+        # big = BIG()
 
         ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
         epg_name = ACI_NAME.sub('-', req_data['EPGName'])
@@ -4917,13 +4917,18 @@ def create_new_epg(env: str, req_data: dict):
         if apic.bd_exists(tn=apic.env.Tenant, bd_name=bd_name):
             return 400, {'message': 'The requested bridge domain already exists'}
 
-        subnet = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips, name=epg_name,
-                                                   coid=int(apic.env.COID), asn=int(apic.env.ASN))
+        # subnet = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips, name=epg_name,
+        #                                            coid=int(apic.env.COID), asn=int(apic.env.ASN))
+        with NetworkAPIIPAM() as ipam:
+            subnet = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips, name=epg_name,
+                                                                          cidr_blocks=apic.env.Subnets,
+                                                                          coid=apic.env.COID, asn=apic.env.ASN,
+                                                                          market='corp'))
 
         if not subnet:
             return 400, [f'{apic.env.Name} has no available network for the required number of IPs.']
 
-        network = IPv4Network(subnet.properties['CIDR'])
+        network = IPv4Network(subnet.network)
         gateway = network.network_address + 1
 
         # Define Tenant
@@ -4992,8 +4997,8 @@ def create_new_epg(env: str, req_data: dict):
         # Update the network in Proteus
         subnet.properties['VLAN'] = vlan
 
-        big.update_object(subnet)
-        big.logout()
+        # big.update_object(subnet)
+        # big.logout()
 
         # Add the EPG to the AEP with the VLAN returned
         aep.add_epg(epg_dn=g_epg.attributes.dn, encap=vlan)
@@ -5014,7 +5019,7 @@ def create_new_epg(env: str, req_data: dict):
 
     inst.store()
 
-    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan,
+    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.network, 'VLAN': vlan,
                  'AppInstance': inst.json(), 'InstancePath': f'{inst.application}/{inst}'}
 
 
@@ -5242,7 +5247,7 @@ def create_custom_epg_v2(env: str, req_data: dict):
 
 def create_new_admz_epg(env: str, req_data: dict):
     with APIC(env=env) as apic:
-        big = BIG()
+        # big = BIG()
 
         ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
         epg_name = ACI_NAME.sub('-', req_data['EPGName'])
@@ -5251,14 +5256,20 @@ def create_new_admz_epg(env: str, req_data: dict):
 
         ap_name = DIV_REMOVE.sub('', ap_name)
 
-        subnet = big.assign_next_network_from_list(block_list=apic.env.ADMZSubnets, no_of_ips=no_of_ips, name=epg_name,
-                                                   coid=int(apic.env.COID), asn=int(apic.env.ASN))
+    # subnet = big.assign_next_network_from_list(block_list=apic.env.ADMZSubnets, no_of_ips=no_of_ips, name=epg_name,
+    #                                            coid=int(apic.env.COID), asn=int(apic.env.ASN))
+        with NetworkAPIIPAM() as ipam:
+            subnet = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips,
+                                                                          name=epg_name,
+                                                                          cidr_blocks=apic.env.ADMZSubnets,
+                                                                          coid=apic.env.COID, asn=apic.env.ASN,
+                                                                          market='corp'))
 
         if not subnet:
-            big.logout()
+            # big.logout()
             return 400, [f'{apic.env.Name} has no available network for the required number of IPs.']
 
-        big.logout()
+        # big.logout()
 
         # network = IPv4Network(subnet.properties['CIDR'])
         # gateway = network.network_address + 1
@@ -5330,7 +5341,7 @@ def create_new_admz_epg(env: str, req_data: dict):
         fw_aep.add_epg(epg_dn=g_epg.attributes.dn, encap=vlan)
         apic.post(configuration=fw_aep.json(), uri=aep.post_uri)
 
-    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.properties['CIDR'], 'VLAN': vlan}
+    return 200, {'EPG Name': epg.attributes.name, 'Subnet': subnet.network, 'VLAN': vlan}
 
 
 def add_oob_leaf(env: str, rack: str, serial: str, pod: int=1):
