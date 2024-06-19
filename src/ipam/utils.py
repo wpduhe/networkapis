@@ -744,7 +744,7 @@ class AddressMixin:
         return self.delete(f'{EVOLVE_PATH}/api/addresses', data=dict(addresses=addresses))
 
     def bulk_reserve(self: EvolveMarketplace,
-                     assignments: List[TypedDict('A', {'address': str, 'name': str})]) -> requests.Response:
+                     assignments: List[TypedDict('AddressData', {'address': str, 'name': str})]) -> requests.Response:
         return self.post(f'{EVOLVE_PATH}/api/addresses/bulk_reserve', data=dict(assignments=assignments))
 
     def manage_device(self: EvolveMarketplace, address: str, dns_template) -> requests.Response:
