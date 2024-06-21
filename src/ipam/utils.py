@@ -6,7 +6,11 @@ from urllib.parse import urlencode
 from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from githubapi.utils import GithubAPI
 import urllib3
-from EvolvePkg.evolvemarketplace import EvolveMarketplace
+# from EvolvePkg.evolvemarketplace import EvolveMarketplace TODO: Fix this!!
+#  >>> ipam = NetworkAPIIPAM()
+#  'NoneType' object has no attribute 'encode'
+#  Request for access token failed.
+from evolve.evolve_util import EvolveMarketplace
 from typing import List, TypedDict
 
 
