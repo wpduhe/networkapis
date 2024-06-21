@@ -1,5 +1,5 @@
 from githubapi.utils import GithubAPI
-from job_handler import ManagementJob
+from ipam.utils import ManagementJob
 from apic.classes import FabricNode
 from apic.utils import APIC
 from ipam.utils import NetworkAPIIPAM
