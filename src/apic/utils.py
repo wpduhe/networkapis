@@ -1,13 +1,12 @@
 from typing import Tuple, List
+from types import SimpleNamespace
 from base64 import b64encode
 from datetime import datetime
 # from openpyxl.writer.excel import save_virtual_workbook
 from copy import deepcopy
-from ipaddress import IPv4Address
-from ipaddress import AddressValueError
+from ipaddress import IPv4Address, AddressValueError
 from apic.classes import *
 from ipam.utils import ManagementJob, NetworkAPIIPAM
-from json_utils.utils import JSONResponse
 from data.environments import ACIEnvironment
 # from smb.SMBConnection import SMBConnection
 # from smb.base import OperationFailure
@@ -136,6 +135,11 @@ def q_wcard(c, a, v) -> str:
 def q_eq(c, a, v) -> str:
     """Generate query string using equal match"""
     return 'query-target-filter=eq(%s.%s,"%s")' % (c, a, v)
+
+
+def jsonload(response: requests.Response) -> SimpleNamespace:
+    if response.ok:
+        return json.loads(response.text, object_hook=lambda x: SimpleNamespace(**x))
 
 
 class ACIJob:
@@ -1313,7 +1317,7 @@ class APIC:
         # big = BIG()
         # address = big.assign_next_ip(network_cidr=oob_network.with_prefixlen, name=node_name)
         with NetworkAPIIPAM() as ipam:
-            address = JSONResponse.load(ipam.assign_next_ip(network=oob_network.with_prefixlen, name=node_name))
+            address = jsonload(ipam.assign_next_ip(network=oob_network.with_prefixlen, name=node_name))
 
         address_cidr = f'{address.address}/{oob_network.prefixlen}'
         gateway = f'{oob_network.network_address + 1}'
@@ -2544,7 +2548,7 @@ class APIC:
                            if s.class_ == Subnet.class_]
                 subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
                 return 200, {'environment': apic.env.Name, 'tenant': bridge_domain.group(1),
-                             'bridge_domain': bridge_domain.group(2),'subnet': subnet, 'all_bd_subnets': subnets,
+                             'bridge_domain': bridge_domain.group(2), 'subnet': subnet, 'all_bd_subnets': subnets,
                              'inuse_by': epgs}
 
     @classmethod
@@ -3483,7 +3487,7 @@ class APIC:
                 ipam_ip = ipam.get_address(str(ip.network_address)).json()
 
                 if ipam_ip['state'] == 'UNASSIGNED':
-                    r = ipam.bulk_reserve([dict(name=f'ACI_AUTO_ASSIGN_{mac}', address=ipam_ip['address'])])
+                    _ = ipam.bulk_reserve([dict(name=f'ACI_AUTO_ASSIGN_{mac}', address=ipam_ip['address'])])
 
         return None
 
@@ -3642,7 +3646,6 @@ class AppInstance:
 
     def remove(self):
         gh = GithubAPI()
-
         gh.delete_file(self.path(), message=f'{self}_removal')
 
     def json(self):
@@ -3788,20 +3791,18 @@ class AppInstance:
     #     network = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips,
     #                                                 name=inst_name, coid=int(apic.env.COID), asn=int(apic.env.ASN))
         with NetworkAPIIPAM() as ipam:
-            network = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips, name=inst_name,
-                                                                           cidr_blocks=apic.env.Subnets,
-                                                                           coid=apic.env.COID,
-                                                                           asn=apic.env.ASN, market='rdc'))
+            network = jsonload(ipam.create_next_available_network(no_of_ips=no_of_ips, name=inst_name,
+                                                                  cidr_blocks=apic.env.Subnets, coid=apic.env.COID,
+                                                                  asn=apic.env.ASN, market='rdc'))
+            if network:
+                pass
+            else:
+                return 400, {'message': f'{apic.env.Name} has no available network for the required number of IPs.'}
 
-        if network:
-            network = JSONResponse.load(ipam.get_network(network.network))
-        else:
-            return 400, {'message': f'{apic.env.Name} has no available network for the required number of IPs.'}
+        ip_network = IPv4Network(network.network)
+        gateway = ip_network.network_address + 1
 
-        ipnetwork = IPv4Network(network.range)
-        gateway = ipnetwork.network_address + 1
-
-        n = {f'{gateway}/{ipnetwork.prefixlen}': {}}
+        n = {f'{gateway}/{ip_network.prefixlen}': {}}
         app_inst.networks.update(n)
 
         tenant = app_inst.generate_config(origin_az=True)
@@ -3850,12 +3851,15 @@ class AppInstance:
             # network = big.assign_next_network_from_list(block_list=inst.originAZ.env.Subnets, no_of_ips=no_of_ips,
             #                                             name=inst_name, coid=int(inst.originAZ.env.COID),
             #                                             asn=int(inst.originAZ.env.ASN))
-            network = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips,
-                                                                           cidr_blocks=inst.originAZ.env.Subnets,
-                                                                           name=inst_name,
-                                                                           coid=inst.originAZ.env.COID,
-                                                                           asn=inst.originAZ.env.ASN,
-                                                                           market='rdc'))
+            network = jsonload(ipam.create_next_available_network(no_of_ips=no_of_ips,
+                                                                  cidr_blocks=inst.originAZ.env.Subnets,
+                                                                  name=inst_name, coid=inst.originAZ.env.COID,
+                                                                  asn=inst.originAZ.env.ASN, market='rdc'))
+            if network:
+                pass
+            else:
+                return 400, {'message': f'{inst.originAZ.env.Name} '
+                                        f'has no available network for the required number of IPs.'}
 
         ipnetwork = IPv4Network(network.network)
         gateway = f'{ipnetwork.network_address + 1}/{ipnetwork.prefixlen}'
@@ -4057,7 +4061,7 @@ class AppInstance:
             # with BIG() as big:
             with NetworkAPIIPAM() as ipam:
                 # ip4network = big.get_network(network_cidr=str(net))
-                ip4network = JSONResponse.load(ipam.get_network(str(net)))
+                ip4network = jsonload(ipam.get_network(str(net)))
                 ip4network.name = f'ACI_DELETE_CANDIDATE_{ip4network.name}'
                 # big.update_object(ip4network)
                 ipam.update_network(data=dict(network=ip4network.range, keyvalues=dict(name=ip4network.name)))
@@ -4920,12 +4924,13 @@ def create_new_epg(env: str, req_data: dict):
         # subnet = big.assign_next_network_from_list(block_list=apic.env.Subnets, no_of_ips=no_of_ips, name=epg_name,
         #                                            coid=int(apic.env.COID), asn=int(apic.env.ASN))
         with NetworkAPIIPAM() as ipam:
-            subnet = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips, name=epg_name,
-                                                                          cidr_blocks=apic.env.Subnets,
-                                                                          coid=apic.env.COID, asn=apic.env.ASN,
-                                                                          market='corp'))
+            subnet = jsonload(ipam.create_next_available_network(no_of_ips=no_of_ips, name=epg_name,
+                                                                 cidr_blocks=apic.env.Subnets,
+                                                                 coid=apic.env.COID, asn=apic.env.ASN, market='corp'))
 
-        if not subnet:
+        if subnet:
+            pass
+        else:
             return 400, [f'{apic.env.Name} has no available network for the required number of IPs.']
 
         network = IPv4Network(subnet.network)
@@ -5259,13 +5264,13 @@ def create_new_admz_epg(env: str, req_data: dict):
     # subnet = big.assign_next_network_from_list(block_list=apic.env.ADMZSubnets, no_of_ips=no_of_ips, name=epg_name,
     #                                            coid=int(apic.env.COID), asn=int(apic.env.ASN))
         with NetworkAPIIPAM() as ipam:
-            subnet = JSONResponse.load(ipam.create_next_available_network(no_of_ips=no_of_ips,
-                                                                          name=epg_name,
-                                                                          cidr_blocks=apic.env.ADMZSubnets,
-                                                                          coid=apic.env.COID, asn=apic.env.ASN,
-                                                                          market='corp'))
+            subnet = jsonload(ipam.create_next_available_network(no_of_ips=no_of_ips, name=epg_name,
+                                                                 cidr_blocks=apic.env.ADMZSubnets, coid=apic.env.COID,
+                                                                 asn=apic.env.ASN, market='corp'))
 
-        if not subnet:
+        if subnet:
+            pass
+        else:
             # big.logout()
             return 400, [f'{apic.env.Name} has no available network for the required number of IPs.']
 
