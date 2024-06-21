@@ -2,17 +2,26 @@ from f5.bigip import ManagementRoot
 from socket import gethostbyname, gethostbyaddr, herror, gaierror
 from ipaddress import IPv4Address, IPv4Network
 from data.environments import F5Environment
-from ipam.utils import BIG
+from ipam.utils import NetworkAPIIPAM
 from typing import List
 from io import BytesIO
 from githubapi.utils import GithubAPI
-from json_utils.utils import JSONObject
+from types import SimpleNamespace
 import requests
 import json
 import re
 import time
 import paramiko
 import os
+
+
+def jsonload(response: requests.Response) -> SimpleNamespace:
+    if response.ok:
+        return json.loads(response.text, object_hook=lambda x: SimpleNamespace(**x))
+
+
+def tonamespace(d: dict) -> SimpleNamespace:
+    return json.loads(json.dumps(d), object_hook=lambda x: SimpleNamespace(**x))
 
 
 class BaseLTMObject:
@@ -373,14 +382,15 @@ class LTM:
         backside_ssl = False
 
         # VIP address processing
-        big = BIG()
+        # big = BIG()
+        ipam = NetworkAPIIPAM()
 
         if address is None:
-            address = big.assign_next_ip_from_list(network_list=self.env.iPPoolsField, name=name)
-
-            if not address:
+            # address = big.assign_next_ip_from_list(network_list=self.env.iPPoolsField, name=name)
+            address = ipam.assign_next_ip_from_list(networks=self.env.iPPoolsField, name=name)
+            if not address.ok:
                 raise Exception(['No VIP addresses are available.  Add new VIP Pool to F5 Environment'])
-
+            address = jsonload(ipam.get_address(address.json()['address']))
         else:
             # Check to make sure VIP destination does not already exist
             if f'{address}:{port}' in self.destination_list:
@@ -401,14 +411,13 @@ class LTM:
                     continue
 
             # Check address assignment status
-            check_address = big.get_ip(address.exploded)
+            check_address = jsonload(ipam.get_address(address.exploded))
 
             if check_address.id == 0:
-                address = big.assign_ip(ipaddress=address.exploded, name=name)
+                # address = big.assign_ip(ipaddress=address.exploded, name=name)
+                address = ipam.bulk_reserve([dict(name=name, address=address.exploded)])
             else:
                 address = check_address
-
-        big.logout()
 
         # Determine which pool monitor to use
         member_port = int(members[0]['port'])
@@ -1005,8 +1014,8 @@ class LTM:
 
 class GTM:
     env = None
-    internal_gtms = ['10.27.71.90', '10.90.8.90']
-    external_gtms = ['10.27.132.90', '10.90.9.90']
+    internal_gtms = ['10.27.71.91', '10.90.8.91']
+    external_gtms = ['10.27.132.91', '10.90.9.91']
 
     def __init__(self, host):
         self.host = host
@@ -1134,7 +1143,7 @@ class BigIQ:
                   password=(password if password else os.getenv('netmgmtpass')),
                   loginProviderName=self.__AUTH_PROVIDER)
 
-        response = JSONObject(self.post(path, data=js).json())
+        response = jsonload(self.post(path, data=js))
 
         self.session.headers['X-F5-Auth-Token'] = response.token.token
 
@@ -1149,18 +1158,18 @@ class BigIQ:
     def post(self, path, data: dict) -> requests.Response:
         return self.session.post('%s%s' % (self.__URL_BASE, path), json=data)
 
-    def get_devices(self) -> List[JSONObject]:
+    def get_devices(self) -> List[SimpleNamespace]:
         path = '/mgmt/shared/resolver/device-groups/cm-adccore-allbigipDevices/devices'
-        devices = [JSONObject(_) for _ in self.get(path=path).json()['items']]
+        devices = [tonamespace(_) for _ in self.get(path=path).json()['items']]
         return devices
 
-    def get_device_groups(self) -> List[JSONObject]:
+    def get_device_groups(self) -> List[SimpleNamespace]:
         path = '/mgmt/shared/resolver/device-groups'
-        subject = [JSONObject(_) for _ in self.get(path=path).json()['items']]
+        subject = [tonamespace(_) for _ in self.get(path=path).json()['items']]
         return subject
 
-    def get_device_group(self, name: str) -> List[JSONObject]:
+    def get_device_group(self, name: str) -> List[SimpleNamespace]:
         path = '/mgmt/shared/resolver/device-groups/%s/devices' % name
-        subject = [JSONObject(_) for _ in self.get(path=path).json()['items']]
+        subject = [tonamespace(_) for _ in self.get(path=path).json()['items']]
         subject = [_ for _ in subject if _.managementAddress != self.__ADDRESS]
         return subject
