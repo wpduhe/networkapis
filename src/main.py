@@ -923,6 +923,15 @@ def create_new_epg(request: Request, az: str, req_data: CreateNewEPG):
     if not validate_api_key(req_data.pop('APIKey')):
         return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
 
+    # Transform APIC object names before sending to backend processes
+    req_data['AppProfileName'] = apic_utils.ACI_NAME.sub('-', req_data['AppProfileName'])
+    req_data['EPGName'] = apic_utils.ACI_NAME.sub('-', req_data['EPGName'])
+    req_data['BridgeDomainName'] = apic_utils.ACI_NAME.sub('-', req_data['BridgeDomainName'])
+
+    req_data['AppProfileName'] = apic_utils.DIV_REMOVE.sub('', req_data['AppProfileName'])
+    if not re.search(r'^ap[\W_]', req_data['AppProfileName']):
+        req_data['AppProfileName'] = f'ap-{req_data["AppProfileName"]}'
+
     req_logit(create_new_epg, request, req_data)
 
     aeps = req_data.pop('AEPs')
@@ -955,6 +964,15 @@ def create_custom_epg(request: Request, az: str, req_data: CreateCustomEPG):
 
     if not validate_api_key(req_data.pop('APIKey')):
         return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    # Transform APIC object names before sending to backend processes
+    req_data['AppProfileName'] = apic_utils.ACI_NAME.sub('-', req_data['AppProfileName'])
+    req_data['EPGName'] = apic_utils.ACI_NAME.sub('-', req_data['EPGName'])
+    req_data['BridgeDomainName'] = apic_utils.ACI_NAME.sub('-', req_data['BridgeDomainName'])
+
+    req_data['AppProfileName'] = apic_utils.DIV_REMOVE.sub('', req_data['AppProfileName'])
+    if not re.search(r'^ap[\W_]', req_data['AppProfileName']):
+        req_data['AppProfileName'] = f'ap-{req_data["AppProfileName"]}'
 
     req_logit(create_custom_epg, request, req_data)
 
@@ -1000,6 +1018,15 @@ def create_custom_epg_v2(request: Request, az: str, req_data: CreateCustomEPGv2)
 
     if not validate_api_key(req_data.pop('APIKey')):
         return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    # Transform APIC object names before sending to backend processes
+    req_data['AppProfileName'] = apic_utils.ACI_NAME.sub('-', req_data['AppProfileName'])
+    req_data['EPGName'] = apic_utils.ACI_NAME.sub('-', req_data['EPGName'])
+    req_data['BridgeDomainName'] = apic_utils.ACI_NAME.sub('-', req_data['BridgeDomainName'])
+
+    req_data['AppProfileName'] = apic_utils.DIV_REMOVE.sub('', req_data['AppProfileName'])
+    if not re.search(r'^ap[\W_]', req_data['AppProfileName']):
+        req_data['AppProfileName'] = f'ap-{req_data["AppProfileName"]}'
 
     req_logit(create_custom_epg_v2, request, req_data)
 
