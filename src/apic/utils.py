@@ -5000,7 +5000,7 @@ def create_new_epg(env: str, req_data: dict):
         vlan = apic.get_next_vlan()
 
         # Update the network in Proteus
-        subnet.properties['VLAN'] = vlan
+        # subnet.properties['VLAN'] = vlan
 
         # big.update_object(subnet)
         # big.logout()
