@@ -48,17 +48,18 @@ def main():
             result = socket.gethostbyaddr(job.ip)
             if re.match(rf'{args[0]}-{args[1]}-\d+-{args[3]}-{args[4]}.{args[5]}.{args[6]}.mgmt.medcity.net',
                         result[0]):
-                job.completion = list(result)
-                gh.add_file(file_path=f'{job.completed_jobs}/{file}', message='Completed ManagementJob',
-                            content=json.dumps(job.__dict__, indent=4))
-                gh.delete_file(file_path=f'{job.queue_path}/{file}', message='Completed ManagementJob')
+                logger.debug(f'DNS record exists for {job.ip}: {result[0]}')
+                complete(job)
                 return True
             else:
+                logger.debug(f'Host record for {job.ip} not match management record template')
                 return False
         except (socket.herror, IndexError):
+            logger.debug(f'No host record found for {job.ip}')
             return False
 
     def complete(i_job: ManagementJob):
+        logger.debug(f'Completing management job for {i_job.ip}...')
         i_job.completion = f'{time.asctime()}: Request submitted by automation'
         gh.add_file(file_path=f'{i_job.completed_jobs}/{file}', message='Completed ManagementJob',
                     content=json.dumps(i_job.__dict__, indent=4))
