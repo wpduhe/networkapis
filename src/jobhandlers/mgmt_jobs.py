@@ -90,9 +90,13 @@ def main():
         # Check to see if address is already managed
         logger.debug(f'Checking management status of {job.ip}...')
         addr = jsonload(ipam.get_address(job.ip))
+        logger.debug(f'{addr.address}: {addr.userDefinedFields.Tools}')
         if addr.userDefinedFields.Tools:
             logger.debug(f'{job.ip} is already managed')
             complete(job)
+            continue
+        else:
+            logger.debug(f'{addr.address} is not managed...')
 
         # Check to see if a host record matching the DNS template has already been created for the given IP:
         #    Could have been by user or prior DNS creation delay caused checks to fail
