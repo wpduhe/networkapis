@@ -127,6 +127,8 @@ def main():
                 logger.debug(f'Response Reason: {r.reason}')
                 logger.debug(f'Response payload: {json.dumps(r.json())}')
                 continue
+        else:
+            logger.debug(f'SSH access to {job.ip} could not be established - Aborting management...')
 
     logger.debug(f'Management jobs completed by {socket.gethostname()}')
 
