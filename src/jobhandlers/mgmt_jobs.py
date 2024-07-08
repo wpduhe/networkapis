@@ -52,7 +52,7 @@ def main():
                 complete(job)
                 return True
             else:
-                logger.debug(f'Host record for {job.ip} not match management record template')
+                logger.debug(f'Host record for {job.ip} does not match management record template')
                 return False
         except (socket.herror, IndexError):
             logger.debug(f'No host record found for {job.ip}')
