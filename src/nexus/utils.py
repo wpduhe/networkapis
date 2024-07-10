@@ -95,8 +95,8 @@ class NXOS:
                 interface = Interface(interface.split('\n'))
                 if 'vpc peer-link' in interface.config:
                     self.vpc.peer_link = interface
-                vrf = re.search(r'vrf member (\S+)', interface.config)
-                interface.vrf = (self.vrf.get('name', vrf.group(1)) if vrf else self.vrf.get('name', 'default'))
+                # vrf = re.search(r'vrf member (\S+)', interface.config)
+                # interface.vrf = (self.vrf.get('name', vrf.group(1)) if vrf else self.vrf.get('name', 'default'))
                 self.interface.add(attribute_name, interface)
 
             for interface in self.interface:
