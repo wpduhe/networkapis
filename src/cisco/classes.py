@@ -162,6 +162,7 @@ class CDPNeighbor:
     local_interfaces = None
     remote_interfaces = None
     ip_addresses = None
+    software: tuple
 
     def __init__(self, data: str):
         assert data.lower().startswith(' id')
@@ -172,6 +173,7 @@ class CDPNeighbor:
         self.platform = re.search(r'Platform:\s*([^,]+)', data).group(1)
         self.local_interfaces = [re.search(r'Interface:\s*([^\n,]+)', data).group(1)]
         self.remote_interfaces = [re.search(r'\(outgoing port\):\s*([^\n,]+)', data).group(1)]
+        self.software = re.search(r'Version:\n[^(]+\(([^)]+)\)\D+(\d+)\.(\d+)([^)]+\))', data).groups()
 
     def __add__(self, x):
         self.local_interfaces += x.local_interfaces
