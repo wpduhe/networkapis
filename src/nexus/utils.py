@@ -134,6 +134,8 @@ class NXOS:
                         self.cdp_neighbors.add(attribute_name, neighbor)
 
             for neighbor in self.cdp_neighbors:
+                # Sort IP addresses
+                neighbor.ip_addresses.sort()
                 for interface in neighbor.local_interfaces:
                     intf = self.interface.get('name', interface)
                     intf.cdp_neighbor = neighbor
@@ -232,18 +234,8 @@ class NXOS:
         return list(unused_vlans)[offset]
 
     def mac_lookup(self, mac):
-        valid_neighbor = [
-            'N5K-C5548P',
-            'N9K-C93180YC-EX',
-            'N7K-C7004',
-            'N5K-C5548UP',
-            'N5K-C5596UP',
-            'WS-C3750X-48P',
-            'N9K-C93180YC-',
-            'N7K-C7010',
-            'cisco WS-C3750X-48P',
-            'N9K-C9396PX'
-        ]
+        def valid_neighbor(neighbor: CDPNeighbor):
+            return neighbor.software[0] == 'NX-OS' and 7 <= int(neighbor.software[1]) < 13
 
         mac = re.sub(r'[.:-]', '', mac)
         mac = mac.lower()
@@ -263,27 +255,20 @@ class NXOS:
             interface = self.vpc.peer_link
             interface.__delattr__('config')
         else:
-            interface = next(self.interface.__getattribute__(attr)
-                             for attr in dir(self.interface)
-                             if isinstance(self.interface.__getattribute__(attr), Interface)
-                             if self.interface.__getattribute__(attr).abbr == interface)
-            # interface = self.interface.__getattribute__(interface.replace('Po', 'port_channel'))
+            interface = self.interface.get('abbr', interface)
             interface.__delattr__('config')
 
         if interface.type == 'port-channel':
             for member in interface.members:
-                if member in self.neighbor_check:
-                    neighbor = next(x for x in self.cdp_neighbors if x.local_interface in interface.members)
-                    if neighbor.platform in valid_neighbor:
-                        return True, neighbor, interface
-                    else:
-                        return False, None, interface
+                member_if = self.interface.get('abbr', member)
+                if bool(member_if.cdp_neighbor):
+                    if valid_neighbor(member_if.cdp_neighbor):
+                        return True, member_if.cdp_neighbor, interface
             return False, None, interface
         else:
-            if interface.abbr in self.neighbor_check:
-                neighbor = next(x for x in self.cdp_neighbors if x.local_interface == interface.abbr)
-                if neighbor.platform in valid_neighbor:
-                    return True, neighbor, interface
+            if interface.cdp_neighbor:
+                if interface.cdp_neighbor.software[0] == 'NX-OS' and 7 <= int(interface.cdp_neighbor.software[1]) < 14:
+                    return True, interface.cdp_neighbor, interface
                 else:
                     return False, None, interface
             else:
