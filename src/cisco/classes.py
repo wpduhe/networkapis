@@ -173,7 +173,12 @@ class CDPNeighbor:
         self.platform = re.search(r'Platform:\s*([^,]+)', data).group(1)
         self.local_interfaces = [re.search(r'Interface:\s*([^\n,]+)', data).group(1)]
         self.remote_interfaces = [re.search(r'\(outgoing port\):\s*([^\n,]+)', data).group(1)]
-        self.software = re.search(r'Version:\n[^(]+\(([^)]+)\)\D+(\d+)\.(\d+)([^)]+\))', data).groups()
+        if 'NCS' in self.platform:
+            ver = re.search(r'Version:\n\D+(\d+)\.(\d+)\.(\S+)', data).groups()
+            self.software = tuple(['IOS XR'] + list(ver))
+        else:
+            self.software = re.search(r'Version:\n.*(NX.*?OS|IOS.*?XE|IOS.*?XR|IOS).*?Version.(\d+)\.(\d+)\.*(\S+)',
+                                      data).groups()
 
     def __add__(self, x):
         self.local_interfaces += x.local_interfaces
