@@ -146,6 +146,9 @@ class NXOS:
                     intf = self.interface.get('name', interface)
                     intf.cdp_neighbor = neighbor
 
+            if self.vpc:
+                self.vpc.peer = self.interface.get('abbr', self.vpc.peer_link.members[0]).cdp_neighbor.ip_addresses[0]
+
             # Collect VLAN Information
             vlans = self.exec_command('show vlan brief | inc active')
             vlans = nexus_tools.nx_string_split(vlans)
