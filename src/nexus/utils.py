@@ -57,9 +57,15 @@ class NXOS:
             # Populate Local VPC Information
             if 'vpc domain' in self.running_config:
                 domain = re.search(r'vpc domain (\d+)', self.running_config)[1]
-                peer, vpc_self = re.search(r'peer-keepalive.*destination ([.\d+]+).*source ([.\d+]+)',
-                                           self.running_config).groups()
-                self.vpc = VPC(domain, vpc_self, peer)
+                keepalive_peer, keepalive_self = re.search(r'peer-keepalive.*destination ([.\d+]+).*source ([.\d+]+)',
+                                                           self.running_config).groups()
+                self.vpc = VPC(domain=domain, keepalive_self=keepalive_self, keepalive_peer=keepalive_peer)
+            else:
+                self.vpc = None
+
+            self.vrf_configs = list(x.group()
+                                    for x in re.finditer(r'(?m)^vrf context [^\n]+\n( +[^\n]+\n)+',
+                                                         self.running_config))
 
             self.vrf_configs = list(x.group()
                                     for x in re.finditer(r'(?m)^vrf context [^\n]+\n( +[^\n]+\n)+',
@@ -150,8 +156,8 @@ class NXOS:
                     continue
                 self.vlans.add(f'vlan{vlan_id}', VLAN(int(vlan_id), vlan_name))
 
-            self.neighbor_check = []
-            self.neighbor_check += [x.local_interfaces for x in self.cdp_neighbors]
+            # self.neighbor_check = []
+            # self.neighbor_check += [x.local_interfaces for x in self.cdp_neighbors]
 
     def __enter__(self):
         return self
@@ -233,7 +239,7 @@ class NXOS:
 
         return list(unused_vlans)[offset]
 
-    def mac_lookup(self, mac):
+    def mac_lookup(self, mac) -> tuple:
         def valid_neighbor(neighbor: CDPNeighbor):
             return neighbor.software[0] == 'NX-OS' and 7 <= int(neighbor.software[1]) < 13
 
@@ -242,7 +248,7 @@ class NXOS:
         mac = mac[:4] + '.' + mac[4:8] + '.' + mac[8:]
 
         if not re.match(r'^[a-f\d]{4}\.[a-f\d]{4}\.[a-f\d]{4}$', mac):
-            return 'Invalid MAC address supplied'
+            raise ValueError('Invalid MAC address supplied')
 
         command = f'show mac address-table dynamic address {mac} | include dynamic'
         output = self.exec_command(command)
@@ -1001,11 +1007,16 @@ def get_subnet_information(env: str, ip: str):
         return 200, response
 
 
-def mac_lookup(host, mac):
+def mac_lookup(host, mac) -> dict:
     host = NXOS(host)
-    repeat, neighbor, interface = host.mac_lookup(mac)
+    try:
+        repeat, neighbor, interface = host.mac_lookup(mac)
+    except ValueError as e:
+        return {'error': str(e)}
+
     if interface is None:
-        return ['MAC Address not found']
+        return {'error': 'MAC address not found'}
+
     trace_data = TraceData(interface=interface.__dict__, **host.self_data())
     del host
     attempts = 1
