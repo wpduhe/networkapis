@@ -289,15 +289,18 @@ class VLAN:
 
 
 class VPC:
-    domain = None
-    self = None
-    peer = None
-    peer_link = None
+    domain: str
+    keepalive_self: str
+    keepalive_peer: str
+    peer: str = None
+    peer_link: Interface = None
 
-    def __init__(self, domain, vpc_self, peer):
+    def __init__(self, domain, keepalive_self, keepalive_peer: str, peer: str=None, peer_link: Interface=None):
         self.domain = domain
-        self.self = vpc_self
+        self.keepalive_self = keepalive_self
+        self.keepalive_peer = keepalive_peer
         self.peer = peer
+        self.peer_link = peer_link
 
 
 class VRF:
