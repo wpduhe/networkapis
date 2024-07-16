@@ -409,7 +409,7 @@ class NXOS:
         if self.vpc is not None:
             return {
                 'VPC Domain': self.vpc.domain,
-                'Self': self.vpc.self,
+                'Self': self.vpc.host,
                 'Peer': self.vpc.peer,
                 'Hostname': self.hostname
             }
