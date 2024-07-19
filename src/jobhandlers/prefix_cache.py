@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 logger = logging.getLogger(__name__)
 
 logging.getLogger('netmiko').setLevel(logging.WARNING)
+logging.getLogger('github').setLevel(logging.WARNING)
 
 
 def main():
