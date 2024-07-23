@@ -28,14 +28,12 @@ logging.getLogger('paramiko').setLevel(logging.WARNING)
 def main(score: int = 90, recipients: List[str] = None):
     def check_fabrics():
         logger.debug('Checking Fabric Lifetimes')
-        environments = json.load(open('data/ACIEnvironments.json'))
+        apics = [APIC(env=e['Name']) for e in json.load(open('data/ACIEnvironments.json'))['Environments']]
 
         d = ''
 
-        for environment in environments['Environments']:
-            if environment['Name'].lower() != 'parallon-dev':
-                apic = APIC(env=environment['Name'])
-
+        for apic in apics:
+            if apic.env.Name.lower() not in ['parallon-dev', 'drdc']:
                 logger.debug(f'Logged into {apic.env.Name}. Checking lifetimes...')
 
                 flashes = apic.get('/api/class/eqptFlash.json').json()['imdata']
