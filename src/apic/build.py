@@ -86,6 +86,7 @@ pc_active = GenericClass(apic_class='lacpLagPol', name='pc-LACP-Active', mode='a
                          ctrl='fast-sel-hot-stdby,graceful-conv,susp-individual')
 pc_on = GenericClass(apic_class='lacpLagPol', name='pc-Static-ON', mode='off', minLinks='1', maxLinks='16',
                      ctrl='fast-sel-hot-stdby,graceful-conv,susp-individual')
+llp = GenericClass(apic_class='fabricHIfPol', name='default', speed='auto', autoNeg='on')
 
 resp = session.post(f'{URL}/api/mo/uni/infra.json', cdp.json())
 print(resp.json())
@@ -100,6 +101,10 @@ print(resp.json())
 assert resp.ok
 
 resp = session.post(f'{URL}/api/mo/uni/infra.json', pc_on.json())
+print(resp.json())
+assert resp.ok
+
+resp = session.post(f'{URL}/api/mo/uni/infra.json', llp.json())
 print(resp.json())
 assert resp.ok
 
@@ -496,10 +501,10 @@ vz_any.children = [vz_prov, vz_cons]
 
 
 # Create VRFs for tn-HCA, tn-HCADR, tn-ADMZ
-vrf_hca = Context(name=env.VRF, annotation='primary_vrf:True')
-vrf_hcadr = Context(name='vrf-hcadr', annotation='primary_vrf:True')
+vrf_hca = Context(name=env.VRF, annotation='primary_vrf:True', pcEnfPref='unenforced')
+vrf_hcadr = Context(name='vrf-hcadr', annotation='primary_vrf:True', pcEnfPref='unenforced')
 vrf_admz = Context(name=env.ADMZVRF, annotation='primary_vrf:True')
-vrf_not_routed = Context(name='vrf-Not-Routed')
+vrf_not_routed = Context(name='vrf-Not-Routed', pcEnfPref='unenforced')
 
 vrf_hca.children = [vz_any]
 vrf_hcadr.children = [vz_any]
