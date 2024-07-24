@@ -5,6 +5,9 @@ import yaml
 import sys
 
 
+# TODO: This process is too intense for Github, too many API calls and running into API rate-limit.  Find another
+#  solution
+
 formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03dZ - %(name)s - %(levelname)s - %(message)s',
                               datefmt='%Y-%m-%dT%H:%M:%S')
 
@@ -20,11 +23,11 @@ logging.getLogger('github').setLevel(logging.WARNING)
 
 
 def main():
-    # TODO: Write this function to create an array of AppInstances and some of their key properties for lookup and
-    #  identification purposes
+    # Generate data to make retrieving AppInstance data and references faster.  DON'T store to Github
     application_data = []
     for application in gh.list_dir('applications'):
         for instance in gh.list_dir(f'applications/{application}'):
+            logger.debug(f'Processing {application}/{instance}...')
             inst = AppInstance.load(f'{application}/{instance}')
             application_data += [
                 dict(path=inst.path(),
@@ -34,15 +37,16 @@ def main():
             ]
 
     # Store application data
-    if gh.file_exists('pyapis/application_data.yaml'):
-        gh.update_file('pyapis/application_data.yaml', message='Updated data',
+    if gh.file_exists('pyapis/appinst_index.yaml'):
+        gh.update_file('pyapis/appinst_index.yaml', message='Updated data',
                        content=yaml.dump(application_data))
     else:
-        gh.add_file('pyapis/application_data.yaml', message='Initial Creation',
+        gh.add_file('pyapis/appinst_index.yaml', message='Initial Creation',
                     content=yaml.dump(application_data))
     return
 
 
 if __name__ == '__main__':
+    logger.debug('Updating AppInstance index data')
     gh = GithubAPI()
     main()

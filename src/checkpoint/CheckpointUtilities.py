@@ -36,9 +36,13 @@ class CheckpointAPI:
         # self.s3 = S3()
         self.gh = GithubAPI()
 
-    def __exit__(self):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
         if self.LoggedIn:
             self.DiscardChanges()
+            self.Logout()
 
     def SetPolicy(self, PolicyName: str):
         self.Policy = FirewallPolicy(PolicyName)
@@ -110,18 +114,19 @@ class CheckpointAPI:
             self.SID = logininfo['sid']
             self.LoggedIn = True
             self.UID = logininfo['uid']
-            self.GatewaysAndServers = \
-                self.PostJSON('/web_api/show-gateways-and-servers', {'details-level': 'full', 'limit': 500}).json()[
-                    'objects']
+            # self.GatewaysAndServers = \
+            #     self.PostJSON('/web_api/show-gateways-and-servers', {'details-level': 'full', 'limit': 500}).json()[
+            #         'objects']
             print('Logged in successfully')
 
     @classmethod
-    def LoginToDomain(cls, Domain):
+    def LoginToDomain(cls, Domain, username: str=None, password: str=None):
         api = cls()
         api.SessionName = 'Automation Testing'
         api.SessionDescription = 'Automation Testing'
         api.IPAddress = '10.26.1.96'
-        api.Password = os.getenv('FWPassword')
+        api.Username = (username if username else os.getenv('FWUsername'))
+        api.Password = (password if password else os.getenv('FWPassword'))
         api.Domain = Domain
         api.Login()
         return api
@@ -343,16 +348,19 @@ class CheckpointAPI:
 
         resp = self.PostJSON(URI, JSON)
 
-        objects = []
+        objects = resp.json()['objects']
+        # objects.sort(key=lambda x: x['name'])
 
-        if resp.json()['total'] > 0:
-            for obj in resp.json()['objects']:
-                objects.append(CheckpointObject(**obj))
+        return objects if objects else None
 
-            objects.sort(key=lambda x: x.name)
-            return objects
-        else:
-            return None
+        # if resp.json()['total'] > 0:
+        #     for obj in resp.json()['objects']:
+        #         objects.append(CheckpointObject(**obj))
+        #
+        #     objects.sort(key=lambda x: x.name)
+        #     return objects
+        # else:
+        #     return None
 
     def ObjectExists(self, Name: str, Type: str):
         search = self.GetObjects(Name, Type)

@@ -3,7 +3,6 @@ import requests
 import re
 import os
 from data.environments import ACIEnvironment
-from apic.apicGet import snapshot, exists, postToApic
 
 
 def copy_vmm_pgs(env, vmm_domain, aep):
