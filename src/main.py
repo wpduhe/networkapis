@@ -13,7 +13,7 @@ from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from apic import utils as apic_utils
 from apic.classes import EPG, AEP, InfraGeneric
 from apic import sviToBd
-from apic.intfConfig import intf_profile
+# from apic.intfConfig import intf_profile
 from bigip.utils import LTM
 from githubapi.utils import GithubAPI
 from ncm.utils import NCMIntegration
@@ -1706,21 +1706,21 @@ def create_new_aep(request: Request, req_data: CreateNewAEP):
     return Response(status_code=resp.status_code, content=json.dumps(resp.json()), media_type='application/json')
 
 
-@app.post('/apis/aci/intfProfile', tags=['ACI'], include_in_schema=False)
-def interface_profile(request: Request, req_data: IntfProfile):
-    """Creates a new ACI interface configuration given the supplied information."""
-    req_data = req_data.dict()
-
-    if not validate_api_key(req_data.pop('APIKey')):
-        return Response(status_code=403, content=json.dumps(['Invalid APIKey']), media_type='application/json')
-
-    req_logit(interface_profile, request, req_data)
-
-    status, response = intf_profile(req_data)
-
-    res_logit(interface_profile, request, response)
-
-    return Response(status_code=status, content=json.dumps(response), media_type='application/json')
+# @app.post('/apis/aci/intfProfile', tags=['ACI'], include_in_schema=False)
+# def interface_profile(request: Request, req_data: IntfProfile):
+#     """Creates a new ACI interface configuration given the supplied information."""
+#     req_data = req_data.dict()
+#
+#     if not validate_api_key(req_data.pop('APIKey')):
+#         return Response(status_code=403, content=json.dumps(['Invalid APIKey']), media_type='application/json')
+#
+#     req_logit(interface_profile, request, req_data)
+#
+#     status, response = intf_profile(req_data)
+#
+#     res_logit(interface_profile, request, response)
+#
+#     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
 
 
 @app.post('/apis/aci/{az}/configure_interfaces', tags=['ACI'])
