@@ -562,8 +562,11 @@ class CheckpointAPI:
         return resp
 
     def CheckForQueuedPush(self, policy_name):
-        if f'{policy_name}--{self.Domain}.json' not in self.gh.list_dir('pyapis/checkpoint/policy_push_queue'):
-            return True
+        if 'checkpoint' in self.gh.list_dir('pyapis') and 'policy_push_queue' in self.gh.list_dir('pyapis/checkpoint'):
+            if f'{policy_name}--{self.Domain}.json' not in self.gh.list_dir('pyapis/checkpoint/policy_push_queue'):
+                return True
+            else:
+                return False
         else:
             return False
 
