@@ -601,10 +601,13 @@ class CheckpointAPI:
                 PolicyInfo = {
                     'policy-package': PolicyName,
                     'targets': [
-                        'frdccoloextfwl',
-                        'xrdccoloextfwl',
+                        'FRDC-ISB-M_FW-EXT',
+                        'SEDC-ISB-EXT-FW',
                         'SLDC-EXT-VS',
-                        'TPDC-EXT-VS-FW'
+                        'SLDC-ISB-M_FW-EXT',
+                        'TPDC-EXT-VS-FW',
+                        'TPDC-ISB-M_FW-EXT',
+                        'XRDC-ISB-M_FW-EXT'
                     ],
                     'threat-prevention': False,
                     'access': True
@@ -646,8 +649,6 @@ class CheckpointAPI:
                     'threat-prevention': False,
                     'access': True
                 }
-                # self.s3.write_json(filename=f'{PolicyName}--{self.Domain}.json', content=PolicyInfo,
-                #                    path='checkpoint/policy_push_queue')
                 self.gh.add_file(file_path=f'pyapis/checkpoint/policy_push_queue/{PolicyName}--{self.Domain}.json',
                                  message='Policy Push Queue', content=json.dumps(PolicyInfo))
 
