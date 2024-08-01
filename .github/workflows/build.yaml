@@ -1,12 +1,14 @@
 name: Container Image Build
 
 on:
-  schedule:
-    - cron: "0 0 1 2,5,8,11 *"
+  # schedule:
+  #   - cron: "0 0 1 2,5,8,11 *"
 
   push:
-    branches:
-      - main
+    tags:
+      - "*"
+    # branches:
+    #   - main
 
   pull_request:
     branches:
