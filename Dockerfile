@@ -1,4 +1,4 @@
-FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.10
+FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.8
 
 # token expiration can be overridden from docker run
 ENV TOKEN_EXPIRATION_MINUTES 10080
