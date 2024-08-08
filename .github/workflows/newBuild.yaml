@@ -4,7 +4,7 @@
 
 # Multiple Python versions and OS variants may be specified in the second job!
 
-name: Main
+name: Build and Publish Image
 
 # Controls when the action will run.
 on:
