@@ -1,0 +1,98 @@
+# Master YAML for Python packages
+
+# Be sure to update the PACKAGE_NAME environment variable below!
+
+# Multiple Python versions and OS variants may be specified in the second job!
+
+name: Main
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push to any branch, and to tags with correct name.
+  # push:
+  #   tags: ["*"]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
+env:
+  PY_VERSION: "3.11"
+  NEXUS_PASSWORD: ${{secrets.NEXUS_PASSWORD}}
+  NEXUS_USERNAME: ${{secrets.NEXUS_USERNAME}}
+  NEXUS_REPOSITORY: repos.medcity.net/repository/hcanetworkservicespypi/
+  PAT_FOR_GITHUB: ${{ secrets.PAT_FOR_GITHUB }}
+  # setting below prevents twine from trying to reach Nexus through Internet proxy servers.
+  NO_PROXY: nexus.hca.corpad.net,repos.medcity.net
+  # not really a package, this is the name of image that will be created in a Docker repo
+  PACKAGE_NAME: ${{ github.event.repository.name }}
+  # tagged release causes variable below to be either "prod" or "default",
+  # corresponding to tox environments.
+  TOX_ENV: "${{ startsWith(github.event.ref, 'refs/tags/') && 'prod' || 'default' }}"
+  MESSAGING_WEBHOOK: ${{ secrets.MESSAGING_WEBHOOK }}
+  DB_TIMEZONE: ${{ secrets.DB_TIMEZONE }}
+
+jobs:
+  # test_linux:
+  #   name: Test on Linux
+  #   runs-on: [ onprem-k8s-arc,enterprise,lnx-amd64,dind,self-hosted ]
+  #   strategy:
+  #     matrix:
+  #       python-version: ["3.10", "3.11"]
+
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+
+  #     - name: Ensure updated packages
+  #       run: |
+  #         python -m pip install --upgrade tox
+  #     - name: Run tests
+  #       # the --basetemp switch given to pytest (yes to pytest) below seems to
+  #       # be necessary to prevent errors on GitHub where it complains about
+  #       # creating a git repo within a git repo.
+  #       run: >-
+  #         tox -e ${{ env.TOX_ENV }} --
+  #         -rFEx --durations 10 --color yes -m "not slow and not integration"
+  #         --basetemp=${{ runner.temp }}/.testtemp --cov-report html --cov-config .coveragerc
+
+  #     - name: Upload test coverage HTML Report artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: htmlcov-${{ matrix.python-version }}
+  #         path: htmlcov/
+
+  build_docker:
+    name: Create and/or publish image
+    runs-on: [ onprem-k8s-arc,enterprise,lnx-amd64,dind,self-hosted ]
+    # needs: [test_linux]
+
+    steps:
+      - uses: HCANetworkServices/nm_build_docker@v1
+        with:
+          registry_url: hcanetworkservicesdocker.repos.medcity.net
+          registry_user: ${{ env.NEXUS_USERNAME }}
+          registry_password: ${{ env.NEXUS_PASSWORD }}
+          img_name: pyapis-prd
+          secrets: |
+            "nexuscreds=${{ env.NEXUS_USERNAME }}:${{ env.NEXUS_PASSWORD }}"
+            "build_context="
+          push: false
+
+      # - name: Send Notification
+      #   if: startsWith(github.event.ref, 'refs/tags/')
+      #   uses: HCANetworkServices/nm_action_send_message@v0.1.0
+      #   with:
+      #     webhook_url: ${{ env.MESSAGING_WEBHOOK }}
+      #     message: >-
+      #       ## New Nelease\n
+      #       - **Repo**: ${{ github.event.repository.name }} [${{ github.ref_name }}](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }})\n
+      #       - **User**: ${{ github.actor }}\n

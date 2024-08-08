@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "standard": {
+      "format": "%(asctime)s.%(msecs)03d - %(name)s:%(filename)s:%(lineno)d - %(levelname)s - %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "formatter": "standard",
+      "level": "DEBUG",
+      "stream": "ext://sys.stdout"
+    }
+  },
+  "root": {
+    "level": "DEBUG",
+    "handlers": [
+      "console"
+    ],
+    "propagate": "no"
+  },
+  "loggers": {
+    "urllib3": {
+      "level": "WARNING",
+      "handlers": [
+        "console"
+      ],
+      "propagate": "no"
+    }, 
+    "paramiko": {
+      "level": "WARNING",
+      "handlers": [
+        "console"
+      ],
+      "propagate": "no"
+    }
+  }
+} 
