@@ -19,7 +19,7 @@ COPY src/requirements.txt .
 RUN pip3 install --upgrade pip
 RUN pip3 install --upgrade setuptools
 RUN echo Testing echo command
-RUN --mount=type=secret,id=nexuscreds echo $nexuscreds
+RUN --mount=type=secret,id=nexuscreds echo Here they are: $nexuscreds
 RUN --mount=type=secret,id=nexuscreds \
   pip3 install --no-cache-dir -r requirements.txt --no-deps \
   --extra-index-url=https://${nexuscreds}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple \

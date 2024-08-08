@@ -22,8 +22,8 @@ concurrency:
 
 env:
   PY_VERSION: "3.11"
-  NEXUS_PASSWORD: ${{secrets.NEXUS_PASSWORD}}
-  NEXUS_USERNAME: ${{secrets.NEXUS_USERNAME}}
+  NEXUS_PASSWORD: ${{secrets.REGISTRY_PASSWORD}}
+  NEXUS_USERNAME: ${{secrets.REGISTRY_USERNAME}}
   NEXUS_REPOSITORY: repos.medcity.net/repository/hcanetworkservicespypi/
   PAT_FOR_GITHUB: ${{ secrets.PAT_FOR_GITHUB }}
   # setting below prevents twine from trying to reach Nexus through Internet proxy servers.
@@ -82,7 +82,7 @@ jobs:
           registry_user: ${{ secrets.REGISTRY_USERNAME }}
           registry_password: ${{ secrets.REGISTRY_PASSWORD }}
           img_name: pyapis-prd
-          secrets: "nexuscreds=${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }}"
+          secrets: "nexuscreds=${{ env.NEXUS_USERNAME }}:${{ env.NEXUS_PASSWORD }}"
           push: false
 
       # - name: Send Notification
