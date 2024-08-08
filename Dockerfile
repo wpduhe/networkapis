@@ -1,69 +1,31 @@
-# syntax=docker/dockerfile:1
-#
-# Dockerfile
-# Documentation: https://docs.docker.com/engine/reference/builder/
-#
-# This Dockerfile's purpose is to establish a basis for building a parent image
-# for future use in building application images.  It is not specifically a
-# base image by definition (i.e., base images have 'scratch' as their source).
-#
-# The base/parent images used to source a parent image for HCA should be pulled
-# utilizing HCA's Nexus Repository Manager which supports proxying of remote
-# docker registries.
-# The Nexus equivalent URL to those registries follow:
-#
-# hca-enterprise-docker-proxy.repos.medcity.net
-#
-# The above proxy mirrors many docker registries including, but not limited to:
-# docker.io, quay.io, registry.access.redhat.com, registry.connect.redhat.com,
-# and registry.redhat.io.
-#
-FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.8:latest
+FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.11
 
-# The following ARG is to allow granular control of the image build.  If the image
-# being built is not a base or parent and is using a managed HCA base/parent image
-# then the necessity to update the base operating system packages in not required.
-# Setting the BASE_PARENT_IMAGE argument (flag) to a value of zero will prevent
-# update of the operating system packages.
-ARG BASE_PARENT_IMAGE=0
-# The PROXYURL argument is set to an empty/null content on purpose to allow the build
-# scripts to behave in a particular manner.  It should not be modified here unless the
-# desired result is to have a proxy configuration made static.
-ARG PROXYURL=
-# The IMAGE_VERSION argument is used by the build workflows - DO NOT ALTER
-ARG IMAGE_VERSION
-# The following may be overridden by utilizing the --build-arg option.
-ARG APP_USER=appuser
-ARG APP_UID=1001
-ARG APP_GROUP=appgroup
-ARG APP_GID=9001
-ARG COMPANY_NAME="HCA Healthcare"
-ARG ORGANIZATION_NAME="ITG"
-ARG DEPARTMENT_NAME="Network Services"
+# token expiration can be overridden from docker run
+ENV TOKEN_EXPIRATION_MINUTES 10080
 
-LABEL company="${COMPANY_NAME}"
-LABEL organization="${ORGANIZATION_NAME}"
-LABEL department="${DEPARTMENT_NAME}"
-# DO NOT remove or modify the following label as it is used by the included
-# GitHub Actions workflow.
-LABEL version=$IMAGE_VERSION
+# these could also be overridden, but probably not a good reason to do so. These
+# two are required by the nm_jwt_oauth_plugin plugin.
+ENV ROLE_MAPPER "app.role_mapper.role_mapper"
+ENV SCOPE_DEFS "app.role_mapper.get_scopes"
 
-# This is a base image which must run as root during build processing
-USER root
-
-# Setting a general location for application content
-WORKDIR /build
-
-# This "template" is set up to use an installation script to assist in minimizing
-# the layers of the resulting container image.
-COPY src/requirements.txt .
-COPY --chmod=0755 ./build-files/* ./
-# RUN chmod 0644 ./*.txt && ./build.sh && rm -rf /build
-RUN --mount=type=secret,id=NEXUSUSER --mount=type=secret,id=NEXUSPASS \
-    chmod 0644 ./*.txt && ./build.sh && rm -rf /build
+ARG PORT=8080
 
 WORKDIR /opt/app
-COPY src .
 
-ENTRYPOINT ["gunicorn","--config=gunicorn_config.py","main:app"]
-# CMD ["/bin/bash"]
+# install dependencies
+
+RUN pip3 install --upgrade pip
+RUN pip3 install --upgrade setuptools
+RUN --mount=type=secret,id=nexuscreds --mount=type=secrets,id=build_context\
+  --mount=type=bind,source=src/requirements${build_context}.txt,target=/tmp/requirements.txt\
+  pip3 install --no-cache-dir -r /tmp/requirements.txt --no-deps \
+  --extra-index-url=https://${nexuscreds}@repos.medcity.net:443/repository/hcanetworkservicespypi/simple \
+  --trusted-host repos.medcity.net
+
+COPY src /opt/app/
+COPY entrypoint.sh loggingconfig.json .
+
+WORKDIR /opt/app/src
+
+# This form allows for graceful shutdown of app, killing background threads
+ENTRYPOINT [ "/opt/app/entrypoint.sh" ]
