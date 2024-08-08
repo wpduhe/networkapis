@@ -16,7 +16,7 @@ WORKDIR /opt/app
 
 RUN pip3 install --upgrade pip
 RUN pip3 install --upgrade setuptools
-RUN --mount=type=secret,id=nexuscreds --mount=type=secrets,id=build_context\
+RUN --mount=type=secret,id=nexuscreds --mount=type=secret,id=build_context\
   --mount=type=bind,source=src/requirements${build_context}.txt,target=/tmp/requirements.txt\
   pip3 install --no-cache-dir -r /tmp/requirements.txt --no-deps \
   --extra-index-url=https://${nexuscreds}@repos.medcity.net:443/repository/hcanetworkservicespypi/simple \
