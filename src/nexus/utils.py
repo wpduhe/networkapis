@@ -757,6 +757,13 @@ class NXOS:
         print('Script has been copied to you clipboard and to the device')
         return script
 
+    def svi_config_to_aci(self, svi_vlan: int, extend_only: bool=True):
+        # TODO: Complete this method
+        subnets = [s for s in self.subnets if s.vlan.id == svi_vlan]
+        vlan = self.vlans.get('id', svi_vlan)
+
+        return None
+
 
 def find_ospf_advertisement_difference(a: NXOS, b: NXOS):
     status_search = re.compile(r'ip router ospf \d+ area (\d{1,3}\.){3}\d{1,3}')
