@@ -23,7 +23,7 @@ RUN --mount=type=secret,id=nexuscreds \
   --extra-index-url=https://$( cat /run/secrets/nexuscreds )@repos.medcity.net/repository/hcanetworkservicespypi/simple
 
 COPY src /opt/app/
-COPY entrypoint.sh loggingconfig.json .
+COPY --chmod 0755 entrypoint.sh loggingconfig.json .
 
 WORKDIR /opt/app/src
 
