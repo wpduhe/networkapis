@@ -82,9 +82,7 @@ jobs:
           registry_user: ${{ env.NEXUS_USERNAME }}
           registry_password: ${{ env.NEXUS_PASSWORD }}
           img_name: pyapis-prd
-          secrets: |
-            "nexuscreds=${{ env.NEXUS_USERNAME }}:${{ env.NEXUS_PASSWORD }}"
-            "build_context="
+          secrets: "nexuscreds=${{ env.NEXUS_USERNAME }}:${{ env.NEXUS_PASSWORD }}"
           push: false
 
       # - name: Send Notification
