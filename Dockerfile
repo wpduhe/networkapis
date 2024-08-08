@@ -21,7 +21,7 @@ RUN pip3 install --upgrade setuptools
 RUN --mount=type=secret,id=nexuscreds \
   pip3 install --no-cache-dir -r requirements.txt --no-deps \
   --extra-index-url=https://${nexuscreds}@nexus.hca.corpad.net/repository/hcanetworkservicespypi/simple \
-  --trusted-host nexus.hca.corpad.net
+  --trusted-host=nexus.hca.corpad.net
 
 COPY src /opt/app/
 COPY entrypoint.sh loggingconfig.json .
