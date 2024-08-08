@@ -79,10 +79,10 @@ jobs:
       - uses: HCANetworkServices/nm_build_docker@v1
         with:
           registry_url: hcanetworkservicesdocker.repos.medcity.net
-          registry_user: ${{ env.NEXUS_USERNAME }}
-          registry_password: ${{ env.NEXUS_PASSWORD }}
+          registry_user: ${{ secrets.REGISTRY_USERNAME }}
+          registry_password: ${{ secrets.REGISTRY_PASSWORD }}
           img_name: pyapis-prd
-          secrets: "nexuscreds=${{ env.NEXUS_USERNAME }}:${{ env.NEXUS_PASSWORD }}"
+          secrets: "nexuscreds=${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }}"
           push: false
 
       # - name: Send Notification
