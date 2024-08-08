@@ -2,9 +2,7 @@ FROM hca-docker-innersource.repos.medcity.net/containers/base/python-3.8
 
 ARG PORT=8080
 
-# install dependencies
-
-# COPY ./src/requirements.txt .
+USER root
 
 RUN pip3 install --upgrade pip
 RUN pip3 install --upgrade setuptools
@@ -12,10 +10,10 @@ RUN --mount=type=secret,id=nexuscreds --mount=type=bind,source=./src/requirement
   pip3 install --no-cache-dir -r ./requirements.txt --no-deps \
   --extra-index-url=https://$( cat /run/secrets/nexuscreds )@repos.medcity.net/repository/hcanetworkservicespypi/simple
 
-COPY src /opt/app/
-COPY --chmod=0755 entrypoint.sh loggingconfig.json .
+WORKDIR /opt/app
 
-WORKDIR /opt/app/src
+COPY src .
+COPY --chmod=0755 entrypoint.sh loggingconfig.json .
 
 # This form allows for graceful shutdown of app, killing background threads
 ENTRYPOINT [ "python","-m","uvicorn","main:app","--port=8080","--host=0.0.0.0" ]
