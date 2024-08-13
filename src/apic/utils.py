@@ -5510,25 +5510,26 @@ def add_new_leaf_pair(env: str, rack1: str, serial1: str, rack2: str, serial2: s
 def get_epg_data(environment: str, epg: str):
     subnets = set()
 
-    with APIC(env=environment) as apic:
-        apic_subnets = apic.get('/api/class/fvSubnet.json').json()['imdata']
-        apic_subnets = list(IPv4Network(subnet['fvSubnet']['attributes']['ip'], strict=False)
-                            for subnet in apic_subnets)
+    apic = APIC(environment)
 
-        endpoints = apic.get(f'/api/class/fvCEp.json?query-target-filter=wcard(fvCEp.dn,"{epg}")').json()['imdata']
-        if endpoints:
-            epg_dn = re.search(r'(.*)/cep', list(endpoints)[0]['fvCEp']['attributes']['dn']).group(1)
-            epg = APICObject.load(apic.get('/api/mo/%s.json?%s' % (epg_dn, FULL_CONFIG)).json()['imdata'][0])
-        else:
-            epg = apic.collect_epgs(epg=epg)
-            epg = APICObject.load(epg)
+    apic_subnets = apic.get('/api/class/fvSubnet.json').json()['imdata']
+    apic_subnets = list(IPv4Network(subnet['fvSubnet']['attributes']['ip'], strict=False)
+                        for subnet in apic_subnets)
 
-        endpoint_count = len(endpoints)
-        vlans = set(int(endpoint['fvCEp']['attributes']['encap'][5:]) for endpoint in endpoints)
-        endpoints = set(endpoint['fvCEp']['attributes']['ip'] for endpoint in endpoints
-                        if endpoint['fvCEp']['attributes']['ip'] != '0.0.0.0')
+    epg_obj = APICObject.load(apic.get(f'/api/class/fvAEPg.json?'
+                                       f'query-target-filter=eq(fvAEPg.name,"{epg}")&{FULL_CONFIG}').json()['imdata'])
 
-    bd = next(child for child in epg.children if child.class_ == 'fvRsBd')
+    if not epg_obj:
+        return 404, {'error': f'EPG {epg} does not exist in {environment.upper()}'}
+
+    endpoints = apic.get(f'/api/mo/{epg_obj.attributes.dn}.json?query-target=subtree&target-subtree-class=fvCEp')
+    endpoints = [APICObject.load(ep) for ep in endpoints.json()['imdata']]
+
+    endpoint_count = len(endpoints)
+    vlans = set(int(re.search(r'\d+', endpoint.attributes.encap).group()) for endpoint in endpoints)
+    endpoints = set(endpoint.attributes.ip for endpoint in endpoints if endpoint.attributes.ip != '0.0.0.0')
+
+    bd = epg_obj.get_child_class('fvRsBd')
 
     for endpoint in endpoints:
         for subnet in apic_subnets:
@@ -5536,11 +5537,11 @@ def get_epg_data(environment: str, epg: str):
                 subnets.add(subnet.with_prefixlen)
 
     response = {
-        'epg_name': epg.attributes.name,
+        'epg_name': epg_obj.attributes.name,
         'bridge_domain': bd.attributes.tnFvBDName,
         'subnets': list(subnets),
         'vlans': list(vlans),
-        'epg_dn': epg.attributes.dn,
+        'epg_dn': epg_obj.attributes.dn,
         'endpoint_count': endpoint_count
     }
 
