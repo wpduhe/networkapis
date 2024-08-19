@@ -174,10 +174,10 @@ class sviToBd:
 
     def migrate(self, stage):
         import requests
-        from apic import apicGet
+        from apic.utils import APIC
         from napalm import get_network_driver
 
-        rollback = apicGet.snapshot(self.apicEnv.Name, 'Auto pre-sviToBd {} {}'.format(', '.join(self.vlans), stage))
+        rollback = APIC(env=self.apicEnv.Name).snapshot('Auto pre-sviToBd {} {}'.format(', '.join(self.vlans), stage))
 
         if rollback is False:
             return 'Automated Snapshot Failed.  Migration configuration aborted.'
