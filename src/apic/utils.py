@@ -2617,6 +2617,8 @@ class APIC:
         interfaces = [GenericClass.load(intf) for intf in self.get(f'/api/class/l1RsAttEntityPCons.json?'
                                                                    f'query-target-filter=wcard(l1RsAttEntityPCons.tDn,'
                                                                    f'"{aep_name}")').json()['imdata']]
+        # Further filter interfaces for exact match
+        interfaces = [intf for intf in interfaces if re.search(rf'{aep_name}$', intf.attributes.tDn)]
 
         # Extract switch information and Construct response data for interfaces
         response_data = {}
