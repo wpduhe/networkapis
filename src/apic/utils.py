@@ -4495,16 +4495,16 @@ def create_dr_env(src_env, dst_env):
         return 200, [f'DR Environment creation completed']
 
 
-def create_dr_env_v2(src_env, dst_env):
+def create_dr_env_v2(src_env: str, dst_env: str):
     with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
         if drenv.snapshot(descr='Auto createDrenvV2') is False:
             return 500, ['Automated Snapshot Failed.  Task Aborted.']
 
         # Collect DR Tags for creating placeholder VLANs
-        tags = env.collect_tags('dr')
+        tags = [APICObject.load(_) for _ in env.collect_tags('dr')]
 
         # Get list of EPGs
-        dr_epg_list = [EPG_DN_SEARCH.search(_['tagInst']['attributes']['dn']) for _ in tags]
+        dr_epg_list = [EPG_DN_SEARCH.search(_.attributes.dn) for _ in tags]
 
         # Get list of application profiles
         dr_ap_list = set(f'uni/tn-{_.group(1)}/ap-{_.group(2)}' for _ in dr_epg_list)
@@ -4516,7 +4516,7 @@ def create_dr_env_v2(src_env, dst_env):
         rsbds = [APICObject.load(env.get(f'/api/mo/{_.group()}/rsbd.json').json()['imdata']) for _ in dr_epg_list]
         bds = [APICObject.load(env.get(f'/api/mo/{_.attributes.tDn}.json?{FCCO}').json()['imdata']) for _ in rsbds]
 
-        # Modify EPG configs for target environment (Physical Domain, others?)
+        # Modify EPG configs for target environment
         for epg in epgs:
             tn, ap, epg_name = EPG_DN_SEARCH.search(epg.attributes.dn).groups()
 
@@ -4584,27 +4584,24 @@ def create_dr_env_v2(src_env, dst_env):
                 continue
             else:
                 ap = AP(dn=dn, status='created')
-                # resp = drenv.post(ap.json())
-                print(ap.json(empty_fields=True))
+                resp = drenv.post(ap.json(empty_fields=True))
 
-                # if not resp.ok:
-                #     raise Exception(f'Failure to create application profile: {dn} : {json.dumps(resp.json())}')
+                if not resp.ok:
+                    raise Exception(f'Failure to create application profile: {dn} : {json.dumps(resp.json())}')
 
         for bd in bds:
             bd.create_modify()
-            # resp = drenv.post(bd.json())
-            print(bd.json(empty_fields=True))
+            resp = drenv.post(bd.json(empty_fields=True))
 
-            # if not resp.ok:
-            #     raise Exception(f'Failure to create bridge domain: {bd.attributes.dn} : {json.dumps(resp.json())}')
+            if not resp.ok:
+                raise Exception(f'Failure to create bridge domain: {bd.attributes.dn} : {json.dumps(resp.json())}')
 
         for epg in epgs:
             epg.create_modify()
-            # resp = drenv.post(epg.json())
-            print(epg.json(empty_fields=True))
+            resp = drenv.post(epg.json(empty_fields=True))
 
-            # if not resp.ok:
-            #     raise Exception(f'Failure to create endpoint group: {epg.attributes.dn} : {json.dumps(resp.json())}')
+            if not resp.ok:
+                raise Exception(f'Failure to create endpoint group: {epg.attributes.dn} : {json.dumps(resp.json())}')
 
         # Get infraRsFuncToEpg for Placeholders
         mappings = []
