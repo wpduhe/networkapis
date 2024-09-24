@@ -131,14 +131,14 @@ class APICObject:
         if self.children == list():
             json_data = {
                 self.class_: {
-                    'attributes': self.attributes.json()
+                    'attributes': self.attributes.json(empty_fields=empty_fields)
                 }
             }
         else:
             json_data = {
                 self.class_: {
                     'attributes': self.attributes.json(empty_fields=empty_fields),
-                    'children': list((obj.json() for obj in self.children))
+                    'children': [obj.json(empty_fields=empty_fields) for obj in self.children]
                 }
             }
 
