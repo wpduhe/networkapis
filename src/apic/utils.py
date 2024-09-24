@@ -54,6 +54,7 @@ DRT_TENANT = 'tn-DRTEST'
 DRT_VRF = 'vrf-drtest'
 
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
+AP_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)')
 BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
 APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}', flags=re.IGNORECASE)
@@ -4492,6 +4493,149 @@ def create_dr_env(src_env, dst_env):
         # requests.get('https://pyapis.ocp.app.medcity.net/apis/aci/updateVlanSpreadsheets', verify=False)
 
         return 200, [f'DR Environment creation completed']
+
+
+def create_dr_env_v2(src_env, dst_env):
+    with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
+        if drenv.snapshot(descr='Auto createDrenvV2') is False:
+            return 500, ['Automated Snapshot Failed.  Task Aborted.']
+
+        # Collect DR Tags for creating placeholder VLANs
+        tags = env.collect_tags('dr')
+
+        # Get list of EPGs
+        dr_epg_list = [EPG_DN_SEARCH.search(_['tagInst']['attributes']['dn']) for _ in tags]
+
+        # Get list of application profiles
+        dr_ap_list = set(f'uni/tn-{_.group(1)}/ap-{_.group(2)}' for _ in dr_epg_list)
+
+        # Collect EPGs tagged for DR
+        epgs = [APICObject.load(env.get(f'/api/mo/{_.group()}.json?{FCCO}').json()['imdata']) for _ in dr_epg_list]
+
+        # Collect bridge domains for each DR tagged EPG
+        rsbds = [APICObject.load(env.get(f'/api/mo/{_.group()}/rsbd.json').json()['imdata']) for _ in dr_epg_list]
+        bds = [APICObject.load(env.get(f'/api/mo/{_.attributes.tDn}.json?{FCCO}').json()['imdata']) for _ in rsbds]
+
+        # Modify EPG configs for target environment (Physical Domain, others?)
+        for epg in epgs:
+            tn, ap, epg_name = EPG_DN_SEARCH.search(epg.attributes.dn).groups()
+
+            if tn == 'tn-HCA':
+                tn = f'tn-{env.env.Name}'
+            elif tn == 'tn-ADMZ':
+                tn = f'tn-{env.env.Name}-ADMZ'
+            else:
+                raise Exception('Unexpected Tenant name')
+
+            epg.attributes.dn = f'uni/tn-{tn}/ap-{ap}/epg-{epg_name}'
+
+            _ = epg.pop_child_class(FvRsDomAtt.class_)
+            epg.domain(drenv.env.PhysicalDomain)
+
+            # Remove unneeded children (contracts, tags, static paths)
+            while True:
+                a = epg.pop_child_class('fvRsCons')
+                b = epg.pop_child_class('fvRsProv')
+                c = epg.pop_child_class('tagInst')
+                d = epg.pop_child_class('tagAnnotation')
+                e = epg.pop_child_class('fvRsPathAtt')
+
+                if a or b or c or d or e:
+                    continue
+                else:
+                    break
+
+        # Clean up Bridge Domains
+        for bd in bds:
+            tn, bd_name = BD_DN_SEARCH.search(bd.attributes.dn).groups()
+
+            if tn == 'tn-HCA':
+                tn = f'tn-{env.env.Name}'
+            elif tn == 'tn-ADMZ':
+                tn = f'tn-{env.env.Name}-ADMZ'
+            else:
+                raise Exception('Unexpected Tenant name')
+
+            bd.attributes.dn = f'uni/tn-{tn}/BD-{bd_name}'
+
+            # Keep only subnets
+            subnets = bd.get_child_class_iter(Subnet.class_)
+            for subnet in subnets:
+                subnet.attributes.scope = 'public,shared'
+                subnet.attributes.preferred = 'no'
+                subnet.attributes.virtual = 'no'
+
+            bd.children = subnets
+            bd.use_vrf('vrf-drtest')
+
+        for ap in dr_ap_list:
+            tn, ap_name = AP_DN_SEARCH.search(ap).groups()
+
+            if tn == 'tn-HCA':
+                dn = f'uni/tn-tn-{env.env.Name}/ap-{ap_name}'
+            elif tn == 'tn-ADMZ':
+                dn = f'uni/tn-tn-{env.env.Name}-ADMZ/ap-{ap_name}'
+            else:
+                raise Exception('Unexpected Tenant name')
+
+            ap_exist = jsonload(drenv.get(f'/api/mo/{dn}.json'))
+
+            if int(ap_exist.totalCount):
+                continue
+            else:
+                ap = AP(dn=dn, status='created')
+                # resp = drenv.post(ap.json())
+                print(ap.json(empty_fields=True))
+
+                # if not resp.ok:
+                #     raise Exception(f'Failure to create application profile: {dn} : {json.dumps(resp.json())}')
+
+        for bd in bds:
+            bd.create_modify()
+            # resp = drenv.post(bd.json())
+            print(bd.json(empty_fields=True))
+
+            # if not resp.ok:
+            #     raise Exception(f'Failure to create bridge domain: {bd.attributes.dn} : {json.dumps(resp.json())}')
+
+        for epg in epgs:
+            epg.create_modify()
+            # resp = drenv.post(epg.json())
+            print(epg.json(empty_fields=True))
+
+            # if not resp.ok:
+            #     raise Exception(f'Failure to create endpoint group: {epg.attributes.dn} : {json.dumps(resp.json())}')
+
+        # Get infraRsFuncToEpg for Placeholders
+        mappings = []
+
+        ifes = [APICObject.load(_) for _ in drenv.get('/api/class/infraRsFuncToEpg.json?query-target-filter='
+                                                      'wcard(infraRsFuncToEpg.dn,"aep-Placeholders")').json()['imdata']]
+        ifes = [(EPG_DN_SEARCH.search(ife.attributes.dn), ife) for ife in ifes]
+
+        for epg in epgs:
+            if epg.attributes.dn not in [ife[0].group() for ife in ifes]:
+                tn_name, ap_name, epg_name = EPG_DN_SEARCH.search(epg.attributes.dn).groups()
+
+                mappings += [{
+                    'Tenant': tn_name,
+                    'AP': ap_name,
+                    'EPG': epg_name,
+                    'AEP': 'aep-Placeholders'
+                }]
+
+        req_data = {
+            'APIKey': os.getenv('localapikey'),
+            'AvailabilityZone': drenv.env.Name,
+            'AEPMappings': mappings
+        }
+
+        print(json.dumps(req_data))
+
+        # resp = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
+        #                      verify=False)
+
+        return bds, epgs
 
 
 # def tag_epgs_v2(env, epgs: list):
