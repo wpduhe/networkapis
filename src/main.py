@@ -1821,7 +1821,9 @@ def create_dr_environment(request: Request, req_data: CreateDREnvironment):
 
     env = ACIEnvironment(req_data['Environment'])
 
-    status, response = apic_utils.create_dr_env(env.Name, env.DREnv)
+    status, response = apic_utils.create_dr_env_v2(env.Name, env.DREnv)
+
+    res_logit(create_dr_environment, request, response)
 
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
 
