@@ -4496,6 +4496,8 @@ def create_dr_env(src_env, dst_env):
 
 
 def create_dr_env_v2(src_env: str, dst_env: str):
+    starttime = time.perf_counter()
+
     with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
         if drenv.snapshot(descr='Auto createDrenvV2') is False:
             return 500, ['Automated Snapshot Failed.  Task Aborted.']
@@ -4632,7 +4634,7 @@ def create_dr_env_v2(src_env: str, dst_env: str):
         # resp = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
         #                      verify=False)
 
-        return bds, epgs
+        return 200, [f'DR Environment creation completed in {round(time.perf_counter() - starttime, 3)} seconds']
 
 
 # def tag_epgs_v2(env, epgs: list):
