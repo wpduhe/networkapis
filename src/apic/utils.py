@@ -4603,7 +4603,7 @@ def create_dr_env_v2(src_env: str, dst_env: str):
 
         for epg in epgs:
             epg.create_modify()
-            tenant, ap, _ = EPG_DN_SEARCH.search(epg.attributes.dn)
+            tenant, ap, _ = EPG_DN_SEARCH.search(epg.attributes.dn).groups()
             resp = drenv.post(epg.json(empty_fields=True), f'/api/mo/uni/tn-{tenant}/ap-{ap}.json')
 
             if not resp.ok:
