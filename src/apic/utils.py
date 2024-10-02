@@ -4527,7 +4527,7 @@ def create_dr_env_v2(src_env: str, dst_env: str):
             elif tn == 'tn-ADMZ':
                 tn = f'tn-{env.env.Name}-ADMZ'
             else:
-                raise Exception('Unexpected Tenant name')
+                raise Exception(f'Unexpected Tenant name: {tn}')
 
             epg.attributes.dn = f'uni/tn-{tn}/ap-{ap}/epg-{epg_name}'
 
@@ -4556,7 +4556,7 @@ def create_dr_env_v2(src_env: str, dst_env: str):
             elif tn == 'tn-ADMZ':
                 tn = f'tn-{env.env.Name}-ADMZ'
             else:
-                raise Exception('Unexpected Tenant name')
+                raise Exception(f'Unexpected Tenant name: {tn}')
 
             bd.attributes.dn = f'uni/tn-{tn}/BD-{bd_name}'
 
@@ -4580,27 +4580,31 @@ def create_dr_env_v2(src_env: str, dst_env: str):
             else:
                 raise Exception('Unexpected Tenant name')
 
+            tenant, _ = AP_DN_SEARCH.search(dn).groups()
+
             ap_exist = jsonload(drenv.get(f'/api/mo/{dn}.json'))
 
             if int(ap_exist.totalCount):
                 continue
             else:
-                ap = AP(dn=dn, status='created')
-                resp = drenv.post(ap.json(empty_fields=True))
+                ap = AP(name=ap_name, status='created')
+                resp = drenv.post(ap.json(empty_fields=True), f'/api/mo/uni/tn-{tenant}.json')
 
                 if not resp.ok:
                     raise Exception(f'Failure to create application profile: {dn} : {json.dumps(resp.json())}')
 
         for bd in bds:
+            tenant, _ = BD_DN_SEARCH.search(bd.attributes.dn).groups()
             bd.create_modify()
-            resp = drenv.post(bd.json(empty_fields=True))
+            resp = drenv.post(bd.json(empty_fields=True), f'/api/mo/uni/tn-{tenant}.json')
 
             if not resp.ok:
                 raise Exception(f'Failure to create bridge domain: {bd.attributes.dn} : {json.dumps(resp.json())}')
 
         for epg in epgs:
             epg.create_modify()
-            resp = drenv.post(epg.json(empty_fields=True))
+            tenant, ap, _ = EPG_DN_SEARCH.search(epg.attributes.dn)
+            resp = drenv.post(epg.json(empty_fields=True), f'/api/mo/uni/tn-{tenant}/ap-{ap}.json')
 
             if not resp.ok:
                 raise Exception(f'Failure to create endpoint group: {epg.attributes.dn} : {json.dumps(resp.json())}')
@@ -4629,10 +4633,8 @@ def create_dr_env_v2(src_env: str, dst_env: str):
             'AEPMappings': mappings
         }
 
-        print(json.dumps(req_data))
-
-        # resp = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
-        #                      verify=False)
+        _ = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
+                             verify=False)
 
         return 200, [f'DR Environment creation completed in {round(time.perf_counter() - starttime, 3)} seconds']
 
