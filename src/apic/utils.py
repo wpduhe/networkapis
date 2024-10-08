@@ -4636,7 +4636,112 @@ def create_dr_env_v2(src_env: str, dst_env: str):
         _ = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
                              verify=False)
 
-        return 200, [f'DR Environment creation completed in {round(time.perf_counter() - starttime, 3)} seconds']
+    return 200, [f'DR Environment creation completed in {round(time.perf_counter() - starttime, 3)} seconds']
+
+
+def create_dr_targeted(src_env: str, dst_env: str, tenant: str, app_profile: str, epg_name: str):
+    starttime = time.perf_counter()
+
+    with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
+        # Collect DR Tags for creating placeholder VLANs
+        tags = [APICObject.load(_) for _ in env.collect_tags('dr')]
+
+        # Get list of EPGs
+        dr_epg_list = [EPG_DN_SEARCH.search(_.attributes.dn) for _ in tags]
+
+        if epg_dn := f'uni/tn-{tenant}/ap-{app_profile}/epg-{epg_name}' in [_.group() for _ in dr_epg_list]:
+            if drenv.snapshot(descr='Auto targeted_dr') is False:
+                return 500, ['Automated Snapshot Failed.  Task Aborted.']
+
+            if tenant == 'tn-HCA':
+                dr_tn = f'tn-{env.env.Name}'
+            elif tenant == 'tn-ADMZ':
+                dr_tn = f'tn-{env.env.Name}-ADMZ'
+            else:
+                raise Exception(f'Unexpected Tenant name: {tenant}')
+
+            # Define DR based EPG dn
+            dr_dn = f'uni/tn-{dr_tn}/ap-{app_profile}/epg-{epg_name}'
+
+            # Get bridge domain
+            rsbd = APICObject.load(env.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'])
+            bd = APICObject.load(env.get(f'/api/mo/{rsbd.attributes.tDn}.json?{FCCO}'))
+
+            # Modify BD for DR environment
+            bd.attributes.__delattr__('dn')
+            bd.create_modify()
+
+            subnets = bd.get_child_class_iter(Subnet.class_)
+            for subnet in subnets:
+                subnet.attributes.scope = 'public,shared'
+                subnet.attributes.preferred = 'no'
+                subnet.attributes.virtual = 'no'
+
+            bd.children = subnets
+            bd.use_vrf('vrf-drtest')
+
+            resp = drenv.post(bd.json(empty_fields=True), uri=f'/api/mo/uni/tn-{dr_tn}.json')
+            if not resp.ok:
+                raise Exception(f'Failure to create bridge domain: uni/tn-{dr_tn}/BD-{bd.attributes.name} : '
+                                f'{json.dumps(resp.json())}')
+
+            # Get EPG
+            epg = APICObject.load(env.get(f'/api/mo/{epg_dn}.json?{FCCO}').json()['imdata'])
+
+            # Modify EPG for DR environment
+            epg.attributes.__delattr__('dn')
+
+            _ = epg.pop_child_class(FvRsDomAtt.class_)
+            epg.domain(drenv.env.PhysicalDomain)
+
+            # Remove unneeded children (contracts, tags, static paths)
+            while True:
+                a = epg.pop_child_class('fvRsCons')
+                b = epg.pop_child_class('fvRsProv')
+                c = epg.pop_child_class('tagInst')
+                d = epg.pop_child_class('tagAnnotation')
+                e = epg.pop_child_class('fvRsPathAtt')
+
+                if a or b or c or d or e:
+                    continue
+                else:
+                    break
+
+            # Generate AP config
+            ap = AP(name=app_profile)
+            ap.create_modify()
+            ap.children = [epg]
+
+            resp = drenv.post(ap.json(empty_fields=True), uri=f'/api/mo/tn-{dr_tn}.json')
+            if not resp.ok:
+                return 400, [f'Targeted DR creation failed for {dr_dn}']
+
+            # Conditionally assign VLAN
+            ife = jsonload(drenv.get(f'/api/mo/uni/infra/attentp-aep-Placeholders/gen-default/'
+                                     f'rsfuncToEpg-[{dr_dn}].json'))
+            if int(ife.totalCount):
+                pass
+            else:
+                mapping = {
+                    'Tenant': dr_tn,
+                    'AP': app_profile,
+                    'EPG': epg_name,
+                    'AEP': 'aep-Placeholders'
+                }
+
+                req_data = {
+                    'APIKey': os.getenv('localapikey'),
+                    'AvailabilityZone': drenv.env.Name,
+                    'AEPMappings': [mapping]
+                }
+
+                _ = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
+                                  verify=False)
+
+            return 200, [f'Targeted DR creation for {dr_dn} completed in {round(time.perf_counter() - starttime, 3)} '
+                         f'seconds']
+        else:
+            return 400, [f'{epg_dn} is not flagged for DR']
 
 
 # def tag_epgs_v2(env, epgs: list):
