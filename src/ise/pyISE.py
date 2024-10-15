@@ -27,7 +27,7 @@ class ERS(object):
         self.user_name = os.getenv('iseuser')
         self.user_pass = os.getenv('isepass')
 
-        self.url_base = f'https://{self.ise_node}:9060/ers'
+        self.url_base = f'https://{self.ise_node}/ers'
         self.ise = requests.session()
         self.ise.auth = (self.user_name, self.user_pass)
         self.ise.verify = verify  # http://docs.python-requests.org/en/latest/user/advanced/#ssl-cert-verification
