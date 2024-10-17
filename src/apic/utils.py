@@ -50,7 +50,6 @@ ODDS = 'Odds'
 EVENS = 'Evens'
 OOB = 'OOB'
 STAGING = 'Staging'
-DRT_TENANT = 'tn-DRTEST'
 DRT_VRF = 'vrf-drtest'
 
 EPG_DN_SEARCH = re.compile(r'uni/tn-([^/\]]+)/ap-([^/\]]+)/epg-([^/\]]+)')
@@ -3677,11 +3676,14 @@ class AppInstance:
         name = re.sub(r'\W+', '_', name)
         return name
 
+    def drt_tenant(self):
+        return f'tn-{self.originAZ.env.Name}'
+
     def epg_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
         if drt:
-            return f'uni/tn-{DRT_TENANT}/ap-{self.ap_name()}/epg-{self.epg_name()}'
+            return f'uni/tn-{self.drt_tenant}/ap-{self.ap_name()}/epg-{self.epg_name()}'
         elif not override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.ap_name()}/' \
                    f'epg-{self.epg_name()}'
@@ -3692,7 +3694,7 @@ class AppInstance:
         self.__activate()
 
         if drt:
-            return f'uni/tn-{DRT_TENANT}/BD-{self.bd_name()}'
+            return f'uni/tn-{self.drt_tenant}/BD-{self.bd_name()}'
         elif override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self}'
         else:
@@ -3717,14 +3719,14 @@ class AppInstance:
     def placeholder_mapping(self, drt: bool=False) -> dict:
         self.__activate()
         t, a, e = EPG_DN_SEARCH.search(self.epg_dn()).groups()
-        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=(DRT_TENANT if drt else t), AP=a, EPG=e)
+        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=(self.drt_tenant() if drt else t), AP=a, EPG=e)
         return mapping
 
     def generate_config(self, origin_az: bool=False, defaults: bool=False, delete: bool=False, drt: bool=False,
                         custom_az: str=False):
         az = (APIC(env=custom_az) if custom_az else self.originAZ if origin_az else self.currentAZ)
 
-        tenant = Tenant(name=(az.env.__getattribute__(self.tenant) if not drt else DRT_TENANT))
+        tenant = Tenant(name=(az.env.__getattribute__(self.tenant) if not drt else self.drt_tenant()))
         tenant.create_modify()
 
         bd = (BD(**self.bdSettings) if self.bdSettings else BD())
