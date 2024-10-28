@@ -222,10 +222,20 @@ class LTM:
 
     def sync_environment(self):
         failover = self.mgmt.tm.sys.failover.load()
-        if 'active' in failover.apiRawValues['apiAnonymous']:
-            self.mgmt.tm.cm.exec_cmd('run', utilCmdArgs=f'config-sync to-group {self.env.deviceGroupNameField}')
+
+        if self.env:
+            if 'active' in failover.apiRawValues['apiAnonymous']:
+                self.mgmt.tm.cm.exec_cmd('run', utilCmdArgs=f'config-sync to-group {self.env.deviceGroupNameField}')
+            else:
+                raise Exception(['Device is not active unit'])
         else:
-            raise Exception(['Device is not active unit'])
+            groups = self.mgmt.tm.cm.device_groups.get_collection()
+            group = next(group for group in groups if group.type == 'sync-failover')
+
+            if 'active' in failover.apiRawValues['apiAnonymous']:
+                self.mgmt.tm.cm.exec_cmd('run', utilCmdArgs=f'config-sync to-group {group.name}')
+
+            pass
 
     def get_pool(self, pool_name):
         pool = self.mgmt.tm.ltm.pools.pool.load(name=pool_name)
@@ -839,8 +849,8 @@ class LTM:
             configs[key] = list(json.loads(o) for o in configs[key])
 
         return_data = {
-            'source_environment': ltm.env.nameField,
-            'source_devices': ltm.env.devicesField,
+            'source_environment': (None if ltm_pair else ltm.env.nameField),
+            'source_devices': (ltm_pair if ltm_pair else ltm.env.devicesField),
             'configurations': configs
         }
 
