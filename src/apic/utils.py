@@ -61,6 +61,7 @@ MAC_IP_SEARCH = re.compile(r'cep-([^/]+)/ip-\[([^]]+)]')
 DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|CPDV|CORP|'
                         r'HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
 ACI_NAME = re.compile(r'[\W_]+')
+NODE_PORT_SEARCH = re.compile(r'node-(\d+).*\[eth(\d+/\d+)')
 
 
 def format_mac_addresses(mac_addresses: list) -> List:
