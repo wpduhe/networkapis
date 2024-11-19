@@ -60,6 +60,15 @@ def main():
                 nodes = [FabricNode.load(apic.collect_nodes(node_id=node)) for node in nodes]
                 upgrades_complete = AND([apic.version in node.attributes.version for node in nodes])
 
+                # Create temporary exception for 9300-FX3 leafs in APIC 4.2 environments
+                if nodes[0].attributes.model.endswith('-FX3') and int(apic.version[0]) < 5:
+                    # Override previous upgrade completion logic to bypass upgrade process for FX3 leafs
+                    # This allows the new leaf node(s) to be moved to its appropriate maintenance group even though it
+                    # has not been code leveled
+                    upgrades_complete = True
+                    logger.debug(f'Overriding leaf upgrade check for {" and ".join([n.attributes.id for n in nodes])} '
+                                 f'because leaf model does not support APIC version {apic.version}')
+
                 if upgrades_complete:
                     for config in job.configs:
                         result = apic.post(configuration=config['configuration'], uri=config['uri'])
