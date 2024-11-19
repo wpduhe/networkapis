@@ -106,7 +106,12 @@ def main():
             continue
 
         # Verify that the node firmware has been upgraded to match the APIC version, do not manage if not.
-        if apic.version not in node.attributes.version:
+        # Adding temporary exception for 9300-FX3 series switches because they do not support firmware versions <5.1
+        if node.attributes.model.endswith('-FX3') and int(apic.version[0]) < 5:
+            # Downgrade is not possible, bypass validation
+            logger.debug(f'Bypassing firmware version check because leaf model cannot support APIC version')
+            pass
+        elif apic.version not in node.attributes.version:
             logger.debug(f'Skipping management of {job.ip} because it is not yet code-leveled...')
             continue
 
