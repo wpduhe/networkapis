@@ -172,8 +172,8 @@
                 "10.237.192.0/18"
             ],
             "ADMZSubnets": ["10.237.248.0/21"],
-            "OOBLeafIPRange": "10.29.245.0/25",
-            "OOBLeafGateway": "10.29.245.1",
+            "OOBLeafIPRange": "10.29.255.64/26",
+            "OOBLeafGateway": "10.29.255.65",
             "LeafDNSTemplate": "naxdc-aclf-#-b-h.xdc.na.mgmt.medcity.net",
             "FirmwareGroup": "XRDC-AZ1-ACI-Fabric",
             "EvensMaintenanceGroup": "Evens",
