@@ -313,7 +313,8 @@
             "FirewallAEP": "aep-ADMZ-FW-Backside",
             "Subnets": [
                 "10.192.216.0/21",
-                "10.192.128.0/21"
+                "10.192.128.0/21",
+                "10.192.28.0/22"
             ],
             "ADMZSubnets": [],
             "OOBLeafIPRange": "10.192.209.0/25",
