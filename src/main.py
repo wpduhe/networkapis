@@ -1783,32 +1783,6 @@ def tag_epg(request: Request, req_data: TagEPG):
     return Response(status_code=status, content=json.dumps(response), media_type='application/json')
 
 
-@app.post('/apis/manage_device', tags=['IPAM'])
-def manage_device(request: Request, req_data: ManageDevice):
-    """This API creates DNS records for the supplied IP address with the given information and queues them for
-    management.  Used for network devices."""
-    req_data = req_data.dict()
-
-    req_logit(manage_device, request, req_data)
-
-    results = []
-
-    # with BIG() as big:
-    #     for ip in req_data['ips']:
-    #         status, response = big.manage_device(dns_template=req_data['dns_template'], ip=ip,
-    #                                              ip_name='Name not provided--Update')
-    #         results.append({'ip': ip, 'status': status, 'result': response})
-    with NetworkAPIIPAM() as ipam:
-        for ip in req_data['ips']:
-            r = ipam.manage_device(address=ip, dns_template=req_data['dns_template'])
-
-            results.append(dict(ip=ip, status=r.status_code, result=r.reason))
-
-    res_logit(manage_device, request, results)
-
-    return Response(status_code=200, content=json.dumps(results), media_type='application/json')
-
-
 @app.post('/apis/aci/create_dr_environment', tags=['ACI'])
 def create_dr_environment(request: Request, req_data: CreateDREnvironment):
     """Runs the DR script for the specified ACI environment"""
@@ -2173,7 +2147,6 @@ def update_ips(request: Request, req_data: UpdateIPs):
 
     res_data = {'Assigned': [], 'Updated': []}
 
-    # big = BIG()
     with NetworkAPIIPAM() as ipam:
         assignments = [dict(name=_['name'], address=_['ip']) for _ in req_data['Updates'] if valid_ip(_['ip'])]
         resp = ipam.bulk_reserve(assignments=assignments)
@@ -2187,8 +2160,6 @@ def update_ips(request: Request, req_data: UpdateIPs):
 
 
     res_data['Updated'] = [_['address'] for _ in resp.json() if _['success']]
-
-    # big.logout()
 
     res_logit(update_ips, request, resp.json())
 
