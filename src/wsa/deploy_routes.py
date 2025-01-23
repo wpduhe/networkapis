@@ -53,7 +53,7 @@ async def main(loop: asyncio.AbstractEventLoop):
     for environment in data[site]['environments']:
         for wsa in data[site]['environments'][environment]['wsaList']:
             use_file = f'{site}_{environment}.dat'
-            tasks.append(loop.create_task(launcher(use_file, wsa)))
+            tasks.append(loop.create_task(deploy(use_file, wsa)))
 
     for task in tasks:
         _ = await task
@@ -61,12 +61,11 @@ async def main(loop: asyncio.AbstractEventLoop):
     return None
 
 
-async def launcher(file: str, wsa: dict):
+async def deploy(file: str, wsa: dict):
     wsa = SimpleNamespace(**wsa)
     async with (ClientSession(cookie_jar=CookieJar(unsafe=True)) as session):
         session_data = SimpleNamespace(session=session, csrf_key=None, base_url=f'https://{wsa.mgmtIP[:-3]}:8443',
-                                       use_file=file,
-                                       cookie='')
+                                       use_file=file, cookie='')
         # logger.debug(f'base_url={session_data.base_url}, csrf_key={str(session_data.csrf_key)}, '
         #              f'data_file={session_data.use_file}')
 
@@ -113,7 +112,7 @@ async def launcher(file: str, wsa: dict):
 
         # logger.debug(f'{wsa.hostname} Login POST Response: {login_resp.status}')
 
-        # Navigate to routes page
+        # Navigate to routes page, we will check the success of the login process here
         route_page = await session_data.session.get(f'{session_data.base_url}/network/routes', headers=user_agent,
                                                     ssl=False)
         route_page_text = await route_page.text()
@@ -138,13 +137,14 @@ async def launcher(file: str, wsa: dict):
 
         route_upload_resp = await session_data.session.post(f'{session_data.base_url}/network/routes',
                                                             headers=user_agent, data=file_data, ssl=False)
+        route_upload_success = "Routes were successfully loaded" in await route_upload_resp.text()
         # logger.debug(f'{wsa.hostname} Route upload page: {await route_upload_resp.text()}')
-        # logger.debug(f'{wsa.hostname} Route upload status: {route_upload_resp.status}')
-        # logger.debug(f'{wsa.hostname} Route upload reason: {route_upload_resp.reason}')
-        logger.debug(f'{wsa.hostname} Route upload successful: {route_upload_resp.status == 200}')
+        # Log whether the routes were successfully uploaded
+        logger.debug(f'{wsa.hostname} Route upload successful: {route_upload_success}')
+
 
         # Commit the changes if the upload was successful
-        if route_upload_resp.status == 200:
+        if route_upload_success:
             commit_data = FormData()
             commit_data.add_field(name='action', value='Commit')
             commit_data.add_field(name='screen', value='commit')
@@ -177,3 +177,21 @@ if __name__ == '__main__':
 
     remove_files()
     logger.debug(f'Completed route deployment to {site} in {round(time.perf_counter() - start_time, 3)} seconds')
+
+
+if __name__ == 'deploy_routes_handler':
+    # TODO: Maybe figure this out....?
+    start_time = time.perf_counter()
+    data = json.load(open('data/wsa.json'))
+
+    generate_files()
+
+    for site in data:
+        logger.debug(f'Processing {site}')
+        # loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(loop)
+        #
+        # loop.run_until_complete(main(loop))
+
+    remove_files()
+    logger.debug(f'Completed route deployment for all sites in {round(time.perf_counter() - start_time, 3)} seconds')
