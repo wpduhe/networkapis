@@ -29,6 +29,8 @@ class GithubAPI:
             return True
         except UnknownObjectException:
             return False
+        except GithubException:
+            return False
 
     def get_file_blob(self, file_path, branch=GithubObject.NotSet):
         # Process to retrieve file from Git regardless of size
