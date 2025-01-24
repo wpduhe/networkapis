@@ -115,6 +115,8 @@ class GithubAPI:
             return [directory.name for directory in self.repo.get_contents(directory_path, ref=branch)]
         except UnknownObjectException:
             return None
+        except GithubException:
+            return None
 
     def merge(self):
         pr = self.repo.create_pull(title='Pull Request for pilot to main', body='Merge changes to pilot into main',
