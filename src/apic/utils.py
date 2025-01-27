@@ -1439,7 +1439,7 @@ class APIC:
         self.post(configuration=snap)
         r = self.get(f'/api/class/configExportP?query-target-filter=eq(configExportP.descr,"{descr}")')
         r = json.loads(r.text)
-        time.sleep(3)
+        time.sleep(5)
 
         if r['totalCount'] == '1':
             return descr
@@ -3009,9 +3009,20 @@ class APIC:
                 if network.overlaps(IPv4Network(ip)):
                     used_subnets.add(dn)
 
-        used_epgs = set(re.search(r'uni/tn-[^/]+/ap-[^/]+/epg-[^/]+', _.attributes.dn).group() for _ in endpoints)
+        # used_epgs = set(re.search(r'uni/tn-[^/]+/ap-[^/]+/epg-[^/]+', _.attributes.dn).group() for _ in endpoints)
+        used_epgs = set(EPG_DN_SEARCH.search(_.attributes.dn).group() for _ in endpoints)
 
         unused_epgs = all_epgs.difference(used_epgs)
+
+        # Remove EPGs that were created less than 30 days ago
+        for _ in list(unused_epgs):
+            mod = APICObject.load(self.get(
+                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
+                                      'imdata'])
+            creation = datetime.fromisoformat(mod.attributes.created)
+            delta = datetime.now(creation.tzinfo) - creation
+            if delta.days < 30:
+                unused_epgs.remove(_)
 
         # Collect all bridge domains from production and ADMZ tenants
         bds = [APICObject.load(_) for _ in self.get('/api/class/fvBD.json').json()['imdata']]
@@ -3023,7 +3034,29 @@ class APIC:
 
         unused_bds = all_bds.difference(set(used_bds))
 
+        # Remove bridge domains that were created less than 30 days ago
+        for _ in list(unused_bds):
+            mod = APICObject.load(self.get(
+                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
+                                      'imdata'])
+            creation = datetime.fromisoformat(mod.attributes.created)
+            delta = datetime.now(creation.tzinfo) - creation
+            if delta.days < 30:
+                unused_bds.remove(_)
+
+
         unused_subnets = all_subnets.difference(used_subnets)
+
+        # Remove subnets that were created less than 30 days ago
+        for _ in list(unused_subnets):
+            mod = APICObject.load(self.get(
+                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
+                                      'imdata'])
+            creation = datetime.fromisoformat(mod.attributes.created)
+            delta = datetime.now(creation.tzinfo) - creation
+            if delta.days < 30:
+                unused_subnets.remove(_)
+
 
         # return unused_epgs, unused_bds, (unused_subnets, used_subnets)
         return 200, {'unused_epgs': list(unused_epgs), 'unused_bds': list(unused_bds),
@@ -3494,6 +3527,51 @@ class APIC:
 
         return None
 
+    def delete_subnet(self, prefix: str) -> Tuple[int, dict]:
+        network = IPv4Network(prefix, strict=False)
+
+        self.snapshot(descr=f'Delete fvSubnet {prefix}')
+
+        subnets = [APICObject.load(x) for x in self.get(f'/api/class/fvSubnet.json?{FCCO}').json()['imdata']]
+        subnets = [s for s in subnets if IPv4Network(s.attributes.ip, strict=False).overlaps(network) and
+                   IPv4Network(s.attributes.ip, strict=False).prefixlen == network.prefixlen]
+
+        ipam = NetworkAPIIPAM()
+
+        for subnet in subnets:
+            subnet.delete()
+            _ = self.post(subnet.self_json())
+
+        net = ipam.get_network(network.with_prefixlen).json()
+        resp = ipam.delete_network(network=network.with_prefixlen, data=net)
+
+        print([s.self_json() for s in subnets])
+
+        return 200, {}
+
+    def delete_epg(self, epg_dn: str) -> Tuple[int, dict]:
+        # Validate that the provided distinguished name matches APIC format
+        if not EPG_DN_SEARCH.match(epg_dn):
+            return 400, {'error': 'complete EPG distinguished name is required'}
+
+        # Attempt to get the EPG
+        resp = self.get(f'/api/mo/{epg_dn}.json?{FCCO}')
+        if resp.ok:
+            epg = APICObject.load(resp.json()['imdata'])
+        else:
+            return resp.status_code, resp.json()
+
+        # Take snapshot prior to deletion of EPG
+        self.snapshot(descr=f'Delete {epg_dn}')
+
+        epg.remove_admin_props()
+        epg.delete()
+
+        # Delete the EPG
+        resp = self.post(epg.json())
+
+        return resp.status_code, resp.json()
+
 
 class AppInstance:
     ADMZTENANT = 'ADMZTenant'
@@ -3565,6 +3643,8 @@ class AppInstance:
         if not self.name.startswith(f'{self.format_name(self.originAZ.env.Name)}_'.lower()):
             self.name = f'{self.format_name(self.originAZ.env.Name)}_{self.name}'.lower()
 
+        self.resolve_tenant()
+
     def __str__(self):
         self.__activate()
         return self.name.lower()
@@ -3609,6 +3689,7 @@ class AppInstance:
         self.modifiedTime = datetime.now()
 
     def store(self):
+        self.resolve_tenant()
         self.modifiedTime = datetime.now()
 
         gh = GithubAPI()
@@ -3712,6 +3793,12 @@ class AppInstance:
 
     def ap_name(self):
         return self.apName if self.apName else self.application
+
+    def resolve_tenant(self):
+        # Resolve tenant name if it is not an ACIEnvironment key
+        if self.tenant not in [self.TENANT, self.ADMZTENANT]:
+            tenant_key = next(k for k, v in self.originAZ.env.__dict__.items() if self.tenant == v)
+            self.tenant = tenant_key
 
     def base_name(self):
         return re.sub(f'(({self.format_name(self.originAZ.env.Name)}|{self.originAZ.env.DataCenter})_)+', '', self.name,
@@ -4154,6 +4241,51 @@ class AppInstance:
                     gh.add_file(f'{cls.ISSUES_PATH}/{inst}', message='No BD assigned to EPG', content=inst.content())
 
                 inst.store()
+
+    @classmethod
+    def document_instance_by_epg(cls, az: str, epg_dn: str):
+        # Accept a manually created EPG and document instance settings
+        data = json.load(open('data/ACIEnvironments.json', 'r'))
+
+        azs = [env['Name'].upper() for env in data['Environments']
+               if env['Name'].upper() not in ['PARALLON-DEV', 'DRDC']]
+
+        if az.upper() not in azs:
+            return 404, {'error': 'Specified availability zone does not exist'}
+
+        if not EPG_DN_SEARCH.match(epg_dn):
+            return 400, {'error': 'EPG distinguished name does not match format uni/tn-TENANT/ap-APPPROFILE/epg-EPG'}
+
+        apic = APIC(env=az)
+
+        tenant, app_name, epg_name = EPG_DN_SEARCH.search(epg_dn).groups()
+
+        # Retrieve bridge domain name from fvRsBd
+        fvrsbd = APICObject.load(apic.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'])
+
+        if not fvrsbd:
+            return 404, {'error': 'EPG distinguished name does not exist'}
+
+        bd = APICObject.load(apic.get(f'/api/mo/{fvrsbd.attributes.tDn}.json?{FCCO}').json()['imdata'])
+
+        # Get subnets from the bridge domain
+        subnets = [_ for _ in bd.get_child_class_iter(Subnet.class_)]
+
+        # Instantiate instance or load existing instance
+        inst = cls(epgDn=epg_dn, name=epg_name, epgName=epg_name, tenant=tenant, bdName=bd.attributes.name,
+                   apName=app_name,application=app_name, currentAZ=apic.env.Name, bdSettings=bd.attributes.json(),
+                   networks={_.attributes.ip: _.attributes.json() for _ in subnets})
+
+        gh = GithubAPI()
+        if gh.file_exists(inst.path()):
+            inst = cls.load(inst.path())
+            # Update instance settings
+            inst.update(**inst.json())
+
+        # Store the instance
+        inst.store()
+
+        return 200, inst.json()
 
 
 # def update_vlan_spreadsheet():
