@@ -1240,7 +1240,7 @@ def create_new_app_instance(request: Request, req_data: CreateNewAppInstance):
 
 @app.get('/apis/appinst/document/{az}/{tenant_name}/{app_profile_name}/{epg_name}', tags=['AppInstance'])
 def document_app_instance(request: Request, az: str, tenant_name: str, app_profile_name: str, epg_name: str):
-    """Examines the components that make up an existing EPG and documents it. Works for existing instances as well."""
+    """Examines the components that make up an existing EPG and documents/updates it"""
     req_logit(document_app_instance, request)
 
     epg_dn = f'uni/tn-{tenant_name}/ap-{app_profile_name}/epg-{epg_name}'
