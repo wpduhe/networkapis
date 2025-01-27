@@ -713,8 +713,10 @@ def rebrand_epg_bd(request: Request, az: str, req_data: RebrandEpgBd):
 
     req_logit(rebrand_epg_bd, request, req_data)
 
-    with apic_utils.APIC(env=az) as apic_api:
-        result = apic_api.rebrand_epg_bd(**req_data)
+    try:
+        result = apic_utils.AppInstance.refactor_instance_by_dn(az=az, **req_data)
+    except:
+        result = apic_utils.APIC(env=az).rebrand_epg_bd(**req_data)
 
     return Response(status_code=200, content=json.dumps(result), media_type='application/json')
 
