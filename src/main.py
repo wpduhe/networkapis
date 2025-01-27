@@ -1238,6 +1238,21 @@ def create_new_app_instance(request: Request, req_data: CreateNewAppInstance):
     return Response(status_code=status, content=json.dumps(data), media_type='application/json')
 
 
+@app.get('/apis/appinst/document/{az}/{tenant_name}/{app_profile_name}/{epg_name}', tags=['AppInstance'])
+def document_app_instance(request: Request, az: str, tenant_name: str, app_profile_name: str, epg_name: str):
+    """Examines the components that make up an existing EPG and documents it. Works for existing instances as well."""
+    req_logit(document_app_instance, request)
+
+    epg_dn = f'uni/tn-{tenant_name}/ap-{app_profile_name}/epg-{epg_name}'
+
+    status, data = apic_utils.AppInstance.document_instance_by_epg(az=az, epg_dn=epg_dn)
+
+    res_logit(document_app_instance, request)
+
+    return Response(status_code=status, content=json.dumps(data), media_type='application/json')
+
+
+
 @app.post('/apis/appinst/{application}/{instance}/create_drt', tags=['AppInstance'])
 def create_drt_app_instance(request: Request, application: str, instance:str, req_data: CreateDRTAppInstance):
     """Creates disaster recovery testing instance of an AppInstance"""
