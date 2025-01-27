@@ -2129,6 +2129,7 @@ class APIC:
         table = yaml.load(gh.get_file_content('pyapis/appinst_index.yaml'), yaml.Loader)
 
         # Load AppInstance based on name
+        # TODO: This isn't working because I don't really have a way to maintain it
         try:
             old_inst_path = next(_['path'] for _ in table if _['epgDn'] == old_epg_dn)
             inst = AppInstance.load(old_inst_path)
@@ -3699,41 +3700,15 @@ class AppInstance:
         else:
             gh.add_file(file_path=self.path(), message=f'{self}_add', content=self.content())
 
-    def refactor(self, new_application: str=None, new_name: str=None):
-        """Renames and/or Moves an instance within GitHub based on the provided criteria"""
-        gh = GithubAPI()
-
-        # Get original values
-        original_path = self.path()
-        original_dn = self.epg_dn()
-        orig_tn, orig_ap, orig_epg = EPG_DN_SEARCH.search(original_dn).groups()
-
-        if new_application:
-            self.application = self.format_name(new_application)
-
-        if new_name:
-            if not new_name.startswith(f'{self.format_name(self.originAZ.env.Name)}_'.lower()):
-                self.name = f'{self.format_name(self.originAZ.env.Name)}_{new_name}'.lower()
-            else:
-                self.name = new_name
-
-        # Check to see if the new generated dn will be different from the current generated dn. Set attributes to keep
-        # original dn for APIC tasks, if so.
-        if self.epg_dn() != original_dn:
-            self.epgName = orig_epg
-            self.apName = orig_ap
-
-        # Delete current file and store in new location
-        if original_path != self.path():
-            gh.delete_file(original_path, message=f'{self.name}_refactor_to_{self.path()}')
-            self.store()
-
     def remove(self):
         gh = GithubAPI()
         gh.delete_file(self.path(), message=f'{self}_removal')
 
     def json(self):
         output = {}
+
+        # Resolve tenant
+        self.resolve_tenant()
 
         # Filter out any unwanted Bridge Domain specifics
         for k in list(self.bdSettings.keys()):
@@ -3781,6 +3756,11 @@ class AppInstance:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self}'
         else:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self.bd_name()}'
+
+    @staticmethod
+    def path_from_dn(az: str, epg_dn: str) -> str:
+        tenant, app_name, epg_name = EPG_DN_SEARCH.search(epg_dn).groups()
+        return f'applications/{AppInstance.format_name(app_name)}/{AppInstance.format_name(az)}_{AppInstance.format_name(epg_name)}'
 
     def subnet_dn(self, network: str, drt: bool=False):
         return f'{self.bd_dn(drt=drt)}/subnet-[{network}]'
@@ -4175,6 +4155,39 @@ class AppInstance:
         inst.remove()
 
         return 200, inst.json()
+
+    @classmethod
+    def refactor_instance_by_dn(cls, az: str, old_epg_dn: str, new_epg_dn: str, new_bd_name: str=None):
+        old_inst = cls.load(cls.path_from_dn(az=az, epg_dn=old_epg_dn))
+        old_dict = dict(**old_inst.__dict__)
+        for k in ['name', 'application', 'tenant', 'createTime', 'modifiedTime', 'epgDn']:
+            try:
+                _ = old_dict.pop(k)
+            except KeyError:
+                pass
+
+        for k in ['currentAZ', 'originAZ']:
+            old_dict[k] = old_dict[k].env.Name
+
+        tenant, app_name, epg_name = EPG_DN_SEARCH.search(new_epg_dn).groups()
+
+        new_inst = cls(name=epg_name, application=app_name, tenant=tenant, **old_dict)
+
+        if new_bd_name:
+            new_inst.bdName = new_bd_name
+
+        new_inst.apName = app_name
+        new_inst.epgName = epg_name
+        new_inst.epgDn = None
+
+        # Refactor the actual APIC objects
+        resp = APIC(env=az).rebrand_epg_bd(old_epg_dn=old_epg_dn, new_epg_dn=new_epg_dn, new_bd_name=new_bd_name)
+
+        gh = GithubAPI()
+        gh.delete_file(old_inst.path(), message=f'Refactoring to {new_inst.path()}')
+        new_inst.store()
+
+        return resp
 
     def create_drt_instance(self, drenv: str=None):
         apic = APIC(env=(drenv if drenv else self.originAZ.env.DREnv))
