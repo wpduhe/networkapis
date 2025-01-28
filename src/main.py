@@ -702,9 +702,10 @@ def update_snmp_strings(request: Request):
 
 @app.post('/apis/aci/{az}/rebrand_epg_bd', tags=['ACI'])
 def rebrand_epg_bd(request: Request, az: str, req_data: RebrandEpgBd):
-    """Renames an EPG.  Optionally renames the bridge domain if a value is provided for new_bd_name.  Updates
-    encapsulation on all AEPs as well.  Requests to this API will delete the old EPG.  This API will not rename a BD if
-    the BD is shared with multiple EPGs."""
+    """Renames an EPG. Optionally renames the bridge domain if a value is provided for new_bd_name. Updates
+    encapsulation on all AEPs as well. Requests to this API will delete the old EPG. This API will not rename a BD if
+    the BD is shared with multiple EPGs. This API now also interacts with AppInstances modifying the documentation
+    files to update the requested changes"""
     req_data = req_data.dict()
 
     if not validate_api_key(req_data.pop('APIKey')):
@@ -715,10 +716,12 @@ def rebrand_epg_bd(request: Request, az: str, req_data: RebrandEpgBd):
 
     try:
         result = apic_utils.AppInstance.refactor_instance_by_dn(az=az, **req_data)
-    except:
-        result = apic_utils.APIC(env=az).rebrand_epg_bd(**req_data)
+        failed = False
+    except NameError:
+        result = {'error': 'Please document the old EPG distinguished name first'}
+        failed = True
 
-    return Response(status_code=200, content=json.dumps(result), media_type='application/json')
+    return Response(status_code=(404 if failed else 200), content=json.dumps(result), media_type='application/json')
 
 
 @app.post('/apis/aci/{az}/clone_aep', tags=['ACI'])
