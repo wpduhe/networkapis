@@ -907,7 +907,7 @@ def get_vlan_data_v2(request: Request, az: str, VLAN: Optional[str or int]=None,
     except Exception as e:
         return Response(status_code=500, content=json.dumps({'message': f'{e}'}), media_type='application/json')
 
-@app.post('/apis/aci/{az}/purge_vlan_id')
+@app.post('/apis/aci/{az}/purge_vlan_id', tags=['ACI'])
 def purge_vlan_id(request: Request, az: str, req_data: PurgeVLANID):
     """Given a VLAN ID, remove all usages of it from the fabric"""
     req_data_dict = req_data.dict()
@@ -922,7 +922,7 @@ def purge_vlan_id(request: Request, az: str, req_data: PurgeVLANID):
     return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
 
 
-@app.post('/apis/aci/{az}/purge_epg_vlan')
+@app.post('/apis/aci/{az}/purge_epg_vlan', tags=['ACI'])
 def purge_epg_vlan(request: Request, az: str, req_data: PurgeEPGVLAN):
     """Given an EPG distinguished name, remove all VLAN definitions used by it from the fabric"""
     req_data_dict = req_data.dict()
@@ -937,7 +937,7 @@ def purge_epg_vlan(request: Request, az: str, req_data: PurgeEPGVLAN):
     return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
 
 
-@app.post('/apis/aci/{az}/purge_epg_and_vlan')
+@app.post('/apis/aci/{az}/purge_epg_and_vlan', tags=['ACI'])
 def purge_epg_and_vlan(request: Request, az: str, req_data: PurgeEPGAndVLAN):
     """Given an EPG distinguished name and VLAN ID, remove all EPG VLAN assignments using the specified VLAN ID from the
     fabric"""
