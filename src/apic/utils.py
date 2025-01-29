@@ -33,6 +33,10 @@ import yaml
 #  Example: https://192.168.1.10/api/mo/topology/pod-1/node-101/sys/phys-[eth1/1]/phys/fcot.json
 
 
+# TODO: DONE: Create a new automation to purge usage of a specific VLAN ID or EPG distinguished name or the combination
+#  of both. Use it first in SEDC on VLAN 2381 which was assigned to epg-Meditech-CAA (needed to be recovered in FWDC)
+
+
 urllib3.disable_warnings()
 urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
 
@@ -1165,6 +1169,77 @@ class APIC:
         vlan_range = [_ for _ in vlan_range if _ > 2000]
         used_vlans = self.get_vlan_data()
         return next(x for x in vlan_range if x not in used_vlans)
+
+    def purge_vlan_id(self, vlan_id: int) -> Tuple[int, dict]:
+        """Given a VLAN ID, remove all usages of that VLAN from the APIC"""
+        func_params = f'?query-target-filter=eq(infraRsFuncToEpg.encap,"vlan-{vlan_id}")&{CO}'
+        static_params = f'?query-target-filter=eq(fvRsPathAtt.encap,"vlan-{vlan_id}")&{CO}'
+
+        functoepgs = [APICObject.load(_)
+                      for _ in self.get(f'/api/class/infraRsFuncToEpg.json{func_params}').json()['imdata']]
+
+        static_paths = [APICObject.load(_)
+                        for _ in self.get(f'/api/class/fvRsPathAtt.json{static_params}').json()['imdata']]
+
+        vlan_usages = functoepgs + static_paths
+
+        for usage in vlan_usages:
+            usage.remove_admin_props()
+            usage.delete()
+            self.post(usage.json())
+
+        return 200, {'message': f'Objects using VLAN {vlan_id} have been deleted',
+                     'objects': [_.attributes.dn for _ in vlan_usages]}
+
+    def purge_epg_vlan(self, epg_dn) -> Tuple[int, dict]:
+        """ Given an EPG distinguished name, remove all VLANs it is using"""
+        try:
+            assert EPG_DN_SEARCH.match(epg_dn)
+        except AssertionError:
+            return 400, {'error': f'The EPG distinguished name {epg_dn} is not valid. '
+                                  f'Please ensure it matches the format "uni/tn-TENANT/ap-APPPROFILE/epg-EPGNAME"'}
+
+        functoepgs = [APICObject.load(_) for _ in self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata']]
+        static_paths = [APICObject.load(_) for _ in self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata']]
+
+        functoepgs = [_ for _ in functoepgs if _.attributes.tDn == epg_dn]
+        static_paths = [_ for _ in static_paths if EPG_DN_SEARCH.search(_.attributes.dn).group() == epg_dn]
+
+        epg_assignment = functoepgs + static_paths
+
+        for usage in epg_assignment:
+            usage.remove_admin_props()
+            usage.delete()
+            self.post(usage.json())
+
+        return 200, {'message': f'All VLAN definitions for {epg_dn} have been removed',
+                     'objects': [_.attributes.dn for _ in epg_assignment]}
+
+    def purge_epg_and_vlan(self, epg_dn: str, vlan_id: int) -> Tuple[int, dict]:
+        try:
+            assert EPG_DN_SEARCH.match(epg_dn)
+        except AssertionError:
+            return 400, {'error': f'The EPG distinguished name {epg_dn} is not valid. '
+                                  f'Please ensure it matches the format "uni/tn-TENANT/ap-APPPROFILE/epg-EPGNAME"'}
+
+        functoepgs = [APICObject.load(_) for _ in self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata']]
+        static_paths = [APICObject.load(_) for _ in self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata']]
+
+        functoepgs = [_ for _ in functoepgs if _.attributes.tDn == epg_dn and _.attributes.encap == f'vlan-{vlan_id}']
+        static_paths = [_ for _ in static_paths
+                        if EPG_DN_SEARCH.search(_.attributes.dn).group() == epg_dn and
+                        _.attributes.encap == f'vlan-{vlan_id}']
+
+        epg_assignment = functoepgs + static_paths
+
+        for usage in epg_assignment:
+            usage.remove_admin_props()
+            usage.delete()
+            self.post(usage.json())
+
+        return 200, {'message': f'All VLAN definitions for {epg_dn} have been removed',
+                     'objects': [_.attributes.dn for _ in epg_assignment]}
+
 
     def get_next_leaf_pair(self, pod: int=1):
         pod = int(pod)
