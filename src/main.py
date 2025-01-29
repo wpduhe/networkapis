@@ -20,6 +20,8 @@ from ncm.utils import NCMIntegration
 from wsa.pac_gen_v2 import pac_gen
 from wsa import wsaBuild
 from datetime import datetime
+from collections.abc import Callable
+from typing import Any
 import json
 import time
 import os
@@ -67,7 +69,7 @@ logging.getLogger('zeep').level = logging.WARNING
 LOGGER.debug('Logging initialized.')
 
 
-def req_logit(func, web_request, req_data=None):
+def req_logit(func: Callable, web_request: Request, req_data: Any=None):
     try:
         client = web_request.headers['X-Forwarded-For']
     except KeyError:
@@ -81,7 +83,7 @@ def req_logit(func, web_request, req_data=None):
     LOGGER.debug(f)
 
 
-def res_logit(func, web_request, res_data=None):
+def res_logit(func: Callable, web_request: Request, res_data: Any=None):
     try:
         client = web_request.headers['X-Forwarded-For']
     except KeyError:
@@ -904,6 +906,52 @@ def get_vlan_data_v2(request: Request, az: str, VLAN: Optional[str or int]=None,
         return new_response
     except Exception as e:
         return Response(status_code=500, content=json.dumps({'message': f'{e}'}), media_type='application/json')
+
+@app.post('/apis/aci/{az}/purge_vlan_id')
+def purge_vlan_id(request: Request, az: str, req_data: PurgeVLANID):
+    """Given a VLAN ID, remove all usages of it from the fabric"""
+    req_data_dict = req_data.dict()
+
+    if not validate_api_key(req_data_dict.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(purge_vlan_id, request, req_data_dict)
+
+    status, resp = apic_utils.APIC(env=az).purge_vlan_id(vlan_id=req_data.vlan_id)
+
+    return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
+
+
+@app.post('/apis/aci/{az}/purge_epg_vlan')
+def purge_epg_vlan(request: Request, az: str, req_data: PurgeEPGVLAN):
+    """Given an EPG distinguished name, remove all VLAN definitions used by it from the fabric"""
+    req_data_dict = req_data.dict()
+
+    if not validate_api_key(req_data_dict.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(purge_epg_vlan, request, req_data_dict)
+
+    status, resp = apic_utils.APIC(env=az).purge_epg_vlan(epg_dn=req_data.epg_dn)
+
+    return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
+
+
+@app.post('/apis/aci/{az}/purge_epg_and_vlan')
+def purge_epg_and_vlan(request: Request, az: str, req_data: PurgeEPGAndVLAN):
+    """Given an EPG distinguished name and VLAN ID, remove all EPG VLAN assignments using the specified VLAN ID from the
+    fabric"""
+    req_data_dict = req_data.dict()
+
+    if not validate_api_key(req_data_dict.pop('APIKey')):
+        return Response(status_code=403, content=json.dumps(['Invalid API Key']), media_type='application/json')
+
+    req_logit(purge_epg_and_vlan, request, req_data_dict)
+
+    status, resp = apic_utils.APIC(env=az).purge_epg_and_vlan(epg_dn=req_data.epg_dn, vlan_id=req_data.vlan_id)
+
+    return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
+
 
 
 @app.get('/apis/aci/{az}/verify_leaf_uplinks', tags=['ACI'])
