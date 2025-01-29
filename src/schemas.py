@@ -389,3 +389,19 @@ class ACIMigrateNetwork(BaseModel):
     external_epg: str
     dst_admz_l3out: str = None
     admz_external_epg: str = None
+
+
+class PurgeVLANID(BaseModel):
+    APIKey: str
+    vlan_id: int
+
+
+class PurgeEPGVLAN(BaseModel):
+    APIKey: str
+    epg_dn: str
+
+
+class PurgeEPGAndVLAN(BaseModel):
+    APIKey: str
+    epg_dn: str
+    vlan_id: int
