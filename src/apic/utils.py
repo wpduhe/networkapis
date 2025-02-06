@@ -824,17 +824,7 @@ class APIC:
             return False
 
     def class_attribute_search(self, object_class: str, attribute: str, value: str, config_only: bool=True,
-                               get_children: bool=False):
-        """
-        :rtype: list if len(r['imdata']) > 1: dict if len(r['imdata'] == 1: False
-
-        :param object_class: str
-        :param attribute: str
-        :param value: str
-        :param config_only: bool=True
-        :param get_children: bool=False
-        :return:
-        """
+                               get_children: bool=False) -> List[APICObject or GenericClass]:
 
         search = []
         value = value.split('*')
@@ -846,15 +836,7 @@ class APIC:
                 f'{("&rsp-prop-include=config-only" if config_only is True else "")}' \
                 f'{("" if get_children is False else "&rsp-subtree=full")}'
 
-        r = self.get(query)
-        r = json.loads(r.text)
-
-        if len(r['imdata']) > 1:
-            return r['imdata']
-        elif len(r['imdata']) == 1:
-            return r['imdata'][0]
-        else:
-            return False
+        return [APICObject.load(_) for _ in self.get(query).json()['imdata']]
 
     def dn_exists(self, get: bool=False, **kwargs):
         def complete(exists, obj):
@@ -1062,91 +1044,91 @@ class APIC:
 
         return response
 
-    def get_vlan_data_old(self, vlan=None, epg=None, aep=None):
-        """
-        :rtype: dict if vlan is not None: list
-        :param vlan:
-        :param epg:
-        :param aep:
-        :return:
-        """
-        if_conn = self.class_dn_search(object_class='fvIfConn', filter_string='vlan-', config_only=False)
-        func_to_epg = self.class_dn_search(object_class='infraRsFuncToEpg', filter_string='', config_only=True)
-
-        if isinstance(func_to_epg, dict):
-            func_to_epg = [func_to_epg]
-
-        for record in if_conn:
-            record['fvIfConn']['attributes']['encap'] = int(
-                record['fvIfConn']['attributes']['encap'].replace('vlan-', ''))
-            record['fvIfConn']['attributes']['object'] = \
-                re.search('tn[-A-Za-z_/0-9]+', record['fvIfConn']['attributes']['dn']).group()
-            try:
-                record['fvIfConn']['attributes']['aep'] = \
-                    re.search(r'attEnt[-A-Za-z_\[\]0-9]+', record['fvIfConn']['attributes']['dn']).group()
-            except AttributeError:
-                record['fvIfConn']['attributes']['aep'] = 'AEP Not Found'
-
-        for record in func_to_epg:
-            record['infraRsFuncToEpg']['attributes']['encap'] = \
-                int(record['infraRsFuncToEpg']['attributes']['encap'].replace('vlan-', ''))
-            record['infraRsFuncToEpg']['attributes']['object'] = \
-                re.search('tn.*', record['infraRsFuncToEpg']['attributes']['tDn']).group()
-            record['infraRsFuncToEpg']['attributes']['aep'] = \
-                re.search('attentp-[-A-Za-z_0-9]+', record['infraRsFuncToEpg']['attributes']['dn']).group()
-
-        vlan_dict = {each['fvIfConn']['attributes']['encap']: {'Consumers': [], 'AEPs': []} for each in if_conn}
-        for func in func_to_epg:
-            vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']] = {'Consumers': [], 'AEPs': []}
-
-        for ep in if_conn:
-            vlan_dict[ep['fvIfConn']['attributes']['encap']]['Consumers'].append(ep['fvIfConn']['attributes']['object'])
-            if ep['fvIfConn']['attributes']['aep'] != 'AEP Not Found':
-                vlan_dict[ep['fvIfConn']['attributes']['encap']]['AEPs'].append(
-                    (re.search(r'aep-[-_\w]+', ep['fvIfConn']['attributes']['aep']).group()
-                     if re.search(r'aep-[-_\w]+', ep['fvIfConn']['attributes']['aep']) is not None
-                     else ep['fvIfConn']['attributes']['aep'])
-                )
-
-        for func in func_to_epg:
-            vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']]['Consumers'].append(
-                func['infraRsFuncToEpg']['attributes']['object']
-            )
-            vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']]['AEPs'].append(
-                (re.search(r'aep-[-_\w]+', func['infraRsFuncToEpg']['attributes']['aep']).group()
-                 if re.search(r'aep-[-_\w]+', func['infraRsFuncToEpg']['attributes']['aep']) is not None
-                 else func['infraRsFuncToEpg']['attributes']['aep'])
-            )
-
-        for key in vlan_dict:
-            vlan_dict[key]['Consumers'] = list(set(vlan_dict[key]['Consumers']))
-            vlan_dict[key]['AEPs'] = list(set(vlan_dict[key]['AEPs']))
-
-        # Convert vlan_dict keys to integers
-        for key in dict(vlan_dict):
-            vlan_dict[int(key)] = vlan_dict.pop(key)
-
-        if vlan is not None:
-            try:
-                return {vlan: vlan_dict[vlan]}
-            except KeyError:
-                return 'VLAN Is Not Used'
-        elif epg is not None:
-            try:
-                return list(({key: vlan_dict[key]} for key in vlan_dict
-                             for entry in vlan_dict[key]['Consumers']
-                             if re.search(f'{epg}$', entry)))
-            except StopIteration:
-                return ['VLAN Not Found for Endpoint Group']
-        elif aep is not None:
-            try:
-                return list(({key: vlan_dict[key]} for key in vlan_dict
-                             for entry in vlan_dict[key]['AEPs']
-                             if aep in entry))
-            except StopIteration:
-                return ['No VLANs Not Found on Port Template']
-        else:
-            return vlan_dict
+    # def get_vlan_data_old(self, vlan=None, epg=None, aep=None):
+    #     """
+    #     :rtype: dict if vlan is not None: list
+    #     :param vlan:
+    #     :param epg:
+    #     :param aep:
+    #     :return:
+    #     """
+    #     if_conn = self.class_dn_search(object_class='fvIfConn', filter_string='vlan-', config_only=False)
+    #     func_to_epg = self.class_dn_search(object_class='infraRsFuncToEpg', filter_string='', config_only=True)
+    #
+    #     if isinstance(func_to_epg, dict):
+    #         func_to_epg = [func_to_epg]
+    #
+    #     for record in if_conn:
+    #         record['fvIfConn']['attributes']['encap'] = int(
+    #             record['fvIfConn']['attributes']['encap'].replace('vlan-', ''))
+    #         record['fvIfConn']['attributes']['object'] = \
+    #             re.search('tn[-A-Za-z_/0-9]+', record['fvIfConn']['attributes']['dn']).group()
+    #         try:
+    #             record['fvIfConn']['attributes']['aep'] = \
+    #                 re.search(r'attEnt[-A-Za-z_\[\]0-9]+', record['fvIfConn']['attributes']['dn']).group()
+    #         except AttributeError:
+    #             record['fvIfConn']['attributes']['aep'] = 'AEP Not Found'
+    #
+    #     for record in func_to_epg:
+    #         record['infraRsFuncToEpg']['attributes']['encap'] = \
+    #             int(record['infraRsFuncToEpg']['attributes']['encap'].replace('vlan-', ''))
+    #         record['infraRsFuncToEpg']['attributes']['object'] = \
+    #             re.search('tn.*', record['infraRsFuncToEpg']['attributes']['tDn']).group()
+    #         record['infraRsFuncToEpg']['attributes']['aep'] = \
+    #             re.search('attentp-[-A-Za-z_0-9]+', record['infraRsFuncToEpg']['attributes']['dn']).group()
+    #
+    #     vlan_dict = {each['fvIfConn']['attributes']['encap']: {'Consumers': [], 'AEPs': []} for each in if_conn}
+    #     for func in func_to_epg:
+    #         vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']] = {'Consumers': [], 'AEPs': []}
+    #
+    #     for ep in if_conn:
+    #         vlan_dict[ep['fvIfConn']['attributes']['encap']]['Consumers'].append(ep['fvIfConn']['attributes']['object'])
+    #         if ep['fvIfConn']['attributes']['aep'] != 'AEP Not Found':
+    #             vlan_dict[ep['fvIfConn']['attributes']['encap']]['AEPs'].append(
+    #                 (re.search(r'aep-[-_\w]+', ep['fvIfConn']['attributes']['aep']).group()
+    #                  if re.search(r'aep-[-_\w]+', ep['fvIfConn']['attributes']['aep']) is not None
+    #                  else ep['fvIfConn']['attributes']['aep'])
+    #             )
+    #
+    #     for func in func_to_epg:
+    #         vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']]['Consumers'].append(
+    #             func['infraRsFuncToEpg']['attributes']['object']
+    #         )
+    #         vlan_dict[func['infraRsFuncToEpg']['attributes']['encap']]['AEPs'].append(
+    #             (re.search(r'aep-[-_\w]+', func['infraRsFuncToEpg']['attributes']['aep']).group()
+    #              if re.search(r'aep-[-_\w]+', func['infraRsFuncToEpg']['attributes']['aep']) is not None
+    #              else func['infraRsFuncToEpg']['attributes']['aep'])
+    #         )
+    #
+    #     for key in vlan_dict:
+    #         vlan_dict[key]['Consumers'] = list(set(vlan_dict[key]['Consumers']))
+    #         vlan_dict[key]['AEPs'] = list(set(vlan_dict[key]['AEPs']))
+    #
+    #     # Convert vlan_dict keys to integers
+    #     for key in dict(vlan_dict):
+    #         vlan_dict[int(key)] = vlan_dict.pop(key)
+    #
+    #     if vlan is not None:
+    #         try:
+    #             return {vlan: vlan_dict[vlan]}
+    #         except KeyError:
+    #             return 'VLAN Is Not Used'
+    #     elif epg is not None:
+    #         try:
+    #             return list(({key: vlan_dict[key]} for key in vlan_dict
+    #                          for entry in vlan_dict[key]['Consumers']
+    #                          if re.search(f'{epg}$', entry)))
+    #         except StopIteration:
+    #             return ['VLAN Not Found for Endpoint Group']
+    #     elif aep is not None:
+    #         try:
+    #             return list(({key: vlan_dict[key]} for key in vlan_dict
+    #                          for entry in vlan_dict[key]['AEPs']
+    #                          if aep in entry))
+    #         except StopIteration:
+    #             return ['No VLANs Not Found on Port Template']
+    #     else:
+    #         return vlan_dict
 
     def get_next_vlan(self):
         """
@@ -1947,24 +1929,23 @@ class APIC:
                 pass
 
     def bd_cleanup(self, tenant: str):
-        assert tenant.startswith('tn-')
         bds = self.get('/api/class/fvBD.json?rsp-prop-include=config-only').json()['imdata']
         bds = [GenericClass.load(bd) for bd in bds]
-        bds = [bd for bd in bds if bd.attributes.dn.split('/')[1] == f'tn-{tenant}']
+        bds = [bd for bd in bds if BD_DN_SEARCH.search(bd.attributes.dn).group(1) == tenant]
 
         used_bds = self.get('/api/class/fvRsBd.json').json()['imdata']
-        used_bds = [GenericClass.load(bd) for bd in used_bds]
-        used_bds = [bd for bd in used_bds if bd.attributes.dn.split('/')[1] == f'tn-{tenant}']
+        used_bds = [APICObject.load(bd) for bd in used_bds]
+        used_bds = [bd for bd in used_bds if BD_DN_SEARCH.search(bd.attributes.dn).group(1) == tenant]
 
         for bd in bds:
-            if bd.attributes.name not in [ubd.attributes.tnFvBDName for ubd in used_bds]:
+            if bd.attributes.dn not in [ubd.attributes.tDn for ubd in used_bds]:
                 answer = input(f'Do you want to delete {bd.attributes.name} from {tenant}?  (y/n) ')
 
                 if answer.lower().startswith('y'):
-                    bd.attributes.__setattr__('status', 'deleted')
+                    bd.delete()
 
                     response = self.post(bd.json())
-                    print(response.status_code, response.reason)
+                    logging.info(f'Deletion of {bd.attributes.dn}: {response.status_code} {response.json()}')
         return None
 
     def fault_cleanup(self):
@@ -2188,171 +2169,6 @@ class APIC:
 
         return 200, {'message': 'Old AEP has been replaced by new AEP',
                      'details': return_data}
-
-    def rebrand_epg_bd_new(self, old_epg_dn: str, new_epg_dn: str, new_bd_name: str=None):
-        if not old_epg_dn.startswith('uni/'):
-            old_epg_dn = f'uni/{old_epg_dn}'
-        if not new_epg_dn.startswith('uni/'):
-            new_epg_dn = f'uni/{new_epg_dn}'
-
-        # TODO: Add ability to update Github AppInstance data along with this
-        old_tenant, old_ap_name, old_epg_name = EPG_DN_SEARCH.search(old_epg_dn).groups()
-        new_tenant, new_ap_name, new_epg_name = EPG_DN_SEARCH.search(new_epg_dn).groups()
-
-        # TODO: Create table for all application instances to make querying faster
-        gh = GithubAPI()
-        table = yaml.load(gh.get_file_content('pyapis/appinst_index.yaml'), yaml.Loader)
-
-        # Load AppInstance based on name
-        # TODO: This isn't working because I don't really have a way to maintain it
-        try:
-            old_inst_path = next(_['path'] for _ in table if _['epgDn'] == old_epg_dn)
-            inst = AppInstance.load(old_inst_path)
-        except (StopIteration, NameError):
-            inst = None
-            old_inst_path = None
-
-        # tenant = old_epg_dn.split('/')[1][3:]
-        # new_tenant = new_epg_dn.split('/')[1][3:]
-        # epg_name = old_epg_dn.split('/')[-1][4:]
-
-        # Get the primary VRF for the destination tenant.  It may be different that the origin tenant
-        ctx = self.get_primary_vrf(tenant=new_tenant)
-
-        # # Determine AP name and whether the new AP needs to be created.  Create if needed
-        # new_ap_name = new_epg_dn.split('/')[2][3:]
-
-        # if not new_ap_name.startswith('ap-'):
-        #     new_ap_name = f'ap-{new_ap_name}'
-
-        aps = [AP.load(ap) for ap in self.collect_aps(tn=new_tenant)]
-        if new_ap_name not in [ap.attributes.name for ap in aps]:
-            ap = AP()
-            ap.attributes.dn = f'uni/tn-{new_tenant}/ap-{new_ap_name}'
-            ap.attributes.__setattr__('status', 'created')
-        else:
-            ap = None
-
-        # Check to see if the new EPG name already exists.  Should not continue if it does
-        epg_usage = self.get(f'/api/mo/{new_epg_dn}.json')
-
-        if not epg_usage.ok:
-            return {'message': 'The existence of the new EPG could not be confirmed',
-                    'details': epg_usage.json()}
-
-        if int(epg_usage.json()['totalCount']):
-            return {'message': 'The new EPG name provided already exists.  Automation aborted',
-                    'details': epg_usage.json()}
-
-        # Collect existing EPG
-        epg = EPG.load(self.collect_epgs(tn=old_tenant, epg=old_epg_name))
-
-        bd_name = next(child.attributes.tnFvBDName for child in epg.children if child.class_ == 'fvRsBd')
-
-        # Collect all BDs from the new tenant.  May or may not be moving to another Tenant
-        bds = [BD.load(_) for _ in self.collect_bds(tn=new_tenant)]
-
-        if new_bd_name and bd_name != new_bd_name:
-
-            # Check to ensure the old BD is not used by multiple EPGs
-            multi_usage = self.get(f'/api/mo/uni/tn-{new_tenant}.json?query-target=subtree&target-subtree-class=fvRsBd'
-                                   f'&query-target-filter=eq(fvRsBd.tnFvBDName,"{bd_name}")')
-            if not multi_usage.ok:
-                # Without a valid response regarding bridge domain usage it would be dangerous to proceed
-                return {'message': 'Bad response from APIC when attempting to get bridge domain usage',
-                        'details': multi_usage.json()}
-
-            if int(multi_usage.json()['totalCount']) > 1:
-                # This scenario could result in outages.  Deleting or changing a bridge domain used by multiple EPGs
-                # can result in the loss of endpoints.  The automation exits if this condition is met.
-                return {'message': 'BD is in use by multiple EPGs. This prevents this automation from running.'}
-
-            # A new BD was specified. Checks will be run to validate the new name against the existing name
-            bd = BD.load(self.collect_bds(tn=old_tenant, bd=bd_name))
-
-            if new_bd_name in [x.attributes.name for x in bds]:
-                # This scenario requires the subnets from the old BD to be put on the existing BD and the old BD be
-                # deleted
-                # No need to change the VRF here.  The BD in the destination tenant already exists
-                new_bd = next(_ for _ in bds if _.attributes.name == new_bd_name)
-                new_bd.attributes.__setattr__('status', 'modified')
-                # This assigns the subnets from the old BD to the new BD without altering the BD configuration
-                new_bd.children = [Subnet.load(child.json()) for child in bd.children if child.class_ == 'fvSubnet']
-                # Prepare the old BD for deletion
-                bd.attributes.__setattr__('status', 'deleted')
-                bd_settings = new_bd.attributes.json()
-            else:
-                # This scenario requires the creation of a new BD.  The old BD will be copied, then deleted assuming it
-                # only has one usage
-                new_bd = BD.load(bd.json())
-                new_bd.attributes.__delattr__('name')
-                new_bd.tenant = new_tenant
-                new_bd.name = new_bd_name
-                print(new_bd.json())
-                # New BD means we need to use the primary VRF, most likely
-                new_bd.use_vrf(name=ctx.attributes.name)
-                print(new_bd.json())
-                new_bd.attributes.__setattr__('status', 'created')
-                # Prepare the old BD for deletion
-                bd.attributes.__setattr__('status', 'deleted')
-                bd_settings = new_bd.attributes.json()
-        else:
-            bd = None
-            new_bd = None
-
-        # Copy existing EPG to new EPG and modify attributes
-        new_epg = EPG.load(epg.json())
-        new_epg.attributes.__setattr__('status', 'created')
-        new_epg.attributes.__delattr__('name')
-        new_epg.attributes.dn = new_epg_dn
-        if new_bd:
-            rs_bd = next(child for child in new_epg.children if child.class_ == 'fvRsBd')
-            rs_bd.attributes.tnFvBDName = new_bd_name
-
-        # Stage existing EPG for deletion
-        epg.attributes.__setattr__('status', 'deleted')
-
-        # Implement the configs
-        if ap:
-            ap_result = self.post(ap.json())
-            print(ap.json())
-            if ap_result.ok:
-                inst.apName = new_ap_name
-        else:
-            ap_result = None
-
-        if bd and new_bd:
-            old_bd_result = self.post(configuration=bd.json())
-            print(bd.json())
-            new_bd_result = self.post(configuration=new_bd.json())
-            print(new_bd.json())
-            if old_bd_result.ok and new_bd_result.ok:
-                inst.bdName = new_bd_name
-        else:
-            new_bd_result = None
-            old_bd_result = None
-
-        old_epg_result = self.post(epg.json())
-        new_epg_result = self.post(new_epg.json())
-        if new_epg_result.ok:
-            inst.epgName = new_epg_name
-
-        self.reassign_encap(old_epg_dn=epg.attributes.dn, new_epg_dn=new_epg.attributes.dn)
-
-        # Everything seems to have worked, now update AppInstance or create new
-        if inst:
-            inst.application = AppInstance.format_name(new_ap_name)
-            name_first = AppInstance.format_name(new_epg_name)
-            inst.name = AppInstance.format_name(f'{self.env.Name}_{name_first}')
-
-            gh = GithubAPI()
-            gh.delete_file(file_path=old_inst_path,
-                           message=f'Rebranded {epg.attributes.name} to {new_epg.attributes.name}')
-            gh.add_file(inst.path(), message=f'Moved {old_epg_dn} to {new_epg_dn}', content=inst.content())
-
-        return {'ap_result': ap_result.reason, 'new_epg_result': new_epg_result.reason,
-                'old_epg_result': old_epg_result.reason, 'old_bd_result': old_bd_result.reason,
-                'new_bd_result': new_bd_result.reason}
 
     def clone_aep(self, aep_name, new_aep_name) -> Tuple[int, dict]:
         # Check if requested AEP exists first
@@ -3587,19 +3403,31 @@ class APIC:
         supernet = IPv4Network('10.0.0.0/8')
 
         # Collect all endpoints
-        eps = [APICObject.load(_) for _ in self.get('/api/class/fvIp.json').json()['imdata']]
-        eps = [(mac, IPv4Network(ip)) for ep in eps for mac, ip in MAC_IP_SEARCH.search(ep.attributes.dn).groups()]
+        ep_objs = [APICObject.load(_) for _ in self.get('/api/class/fvIp.json').json()['imdata']]
+        eps = []
+        for ep in ep_objs:
+            mac, ip = MAC_IP_SEARCH.search(ep.attributes.dn).groups()
+            eps += [(mac, IPv4Network(ip))]
+
+        eps.sort(key=lambda x: int(x[1].network_address), reverse=True)
 
         ipam = NetworkAPIIPAM()
 
         # Check each IP to see if it is assigned.  Assign if not assigned.
         while eps:
+            starttime = time.perf_counter()
             mac, ip = eps.pop()
+            print(f'Checking {ip.network_address}...')
             if supernet.overlaps(ip):
                 ipam_ip = ipam.get_address(str(ip.network_address)).json()
 
                 if ipam_ip['state'] == 'UNASSIGNED':
+                    print(f'Assigning IP {ip.network_address} as ACI_AUTO_ASSIGN_{mac}')
                     _ = ipam.bulk_reserve([dict(name=f'ACI_AUTO_ASSIGN_{mac}', address=ipam_ip['address'])])
+                    print(f'Process took {round(time.perf_counter() - starttime, 3)} seconds')
+                else:
+                    print(f'{ip.network_address} already assigned to {ipam_ip["name"]}')
+                    print(f'Process took {round(time.perf_counter() - starttime, 3)} seconds')
 
         return None
 
