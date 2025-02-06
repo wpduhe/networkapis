@@ -278,6 +278,9 @@ class GenericClass:
     def create(self):
         self.attributes.__setattr__('status', 'created')
 
+    def delete(self):
+        self.attributes.__setattr__('status', 'deleted')
+
     def pop_child_class(self, class_):
         if class_ in [_.class_ for _ in self.children]:
             child = self.children.pop(self.children.index(next(c for c in self.children if c.class_ == class_)))
