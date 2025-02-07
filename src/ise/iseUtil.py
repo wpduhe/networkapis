@@ -11,7 +11,7 @@ from datetime import datetime
 from ad.adUtil import pyAD
 from ise.pyISE import ERS
 
-pyise = ERS(ise_node='fwdclpmgtise01.hca.corpad.net', disable_warnings=True, timeout=60)
+pyise = ERS(ise_node=os.getenv('isenode'), disable_warnings=True, timeout=60)
 pyad = pyAD()
 
 data = crp.read_encrypted(path='data/iPSKListv2.crypt', password=os.getenv('ipskcrypt'))
