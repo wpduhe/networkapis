@@ -138,6 +138,8 @@ def main():
         # If they do not match, update routes
         logger.debug('WSA appliance routes differ from administratively defined routes.')
         logger.debug('Starting route deployment for all sites. ')
+
+        # TODO: Find a way to check for change freezes?
         import wsa.deploy_routes
     else:
         logger.debug('WSA appliance routes match administratively defined routes. No action required.')
