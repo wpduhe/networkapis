@@ -179,8 +179,8 @@ if __name__ == '__main__':
     logger.debug(f'Completed route deployment to {site} in {round(time.perf_counter() - start_time, 3)} seconds')
 
 
-if __name__ == 'deploy_routes_handler':
-    # TODO: Maybe figure this out....?
+if __name__ == 'wsa.deploy_routes':
+    logger.debug(f'Route updates triggered by {__name__} import')
     start_time = time.perf_counter()
     data = json.load(open('data/wsa.json'))
 
@@ -188,10 +188,10 @@ if __name__ == 'deploy_routes_handler':
 
     for site in data:
         logger.debug(f'Processing {site}')
-        # loop = asyncio.new_event_loop()
-        # asyncio.set_event_loop(loop)
-        #
-        # loop.run_until_complete(main(loop))
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        loop.run_until_complete(main(loop))
 
     remove_files()
     logger.debug(f'Completed route deployment for all sites in {round(time.perf_counter() - start_time, 3)} seconds')
