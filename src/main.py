@@ -1495,8 +1495,7 @@ def trunk_vlan(request: Request, req_data: TrunkVlan):
 
 @app.get('/apis/wsa/routes', tags=['WSA'])
 def get_wsa_routes(request: Request, dst: Optional[str]=None):
-    """Returns the route(s) that are/will be configured on WSAs.  If a route is seen in this data but not in the WSA
-    routing table, a POST to /apis/wsa/deploy_routes needs to be made."""
+    """Returns the route(s) that are/will be configured on WSAs."""
     from wsa.wsa_routes import get_routes
 
     req_logit(get_wsa_routes, request, dst)
@@ -1544,34 +1543,6 @@ def wsa_routes(request: Request, req_data: WSARoutes):
         res_logit(wsa_routes, request, response)
 
         return Response(status_code=status, content=response, media_type='text/plain')
-
-
-@app.post('/apis/wsa/deploy_routes', tags=['WSA'])
-def wsa_deploy_routes(request: Request, req_data: WSADeployRoutes):
-    """Deploys the routing table found at /apis/wsa/routes to all WSA environments or to the specified site."""
-    req_data = req_data.dict()
-
-    if req_data.pop('key') != 'gxoCQuv7X84ZlXiOL9FR':
-        return Response(status_code=403, content=json.dumps(['You need a key to call this API']),
-                        media_type='application/json')
-
-    req_logit(wsa_routes, request, req_data)
-
-    site = ('' if req_data['site'].lower() == 'all' else req_data['site'].upper())
-
-    from wsa.deploy import deploy_wsa_routes
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    elapsed, response = deploy_wsa_routes(loop=loop, site=site)
-
-    res_logit(wsa_deploy_routes, request, f'Elapsed time: {elapsed} seconds')
-
-    if isinstance(response, list):
-        return response
-    else:
-        return Response(content=f'{elapsed}: {response}', media_type='text/plain')
 
 
 @app.post('/apis/wsa/{data_center}/build', tags=['WSA'])
