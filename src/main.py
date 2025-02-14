@@ -622,7 +622,7 @@ def get_unused_objects(request: Request, az: str):
 
     status, data = apic_utils.APIC(env=az).remove_unused_epgs_bds_subnets()
 
-    return Response(status_code=status, content=data, media_type='application/json')
+    return Response(status_code=status, content=json.dumps(data), media_type='application/json')
 
 
 @app.get('/apis/aci/snmp_clients', tags=['ACI'], include_in_schema=False)
