@@ -33,10 +33,6 @@ import yaml
 #  Example: https://192.168.1.10/api/mo/topology/pod-1/node-101/sys/phys-[eth1/1]/phys/fcot.json
 
 
-# TODO: DONE: Create a new automation to purge usage of a specific VLAN ID or EPG distinguished name or the combination
-#  of both. Use it first in SEDC on VLAN 2381 which was assigned to epg-Meditech-CAA (needed to be recovered in FWDC)
-
-
 urllib3.disable_warnings()
 urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
 
@@ -1511,176 +1507,6 @@ class APIC:
         else:
             return False
 
-    def interface_configuration_old(self, aep_name: str, infra_info: list):
-        assert self.exists(infraAttEntityP=aep_name), 'The specified AEP does not exist'
-
-        # Get complete list of Interface Policy Group Names
-        acc_pg_list = self.get('/api/class/infraAccPortGrp.json').json()['imdata']
-        pc_pg_list = self.get('/api/class/infraAccBndlGrp.json').json()['imdata']
-        acc_pg_list = list((GenericClass.load(x).attributes.name for x in acc_pg_list))
-        pc_pg_list = list((GenericClass.load(x).attributes.name for x in pc_pg_list))
-        pg_list = acc_pg_list + pc_pg_list
-
-        # Compile complete list of switch profiles that will need to be updated and empty the children containers
-        switch_profiles = list((SwitchProfile.load(x) for x in self.collect_switch_profiles()))
-        for x in switch_profiles:
-            x.attributes.status = 'modified'
-            x.children = []
-
-        # Start compiling JSON POST data
-        infra = Infra()
-
-        infra_funcp = GenericClass('infraFuncP')  # Policy groups will be a child objects of this object
-        infra_funcp.attributes.dn = 'uni/infra/funcprof'
-        infra_funcp.attributes.status = 'modified'
-
-        infra.children.append(infra_funcp)
-
-        for server in infra_info:
-            interfaces = server['interfaces']
-            port_channel = server['port_channel']
-            lacp = server['lacp']
-            pg_prefix = None
-
-            policy_group = InterfacePolicyGroup()
-            policy_group.attributes.status = 'created'
-            policy_group.use_aep(aep_name=aep_name)
-            if port_channel is True:
-                policy_group.port_channel(lacp=lacp)
-
-            for switch_profile in server['switch_profiles']:
-                nodes = re.findall(r'\d{3}', switch_profile)
-                node_count = len(nodes)
-                s_profile = next(x for x in switch_profiles if switch_profile == x.attributes.name)
-
-                if port_channel is True and node_count == 2:
-                    i_profile_name = f'vpc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
-                    if i_profile_name not in list((x.attributes.name for x in infra.children
-                                                   if type(x) == InterfaceProfile)):
-                        i_profile = InterfaceProfile()
-                        i_profile.attributes.name = i_profile_name
-                        i_profile.attributes.status = 'created,modified'
-                    else:
-                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
-                                         if x.attributes.name == i_profile_name)
-
-                    policy_group.attributes.name = f'vpc-{server["infra_name"]}'
-                    pg_prefix = 'vpc'
-                    policy_group.attributes.lagT = 'node'
-
-                    selector = InterfaceSelector()
-                    selector.attributes.name = f'vpc-{server["infra_name"]}'
-                    selector.attributes.descr = server['infra_name']
-                    selector.attributes.status = 'created,modified'
-
-                    i_profile.children.append(selector)
-
-                    for intfs in interfaces.split(','):
-                        ports = intfs.split('-')
-                        block = InterfaceBlock()
-                        block.attributes.name = f'block{int(ports[0]) + 1}'
-                        block.attributes.fromPort = ports[0]
-                        block.attributes.toPort = ports[-1]
-                        block.attributes.descr = server['infra_name']
-
-                        selector.children.append(block)
-
-                elif port_channel is True and node_count == 1:
-                    i_profile_name = f'pc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
-                    if i_profile_name not in list((x.attributes.name for x in infra.children
-                                                   if type(x) == InterfaceProfile)):
-                        i_profile = InterfaceProfile()
-                        i_profile.attributes.name = i_profile_name
-                        i_profile.attributes.status = 'created,modified'
-                    else:
-                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
-                                         if x.attributes.name == i_profile_name)
-
-                    pg_prefix = 'pc'
-                    policy_group.attributes.lagT = 'link'
-
-                    selector = InterfaceSelector()
-                    selector.attributes.name = f'pc-{server["infra_name"]}'
-                    selector.attributes.descr = server['infra_name']
-                    selector.attributes.status = 'created,modified'
-
-                    i_profile.children.append(selector)
-
-                    for intfs in interfaces.split(','):
-                        ports = intfs.split('-')
-                        block = InterfaceBlock()
-                        block.attributes.name = f'block{int(ports[0]) + 1}'
-                        block.attributes.fromPort = ports[0]
-                        block.attributes.toPort = ports[-1]
-                        block.attributes.descr = server['infra_name']
-
-                        selector.children.append(block)
-
-                elif port_channel is False:
-                    i_profile_name = f'acc-{aep_name.replace("aep-", "")}_{"-".join(nodes)}'
-                    if i_profile_name not in list((x.attributes.name for x in infra.children
-                                                   if type(x) == InterfaceProfile)):
-                        i_profile = InterfaceProfile()
-                        i_profile.attributes.name = i_profile_name
-                        i_profile.attributes.status = 'created,modified'
-                    else:
-                        i_profile = next(x for x in infra.children if type(x) == InterfaceProfile
-                                         if x.attributes.name == i_profile_name)
-
-                    pg_prefix = 'acc'
-
-                    selector = InterfaceSelector()
-                    selector.attributes.name = f'acc-{server["infra_name"]}'
-                    selector.attributes.descr = server['infra_name']
-                    selector.attributes.status = 'created,modified'
-
-                    i_profile.children.append(selector)
-
-                    for intfs in interfaces.split(','):
-                        ports = intfs.split('-')
-                        block = InterfaceBlock()
-                        block.attributes.name = f'block{int(ports[0]) + 1}'
-                        block.attributes.fromPort = ports[0]
-                        block.attributes.toPort = ports[-1]
-                        block.attributes.descr = server['infra_name']
-
-                        selector.children.append(block)
-
-                else:
-                    raise Exception('The Request could not be processed')
-
-                attach_i_profile = GenericClass('infraRsAccPortP')
-                attach_i_profile.attributes.tDn = f'uni/infra/accportprof-{i_profile.attributes.name}'
-                attach_i_profile.attributes.status = 'created,modified'
-
-                if attach_i_profile.attributes.tDn not in list((x.attributes.tDn for x in s_profile.children)):
-                    s_profile.children.append(attach_i_profile)
-
-                if i_profile not in infra.children:
-                    infra.children.append(i_profile)
-
-                attach_policy_group = GenericClass('infraRsAccBaseGrp')
-                if pg_prefix == 'vpc' or pg_prefix == 'pc':
-                    tdn_path = 'uni/infra/funcprof/accbundle-'
-                else:
-                    tdn_path = 'uni/infra/funcprof/accportgrp-'
-                attach_policy_group.attributes.tDn = f'{tdn_path}{pg_prefix}-{server["infra_name"]}'
-                attach_policy_group.attributes.status = 'created,modified'
-
-                selector.children.append(attach_policy_group)
-
-            policy_group.attributes.name = f'{pg_prefix}-{server["infra_name"]}'
-            if policy_group.attributes.name not in pg_list and \
-                    policy_group.attributes.name not in \
-                    (x.attributes.name for x in infra_funcp.children if type(x) is InterfacePolicyGroup):
-                infra_funcp.children.append(policy_group)
-        for x in switch_profiles:
-            if not x.children == list():
-                infra.children.append(x)
-
-        r = self.post(configuration=infra.json(), uri='/api/mo/uni/infra.json')
-        # return infra.json()
-        return r, infra.json()
 
     def interface_configuration(self, aep_name: str, infra_info: list):
         assert self.exists(infraAttEntityP=aep_name), 'The specified AEP does not exist'
@@ -2879,7 +2705,7 @@ class APIC:
         # Collect all endpoints, fvCEp
         endpoints = [APICObject.load(_) for _ in self.collect_eps()]
         # Filter to endpoints known via EPGs
-        endpoints = [_ for _ in endpoints if re.match(r'uni/tn-[^/]+/ap-[^/]+/epg-[^/]+', _.attributes.dn)]
+        endpoints = [_ for _ in endpoints if EPG_DN_SEARCH.match(_.attributes.dn)]
 
         ipaddresses = set(_.attributes.ip for _ in endpoints if 'ip' in _.attributes.json().keys()
                           if bool(int(IPv4Address(_.attributes.ip))))
@@ -2911,10 +2737,13 @@ class APIC:
             mod = APICObject.load(self.get(
                 '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
                                       'imdata'])
-            creation = datetime.fromisoformat(mod.attributes.created)
-            delta = datetime.now(creation.tzinfo) - creation
-            if delta.days < 30:
-                unused_epgs.remove(_)
+            if mod:
+                creation = datetime.fromisoformat(mod.attributes.created)
+                delta = datetime.now(creation.tzinfo) - creation
+                if delta.days < 30:
+                    unused_epgs.remove(_)
+            else:
+                continue
 
         # Collect all bridge domains from production and ADMZ tenants
         bds = [APICObject.load(_) for _ in self.get('/api/class/fvBD.json').json()['imdata']]
@@ -2944,10 +2773,13 @@ class APIC:
             mod = APICObject.load(self.get(
                 '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
                                       'imdata'])
-            creation = datetime.fromisoformat(mod.attributes.created)
-            delta = datetime.now(creation.tzinfo) - creation
-            if delta.days < 30:
-                unused_subnets.remove(_)
+            if mod:
+                creation = datetime.fromisoformat(mod.attributes.created)
+                delta = datetime.now(creation.tzinfo) - creation
+                if delta.days < 30:
+                    unused_subnets.remove(_)
+            else:
+                continue
 
 
         # return unused_epgs, unused_bds, (unused_subnets, used_subnets)
