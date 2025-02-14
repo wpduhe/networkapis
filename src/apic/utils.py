@@ -2768,20 +2768,6 @@ class APIC:
 
         unused_subnets = all_subnets.difference(used_subnets)
 
-        # Remove subnets that were created less than 30 days ago
-        for _ in list(unused_subnets):
-            mod = APICObject.load(self.get(
-                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
-                                      'imdata'])
-            if mod:
-                creation = datetime.fromisoformat(mod.attributes.created)
-                delta = datetime.now(creation.tzinfo) - creation
-                if delta.days < 30:
-                    unused_subnets.remove(_)
-            else:
-                continue
-
-
         # return unused_epgs, unused_bds, (unused_subnets, used_subnets)
         return 200, {'unused_epgs': list(unused_epgs), 'unused_bds': list(unused_bds),
                      'unused_subnets': list(unused_subnets)}
