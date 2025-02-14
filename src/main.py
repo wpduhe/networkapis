@@ -620,9 +620,9 @@ def get_unused_objects(request: Request, az: str):
     """Get a list of unused EPGs, BDs, and Subnets from the target fabric"""
     req_logit(get_unused_objects, request, az)
 
-    data = apic_utils.APIC(env=az).remove_unused_epgs_bds_subnets()
+    status, data = apic_utils.APIC(env=az).remove_unused_epgs_bds_subnets()
 
-    return data
+    return Response(status_code=status, content=data, media_type='application/json')
 
 
 @app.get('/apis/aci/snmp_clients', tags=['ACI'], include_in_schema=False)
