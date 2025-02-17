@@ -1,0 +1,590 @@
+FRDC-WSA:
+  auth_servers:
+  - ftwadhca01.hca.corpad.net
+  - ftwadhca02.hca.corpad.net
+  - corpadhca01.hca.corpad.net
+  dns:
+  - 10.65.1.29
+  - 10.226.128.203
+  - 10.129.1.29
+  - 10.227.128.203
+  environments:
+    environment_1:
+      external_gateway: 10.65.200.65
+      internal_gateway: 10.65.200.33
+      wsaList:
+      - hostname: FWDCUPPRX01A
+        mgmtIP: 10.90.1.103/24
+        p1: 10.65.200.36/27
+        p2: 10.65.200.68/27
+      - hostname: FWDCUPPRX01B
+        mgmtIP: 10.90.1.104/24
+        p1: 10.65.200.37/27
+        p2: 10.65.200.69/27
+      - hostname: FWDCUPPRX01C
+        mgmtIP: 10.90.1.105/24
+        p1: 10.65.200.38/27
+        p2: 10.65.200.70/27
+      - hostname: FWDCUPPRX01D
+        mgmtIP: 10.90.1.106/24
+        p1: 10.65.200.39/27
+        p2: 10.65.200.71/27
+      - hostname: FWDCUPPRX01E
+        mgmtIP: 10.90.1.107/24
+        p1: 10.65.200.40/27
+        p2: 10.65.200.72/27
+      - hostname: FWDCUPPRX01F
+        mgmtIP: 10.90.1.108/24
+        p1: 10.65.200.41/27
+        p2: 10.65.200.73/27
+      - hostname: FWDCUPPRX01G
+        mgmtIP: 10.90.1.109/24
+        p1: 10.65.200.42/27
+        p2: 10.65.200.74/27
+      - hostname: FWDCUPPRX01H
+        mgmtIP: 10.90.1.110/24
+        p1: 10.65.200.43/27
+        p2: 10.65.200.75/27
+      - hostname: FWDCUPPRX01I
+        mgmtIP: 10.90.1.111/24
+        p1: 10.65.200.44/27
+        p2: 10.65.200.76/27
+      - hostname: FWDCUPPRX01J
+        mgmtIP: 10.90.1.112/24
+        p1: 10.65.200.45/27
+        p2: 10.65.200.77/27
+      - hostname: FWDCUPPRX01K
+        mgmtIP: 10.90.1.113/24
+        p1: 10.65.200.46/27
+        p2: 10.65.200.78/27
+      - hostname: FWDCUPPRX01L
+        mgmtIP: 10.90.1.114/24
+        p1: 10.65.200.47/27
+        p2: 10.65.200.79/27
+      - hostname: FWDCUPPRX01M
+        mgmtIP: 10.90.1.115/24
+        p1: 10.65.200.48/27
+        p2: 10.65.200.80/27
+      - hostname: FWDCUPPRX01N
+        mgmtIP: 10.90.1.116/24
+        p1: 10.65.200.49/27
+        p2: 10.65.200.81/27
+      - hostname: FWDCUPPRX01O
+        mgmtIP: 10.90.1.117/24
+        p1: 10.65.200.50/27
+        p2: 10.65.200.82/27
+      - hostname: FWDCUPPRX01P
+        mgmtIP: 10.90.1.121/24
+        p1: 10.65.200.51/27
+        p2: 10.65.200.83/27
+      - hostname: FWDCUPPRX01Q
+        mgmtIP: 10.90.1.122/24
+        p1: 10.65.200.52/27
+        p2: 10.65.200.84/27
+      - hostname: FWDCUPPRX01R
+        mgmtIP: 10.90.1.123/24
+        p1: 10.65.200.53/27
+        p2: 10.65.200.85/27
+      - hostname: FWDCUPPRX01S
+        mgmtIP: 10.219.3.140/24
+        p1: 10.65.200.54/27
+        p2: 10.65.200.86/27
+      - hostname: FWDCUPPRX01T
+        mgmtIP: 10.219.3.141/24
+        p1: 10.65.200.55/27
+        p2: 10.65.200.87/27
+      - hostname: FWDCUPPRX01U
+        mgmtIP: 10.219.3.142/24
+        p1: 10.65.200.56/27
+        p2: 10.65.200.88/27
+      - hostname: FWDCUPPRX01V
+        mgmtIP: 10.219.3.143/24
+        p1: 10.65.200.57/27
+        p2: 10.65.200.89/27
+      - hostname: FWDCUPPRX01W
+        mgmtIP: 10.219.3.144/24
+        p1: 10.65.200.58/27
+        p2: 10.65.200.90/27
+      - hostname: FWDCUPPRX01X
+        mgmtIP: 10.219.3.145/24
+        p1: 10.65.200.59/27
+        p2: 10.65.200.91/27
+      - hostname: FWDCUPPRX01Y
+        mgmtIP: 10.219.3.146/24
+        p1: 10.65.200.60/27
+        p2: 10.65.200.92/27
+      - hostname: FWDCUPPRX01Z
+        mgmtIP: 10.219.3.147/24
+        p1: 10.65.200.61/27
+        p2: 10.65.200.93/27
+    environment_2:
+      external_gateway: 10.65.200.129
+      internal_gateway: 10.65.200.97
+      wsaList:
+      - hostname: FWDCUPPRX01AA
+        mgmtIP: 10.219.3.148/24
+        p1: 10.65.200.98/27
+        p2: 10.65.200.130/27
+      - hostname: FWDCUPPRX01BB
+        mgmtIP: 10.219.3.149/24
+        p1: 10.65.200.99/27
+        p2: 10.65.200.131/27
+  frdcRadius: true
+  logging: 10.204.64.40
+  mgmt_gateway: 10.90.1.1
+  name: FRDC-WSA
+  ntp:
+  - 10.90.10.100
+  - 10.26.10.100
+  - 10.154.10.100
+  snmpLocation: FRDC
+  timezone: America/Chicago
+SEDC-WSA:
+  auth_servers:
+  - sedcadhca02.hca.corpad.net
+  - sedcadhca01.hca.corpad.net
+  - orladhca03.hca.corpad.net
+  dns:
+  - 10.209.128.203
+  - 10.227.128.203
+  - 10.129.1.29
+  - 10.65.1.29
+  environments:
+    environment_1:
+      external_gateway: 10.209.128.97
+      internal_gateway: 10.209.128.226
+      wsaList:
+      - hostname: SEDCUPPRX01A
+        mgmtIP: 10.209.7.138/25
+        p1: 10.209.128.230/27
+        p2: 10.209.128.100/27
+      - hostname: SEDCUPPRX01B
+        mgmtIP: 10.209.7.139/25
+        p1: 10.209.128.231/27
+        p2: 10.209.128.101/27
+      - hostname: SEDCUPPRX01C
+        mgmtIP: 10.209.7.140/25
+        p1: 10.209.128.232/27
+        p2: 10.209.128.102/27
+      - hostname: SEDCUPPRX01D
+        mgmtIP: 10.209.7.141/25
+        p1: 10.209.128.233/27
+        p2: 10.209.128.103/27
+      - hostname: SEDCUPPRX01E
+        mgmtIP: 10.209.7.142/25
+        p1: 10.209.128.234/27
+        p2: 10.209.128.104/27
+      - hostname: SEDCUPPRX01F
+        mgmtIP: 10.209.7.143/25
+        p1: 10.209.128.235/27
+        p2: 10.209.128.105/27
+      - hostname: SEDCUPPRX01G
+        mgmtIP: 10.209.7.144/25
+        p1: 10.209.128.236/27
+        p2: 10.209.128.106/27
+      - hostname: SEDCUPPRX01H
+        mgmtIP: 10.209.7.145/25
+        p1: 10.209.128.237/27
+        p2: 10.209.128.107/27
+      - hostname: SEDCUPPRX01I
+        mgmtIP: 10.209.7.146/25
+        p1: 10.209.128.238/27
+        p2: 10.209.128.108/27
+      - hostname: SEDCUPPRX01J
+        mgmtIP: 10.209.7.147/25
+        p1: 10.209.128.239/27
+        p2: 10.209.128.109/27
+  frdcRadius: false
+  logging: 10.227.64.72
+  mgmt_gateway: 10.209.7.129
+  name: SEDC-WSA
+  ntp:
+  - 10.154.10.100
+  - 10.26.10.100
+  - 10.90.10.100
+  snmpLocation: SEDC
+  timezone: America/Kentucky/Louisville
+SLDC-WSA:
+  auth_servers:
+  - ldap-sldc.hca.corpad.net
+  - ftwadhca01.hca.corpad.net
+  - corpadhca01.hca.corpad.net
+  dns:
+  - 10.226.128.203
+  - 10.65.1.29
+  - 10.129.1.29
+  - 10.227.128.203
+  environments:
+    environment_1:
+      external_gateway: 10.226.128.97
+      internal_gateway: 10.226.128.226
+      wsaList:
+      - hostname: SRDCUPPRX01A
+        mgmtIP: 10.226.2.100/24
+        p1: 10.226.128.230/27
+        p2: 10.226.128.100/27
+      - hostname: SRDCUPPRX01B
+        mgmtIP: 10.226.2.101/24
+        p1: 10.226.128.231/27
+        p2: 10.226.128.101/27
+      - hostname: SRDCUPPRX01C
+        mgmtIP: 10.226.2.102/24
+        p1: 10.226.128.232/27
+        p2: 10.226.128.102/27
+      - hostname: SRDCUPPRX01D
+        mgmtIP: 10.226.2.103/24
+        p1: 10.226.128.233/27
+        p2: 10.226.128.103/27
+      - hostname: SRDCUPPRX01E
+        mgmtIP: 10.226.2.104/24
+        p1: 10.226.128.234/27
+        p2: 10.226.128.104/27
+      - hostname: SRDCUPPRX01F
+        mgmtIP: 10.226.2.105/24
+        p1: 10.226.128.235/27
+        p2: 10.226.128.105/27
+      - hostname: SRDCUPPRX01G
+        mgmtIP: 10.226.2.106/24
+        p1: 10.226.128.236/27
+        p2: 10.226.128.106/27
+      - hostname: SRDCUPPRX01H
+        mgmtIP: 10.226.2.107/24
+        p1: 10.226.128.237/27
+        p2: 10.226.128.107/27
+      - hostname: SRDCUPPRX01I
+        mgmtIP: 10.226.2.108/24
+        p1: 10.226.128.238/27
+        p2: 10.226.128.108/27
+      - hostname: SRDCUPPRX01J
+        mgmtIP: 10.226.2.109/24
+        p1: 10.226.128.239/27
+        p2: 10.226.128.109/27
+      - hostname: SRDCUPPRX01K
+        mgmtIP: 10.226.2.110/24
+        p1: 10.226.128.240/27
+        p2: 10.226.128.110/27
+      - hostname: SRDCUPPRX01L
+        mgmtIP: 10.226.2.111/24
+        p1: 10.226.128.241/27
+        p2: 10.226.128.111/27
+      - hostname: SRDCUPPRX01M
+        mgmtIP: 10.226.2.112/24
+        p1: 10.226.128.242/27
+        p2: 10.226.128.112/27
+      - hostname: SRDCUPPRX01N
+        mgmtIP: 10.226.2.113/24
+        p1: 10.226.128.243/27
+        p2: 10.226.128.113/27
+      - hostname: SRDCUPPRX01O
+        mgmtIP: 10.226.2.114/24
+        p1: 10.226.128.244/27
+        p2: 10.226.128.114/27
+      - hostname: SRDCUPPRX01P
+        mgmtIP: 10.226.2.115/24
+        p1: 10.226.128.245/27
+        p2: 10.226.128.115/27
+      - hostname: SRDCUPPRX01Q
+        mgmtIP: 10.226.2.116/24
+        p1: 10.226.128.246/27
+        p2: 10.226.128.116/27
+      - hostname: SRDCUPPRX01R
+        mgmtIP: 10.226.2.117/24
+        p1: 10.226.128.247/27
+        p2: 10.226.128.117/27
+      - hostname: SRDCUPPRX01S
+        mgmtIP: 10.226.2.118/24
+        p1: 10.226.128.248/27
+        p2: 10.226.128.118/27
+      - hostname: SRDCUPPRX01T
+        mgmtIP: 10.226.2.119/24
+        p1: 10.226.128.249/27
+        p2: 10.226.128.119/27
+  frdcRadius: true
+  logging: 10.204.64.40
+  mgmt_gateway: 10.226.2.1
+  name: SLDC-WSA
+  ntp:
+  - 10.90.10.100
+  - 10.26.10.100
+  - 10.154.10.100
+  snmpLocation: SLDC
+  timezone: America/Chicago
+TPDC-WSA:
+  auth_servers:
+  - orladhca02.hca.corpad.net
+  - orladhca03.hca.corpad.net
+  - corpadhca01.hca.corpad.net
+  dns:
+  - 10.227.128.203
+  - 10.129.1.29
+  - 10.65.1.29
+  - 10.226.128.203
+  environments:
+    environment_1:
+      external_gateway: 10.227.128.97
+      internal_gateway: 10.227.128.226
+      wsaList:
+      - hostname: TPDCUPPRX01A
+        mgmtIP: 10.227.2.100/24
+        p1: 10.227.128.230/27
+        p2: 10.227.128.100/27
+      - hostname: TPDCUPPRX01B
+        mgmtIP: 10.227.2.101/24
+        p1: 10.227.128.231/27
+        p2: 10.227.128.101/27
+      - hostname: TPDCUPPRX01C
+        mgmtIP: 10.227.2.102/24
+        p1: 10.227.128.232/27
+        p2: 10.227.128.102/27
+      - hostname: TPDCUPPRX01D
+        mgmtIP: 10.227.2.103/24
+        p1: 10.227.128.233/27
+        p2: 10.227.128.103/27
+      - hostname: TPDCUPPRX01E
+        mgmtIP: 10.227.2.104/24
+        p1: 10.227.128.234/27
+        p2: 10.227.128.104/27
+      - hostname: TPDCUPPRX01F
+        mgmtIP: 10.227.2.105/24
+        p1: 10.227.128.235/27
+        p2: 10.227.128.105/27
+      - hostname: TPDCUPPRX01G
+        mgmtIP: 10.227.2.106/24
+        p1: 10.227.128.236/27
+        p2: 10.227.128.106/27
+      - hostname: TPDCUPPRX01H
+        mgmtIP: 10.227.2.107/24
+        p1: 10.227.128.237/27
+        p2: 10.227.128.107/27
+      - hostname: TPDCUPPRX01I
+        mgmtIP: 10.227.2.108/24
+        p1: 10.227.128.238/27
+        p2: 10.227.128.108/27
+      - hostname: TPDCUPPRX01J
+        mgmtIP: 10.227.2.109/24
+        p1: 10.227.128.239/27
+        p2: 10.227.128.109/27
+      - hostname: TPDCUPPRX01K
+        mgmtIP: 10.227.2.110/24
+        p1: 10.227.128.240/27
+        p2: 10.227.128.110/27
+      - hostname: TPDCUPPRX01L
+        mgmtIP: 10.227.2.111/24
+        p1: 10.227.128.241/27
+        p2: 10.227.128.111/27
+      - hostname: TPDCUPPRX01M
+        mgmtIP: 10.227.2.112/24
+        p1: 10.227.128.242/27
+        p2: 10.227.128.112/27
+      - hostname: TPDCUPPRX01N
+        mgmtIP: 10.227.2.113/24
+        p1: 10.227.128.243/27
+        p2: 10.227.128.113/27
+      - hostname: TPDCUPPRX01O
+        mgmtIP: 10.227.2.114/24
+        p1: 10.227.128.244/27
+        p2: 10.227.128.114/27
+      - hostname: TPDCUPPRX01P
+        mgmtIP: 10.227.2.115/24
+        p1: 10.227.128.245/27
+        p2: 10.227.128.115/27
+      - hostname: TPDCUPPRX01Q
+        mgmtIP: 10.227.2.116/24
+        p1: 10.227.128.246/27
+        p2: 10.227.128.116/27
+      - hostname: TPDCUPPRX01R
+        mgmtIP: 10.227.2.117/24
+        p1: 10.227.128.247/27
+        p2: 10.227.128.117/27
+      - hostname: TPDCUPPRX01S
+        mgmtIP: 10.227.2.118/24
+        p1: 10.227.128.248/27
+        p2: 10.227.128.118/27
+      - hostname: TPDCUPPRX01T
+        mgmtIP: 10.227.2.119/24
+        p1: 10.227.128.249/27
+        p2: 10.227.128.119/27
+  frdcRadius: false
+  logging: 10.227.64.72
+  mgmt_gateway: 10.227.2.1
+  name: TPDC-WSA
+  ntp:
+  - 10.154.10.100
+  - 10.26.10.100
+  - 10.90.10.100
+  snmpLocation: TPDC
+  timezone: America/Kentucky/Louisville
+XRDC-QA-WSA:
+  auth_servers:
+  - corpadhca01.hca.corpad.net
+  - corpadhca02.hca.corpad.net
+  - orladhca02.hca.corpad.net
+  dns:
+  - 10.129.1.29
+  - 10.227.128.203
+  - 10.65.1.29
+  - 10.226.128.203
+  environments:
+    environment_qa:
+      external_gateway: 10.129.200.129
+      internal_gateway: 10.129.200.97
+      wsaList:
+      - hostname: XRDCUPPRX01CC
+        mgmtIP: 10.27.31.101/25
+        p1: 10.129.200.102/27
+        p2: 10.129.200.134/27
+      - hostname: XRDCUPPRX01DD
+        mgmtIP: 10.27.31.102/25
+        p1: 10.129.200.103/27
+        p2: 10.129.200.135/27
+  frdcRadius: false
+  logging: 10.237.64.26
+  mgmt_gateway: 10.27.31.1
+  name: XRDC-QA-WSA
+  ntp:
+  - 10.26.10.100
+  - 10.90.10.100
+  - 10.154.10.100
+  snmpLocation: XRDC
+  timezone: America/Chicago
+XRDC-WSA:
+  auth_servers:
+  - corpadhca01.hca.corpad.net
+  - corpadhca02.hca.corpad.net
+  - orladhca02.hca.corpad.net
+  dns:
+  - 10.129.1.29
+  - 10.227.128.203
+  - 10.65.1.29
+  - 10.226.128.203
+  environments:
+    environment_1:
+      external_gateway: 10.129.200.65
+      internal_gateway: 10.129.200.33
+      wsaList:
+      - hostname: XRDCUPPRX01A
+        mgmtIP: 10.27.31.103/25
+        p1: 10.129.200.36/27
+        p2: 10.129.200.68/27
+      - hostname: XRDCUPPRX01B
+        mgmtIP: 10.27.31.104/25
+        p1: 10.129.200.37/27
+        p2: 10.129.200.69/27
+      - hostname: XRDCUPPRX01C
+        mgmtIP: 10.27.31.105/25
+        p1: 10.129.200.38/27
+        p2: 10.129.200.70/27
+      - hostname: XRDCUPPRX01D
+        mgmtIP: 10.27.31.106/25
+        p1: 10.129.200.39/27
+        p2: 10.129.200.71/27
+      - hostname: XRDCUPPRX01E
+        mgmtIP: 10.27.31.107/25
+        p1: 10.129.200.40/27
+        p2: 10.129.200.72/27
+      - hostname: XRDCUPPRX01F
+        mgmtIP: 10.27.31.108/25
+        p1: 10.129.200.41/27
+        p2: 10.129.200.73/27
+      - hostname: XRDCUPPRX01G
+        mgmtIP: 10.27.31.109/25
+        p1: 10.129.200.42/27
+        p2: 10.129.200.74/27
+      - hostname: XRDCUPPRX01H
+        mgmtIP: 10.27.31.110/25
+        p1: 10.129.200.43/27
+        p2: 10.129.200.75/27
+      - hostname: XRDCUPPRX01I
+        mgmtIP: 10.27.31.111/25
+        p1: 10.129.200.44/27
+        p2: 10.129.200.76/27
+      - hostname: XRDCUPPRX01J
+        mgmtIP: 10.27.31.112/25
+        p1: 10.129.200.45/27
+        p2: 10.129.200.77/27
+      - hostname: XRDCUPPRX01K
+        mgmtIP: 10.27.31.113/25
+        p1: 10.129.200.46/27
+        p2: 10.129.200.78/27
+      - hostname: XRDCUPPRX01L
+        mgmtIP: 10.27.31.196/25
+        p1: 10.129.200.47/27
+        p2: 10.129.200.79/27
+      - hostname: XRDCUPPRX01M
+        mgmtIP: 10.27.31.197/25
+        p1: 10.129.200.48/27
+        p2: 10.129.200.80/27
+      - hostname: XRDCUPPRX01N
+        mgmtIP: 10.27.31.198/25
+        p1: 10.129.200.49/27
+        p2: 10.129.200.81/27
+      - hostname: XRDCUPPRX01O
+        mgmtIP: 10.27.31.199/25
+        p1: 10.129.200.50/27
+        p2: 10.129.200.82/27
+      - hostname: XRDCUPPRX01P
+        mgmtIP: 10.27.31.200/25
+        p1: 10.129.200.51/27
+        p2: 10.129.200.83/27
+      - hostname: XRDCUPPRX01Q
+        mgmtIP: 10.27.31.201/25
+        p1: 10.129.200.52/27
+        p2: 10.129.200.84/27
+      - hostname: XRDCUPPRX01R
+        mgmtIP: 10.27.31.202/25
+        p1: 10.129.200.53/27
+        p2: 10.129.200.85/27
+      - hostname: XRDCUPPRX01S
+        mgmtIP: 10.27.31.140/25
+        p1: 10.129.200.54/27
+        p2: 10.129.200.86/27
+      - hostname: XRDCUPPRX01T
+        mgmtIP: 10.27.31.141/25
+        p1: 10.129.200.55/27
+        p2: 10.129.200.87/27
+      - hostname: XRDCUPPRX01U
+        mgmtIP: 10.27.31.142/25
+        p1: 10.129.200.56/27
+        p2: 10.129.200.88/27
+      - hostname: XRDCUPPRX01V
+        mgmtIP: 10.27.31.143/25
+        p1: 10.129.200.57/27
+        p2: 10.129.200.89/27
+      - hostname: XRDCUPPRX01W
+        mgmtIP: 10.27.31.144/25
+        p1: 10.129.200.58/27
+        p2: 10.129.200.90/27
+      - hostname: XRDCUPPRX01X
+        mgmtIP: 10.27.31.145/25
+        p1: 10.129.200.59/27
+        p2: 10.129.200.91/27
+      - hostname: XRDCUPPRX01Y
+        mgmtIP: 10.27.31.146/25
+        p1: 10.129.200.60/27
+        p2: 10.129.200.92/27
+      - hostname: XRDCUPPRX01Z
+        mgmtIP: 10.27.31.147/25
+        p1: 10.129.200.61/27
+        p2: 10.129.200.93/27
+    environment_2:
+      external_gateway: 10.129.200.129
+      internal_gateway: 10.129.200.97
+      wsaList:
+      - hostname: XRDCUPPRX01AA
+        mgmtIP: 10.27.31.148/25
+        p1: 10.129.200.100/27
+        p2: 10.129.200.132/27
+      - hostname: XRDCUPPRX01BB
+        mgmtIP: 10.27.31.149/25
+        p1: 10.129.200.101/27
+        p2: 10.129.200.133/27
+  frdcRadius: false
+  logging: 10.237.64.26
+  mgmt_gateway: 10.27.31.1
+  name: XRDC-WSA
+  ntp:
+  - 10.26.10.100
+  - 10.90.10.100
+  - 10.154.10.100
+  snmpLocation: XRDC
+  timezone: America/Chicago

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import yaml
 import os
 import time
 import re
@@ -74,8 +75,13 @@ async def deploy(file: str, wsa: dict):
         # We also acquire the session cookie named "sid"
         user_agent = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-        login_page_resp = await session_data.session.get(session_data.base_url + '/login', headers=user_agent,
-                                                         ssl=False)
+        try:
+            login_page_resp = await session_data.session.get(session_data.base_url + '/login', headers=user_agent,
+                                                             ssl=False)
+        except Exception as e:
+            logger.debug(f'{wsa.hostname}: Failed to reach login page: {e}')
+            return None
+
         session_cookie = re.search('sid=\w+', login_page_resp.headers.get('set-cookie')).group()
 
         # logger.debug(f'{wsa.hostname} session cookie: {session_cookie}')
@@ -166,7 +172,8 @@ if __name__ == '__main__':
     start_time = time.perf_counter()
     site = sys.argv[1].upper()
 
-    data = json.load(open('data/wsa.json'))
+    # data = json.load(open('data/wsa.json'))
+    data = yaml.load(open('data/wsa.yaml'), yaml.Loader)
 
     generate_files()
 
@@ -182,7 +189,8 @@ if __name__ == '__main__':
 if __name__ == 'wsa.deploy_routes':
     logger.debug(f'Route updates triggered by {__name__} import')
     start_time = time.perf_counter()
-    data = json.load(open('data/wsa.json'))
+    # data = json.load(open('data/wsa.json'))
+    data = yaml.load(open('data/wsa.yaml'), yaml.Loader)
 
     generate_files()
 
