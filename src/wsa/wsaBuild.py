@@ -9,7 +9,7 @@ from ipaddress import IPv4Network
 from getpass import getpass
 import urllib3
 import requests
-import json
+import yaml
 import os
 import re
 
@@ -722,7 +722,7 @@ def build_wsa_api(wsa_env: str, wsa_list: str, username: str, password: str):
     else:
         wsa_env = f'{wsa_env.upper()}-WSA'
 
-    wsa_data = json.load(open('data/wsa.json'))
+    wsa_data = yaml.load(open('data/wsa.yaml'), yaml.Loader)
 
     wsa_env = wsa_data[wsa_env]
 
@@ -757,6 +757,8 @@ def build_wsa_api(wsa_env: str, wsa_list: str, username: str, password: str):
 if __name__ == '__main__':
     failed_attempts = []
 
+    data = yaml.load(open('data/wsa.yaml'), yaml.Loader)
+
     site = input('\nFRDC\nSEDC\nSLDC\nTPDC\nXRDC\nXRDC-QA\n\n'
                  'Enter the environment you would like to build or type \'cancel\' to abort: ').upper()
 
@@ -768,8 +770,6 @@ if __name__ == '__main__':
         exit()
     else:
         site += '-WSA'
-
-    data = json.load(open('../data/wsa.json'))
 
     site = data[site]
 
