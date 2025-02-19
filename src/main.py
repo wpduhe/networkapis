@@ -13,7 +13,6 @@ from ipaddress import IPv4Address, IPv4Network, AddressValueError
 from apic import utils as apic_utils
 from apic.classes import EPG, AEP, InfraGeneric
 from apic import sviToBd
-# from apic.intfConfig import intf_profile
 from bigip.utils import LTM
 from githubapi.utils import GithubAPI
 from ncm.utils import NCMIntegration
@@ -28,7 +27,6 @@ import os
 import re
 import socket
 import sys
-import asyncio
 import logging
 import functools
 import netmiko
@@ -565,6 +563,16 @@ def get_aep_usage(request: Request, az: str, aep: str):
         usage = apic_api.get_aep_usage(aep_name=aep)
 
     return usage
+
+
+@app.get('/apis/aci/{az}/get_interface_policies_by_endpoint', tags=['ACI'])
+def get_interface_policies_by_endpoint(request: Request, az: str, mac: Optional[str]=None, ip: Optional[str]=None):
+    """Returns the fabric access policies that apply to the interface found to be associated with the provided endpoint"""
+    req_logit(get_interface_policies_by_endpoint, request, az)
+
+    status, result = apic_utils.APIC(env=az).get_interface_policies_from_endpoint(mac=mac, ip=ip)
+
+    return Response(status_code=status, content=json.dumps(result), media_type='application/json')
 
 
 @app.get('/apis/aci/{az}/switch_profiles', tags=['ACI'])
