@@ -314,6 +314,7 @@ class AEP(APICObject):
 
     _dn_template = 'uni/infra/attentp-{name}'
     _dn_attributes = ['name']
+    search = re.compile(r'uni/infra/attentp-(?P<name>[^/\]]+)')
     tf_resource = 'aci_attachable_access_entity_profile'
 
     def __init__(self, **kwargs):
@@ -394,6 +395,7 @@ class SwitchProfile(APICObject):
 
     _dn_attributes = ['name']
     _dn_template = 'uni/infra/nprof-{name}'
+    search = re.compile(r'uni/infra/nprof-(?P<name>[^/\]]+)').search
     tf_resource = 'aci_leaf_profile'
 
     def __init__(self, **kwargs):
@@ -433,6 +435,8 @@ class LeafSelector(APICObject):
         'type': 'range'
     }
 
+    search = re.compile(r'uni/infra/nprof-(?P<infraNodeP>[^/]+)/leaves-(?P<name>[-\w]+)-typ-range').search
+
     def __init__(self, **kwargs):
         self.children = []
         self.attributes = Attributes(**self.attrs)
@@ -448,6 +452,8 @@ class InfraNodeBlock(APICObject):
         'to_': ''
     }
 
+    search = re.compile(r'uni/infra/nprof-(?P<infraNodeP>[^/]+)/leaves-(?P<infraLeafS>[-\w]+)-typ-range/nodeblk-(?P<name>[^/\]]+)').search
+
     def __init__(self):
         self.children = []
         self.attributes = Attributes(**self.attrs)
@@ -462,6 +468,8 @@ class InfraRsFuncToEpg(APICObject):
         'mode': 'regular',
         'status': 'created'
     }
+
+    search = re.compile(r'uni/infra/attentp-(?P<infraAttEntityP>[^/]+)/gen-default/rsfuncToEpg-\[(?P<epgdn>[^]]+)]').search
     tf_resource = 'aci_epgs_using_function'
 
     _dn_attributes = ['aep', 'tenant', 'app_profile', 'epg']
@@ -487,6 +495,8 @@ class Tenant(APICObject):
         'name': '',
         'status': 'modified'
     }
+
+    search = re.compile(r'uni/tn-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni.json'
     tf_resource = 'aci_tenant'
 
@@ -503,6 +513,8 @@ class AP(APICObject):
         'dn': '',
         'name': ''
     }
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/ap-(?P<name>[^/\]]+)').search
 
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/ap-{name}'
@@ -523,6 +535,8 @@ class EPG(APICObject):
         'name': '',
         'descr': ''
     }
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/ap-(?P<fvAp>[^/\]]+)/epg-(?P<name>[^/\]]+)').search
 
     _dn_attributes = ['tenant', 'app_profile', 'name']
     _dn_template = 'uni/tn-{tenant}/ap-{app_profile}/epg-{name}'
@@ -569,6 +583,8 @@ class BD(APICObject):
         'unkMacUcastAct': '',
         'limitIpLearnToSubnets': 'yes'
     }
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/BD-(?P<name>[^/\]]+)').search
     tf_resource = 'aci_bridge_domain'
 
     _dn_attributes = ['tenant', 'name']
@@ -621,6 +637,8 @@ class FvRsBd(APICObject):
         'tnFvBDName': ''
     }
 
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/ap-(?P<fvAp>[^/\]]+)/epg-(?P<fvAEPg>[^/\]]+)/rsbd').search
+
     def __init__(self, name: str=''):
         self.children = []
         self.attributes = Attributes(**self.attrs)
@@ -648,6 +666,8 @@ class Subnet(APICObject):
         'scope': 'public',
         'virtual': 'no'
     }
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/BD-(?P<bd>[^/\]]+)/subnet-\[(?P<ip>[^]]+)]').search
     tf_resource = 'aci_subnet'
 
     _dn_attributes = ['tenant', 'bd', 'ip_network']
@@ -1028,6 +1048,8 @@ class InterfacePolicyGroup(APICObject):
         'descr': '',
         'status': 'created,modified'
     }
+
+    search = re.compile(r'uni/infra/funcprof/accportgrp-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni/infra/funcprof.json'
 
     def __init__(self, **kwargs):
@@ -1062,6 +1084,8 @@ class InterfaceProfile(APICObject):
         'descr': '',
         'status': 'created,modified'
     }
+
+    search = re.compile(r'uni/infra/accportprof-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni/infra.json'
 
     _dn_attributes = ['name']
@@ -1081,6 +1105,8 @@ class InfraRsAccPortP(APICObject):
         'tDn': ''
     }
 
+    search = re.compile(r'uni/infra/nprof-(?P<infraNodeP>[^/\]]+)/rsaccPortP-\[uni/infra/accportprof-(?P<name>[^]]+)]').search
+
     _dn_attributes = ['switch_profile', 'name']
     _dn_template = 'uni/infra/nprof-{switch_profile}/rsaccPortP-[uni/infra/accportprof-{name}]'
 
@@ -1098,6 +1124,8 @@ class InterfaceSelector(APICObject):
         'status': 'created,modified'
     }
 
+    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<name>[^-\w]+)-typ-range').search
+
     def __init__(self, **kwargs):
         self.children = []
         self.attributes = Attributes(**self.attrs)
@@ -1114,6 +1142,8 @@ class InterfaceBlock(APICObject):
         'toPort': '',
         'status': 'created,modified'
     }
+
+    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<infraHPortS>[^-\w]+)-typ-range/portblk-(?P<name>[^/\]]+)').search
 
     _dn_attributes = ['profile', 'selector', 'name']
     _dn_template = 'uni/infra/accportprof-{profile}/hports-{selector}/portblk-{name}'
