@@ -58,15 +58,16 @@ BD_DN_SEARCH = re.compile(r'uni/tn-([^/]+)/BD-([^/\]]+)')
 AEP_DN_SEARCH = re.compile(r'uni/infra/attentp-([^/\]]+)')
 APIC_MAC_MATCH = re.compile(r'[a-f0-9]{2}(:[a-f0-9]{2}){5}', flags=re.IGNORECASE)
 MAC_IP_SEARCH = re.compile(r'cep-([^/]+)/ip-\[([^]]+)]')
-DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|CPDV|CORP|'
-                        r'HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
+DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTDV|WFDV|EFDV|NFDV|TRDV|SATL|SODV|CPDV|'
+                        r'CORP|HTWS|NCDV|XRDC|FWDC|FRDC|TPDC|SLDC|HODC|SEDC)')
 ACI_NAME = re.compile(r'[\W_]+')
 NODE_PORT_SEARCH = re.compile(r'node-(\d+).*\[eth(\d+/\d+)')
+PATH_SEARCH = re.compile(r'topology/pod-\d+/(?:paths|protpaths)-(\d+|\d+-\d+)/pathep-\[([^]]+)')
 
 
 def format_mac_addresses(mac_addresses: list) -> List:
-    mac_addresses = [''.join(re.findall(r'[a-f0-9]+', _)) for _ in mac_addresses]
-    mac_addresses = [':'.join([_.group() for _ in re.finditer(r'[a-f0-9]{2}', mac)]) for mac in mac_addresses]
+    mac_addresses = [''.join(re.findall(r'[a-f0-9]+', _, flags=re.IGNORECASE)) for _ in mac_addresses]
+    mac_addresses = [':'.join([_.group() for _ in re.finditer(r'[a-f0-9]{2}', mac, flags=re.IGNORECASE)]) for mac in mac_addresses]
 
     # Filter MAC addresses to only include proper MAC addresses
     mac_addresses = [_ for _ in mac_addresses if bool(APIC_MAC_MATCH.fullmatch(_))]
@@ -2355,6 +2356,95 @@ class APIC:
             response_data[key].sort()
 
         return response_data
+
+    def resolve_interface_policies(self, node: int, interface: str) -> Tuple[InterfaceProfile, InterfaceSelector, GenericClass]:
+        node = int(node)
+
+        nodeblks = [APICObject.load(_) for _ in self.get(f'/api/class/infraNodeBlk.json').json()['imdata']]
+        nodeblks = [_ for _ in nodeblks if node in range(int(_.attributes.from_), int(_.attributes.to_) + 1)]
+
+        nodeps = [SwitchProfile.search(_.attributes.dn).group() for _ in nodeblks]
+
+        intf_profiles = []
+
+        for nodep in nodeps:
+            # Collect all Interface profiles assigned under the relevant Leaf Profiles
+            rs_profiles = [APICObject.load(_) for _ in self.get(f'/api/mo/{nodep}.json?query-target=subtree&'
+                                                                f'target-subtree-class=infraRsAccPortP').json()['imdata']]
+            # This generates a list of Interface Profile names
+            intf_profiles += [InterfaceProfile.search(_.attributes.dn).group('name') for _ in rs_profiles]
+
+        port_blocks = []
+        for intf_profile in intf_profiles:
+            port_blocks += [APICObject.load(_) for _ in self.get(f'/api/mo/uni/infra/accportprof-{intf_profile}.json?'
+                                                                 f'query-target=subtree&target-subtree-class=infraPortBlk').json()['imdata']]
+
+        # Identify the one port block that pertains to the specified interface
+        block = next(_ for _ in port_blocks if int(interface) in range(int(_.attributes.fromPort), int(_.attributes.toPort) + 1))
+
+        intf_sel_dn = InterfaceSelector.search(block.attributes.dn).group()
+        profile = APICObject.load(self.get(f'/api/mo/{InterfaceProfile.search(intf_sel_dn).group()}.json').json()['imdata'])
+        selector = APICObject.load(self.get(f'/api/mo/{intf_sel_dn}.json').json()['imdata'])
+
+        policy_group_ref = APICObject.load(self.get(f'/api/mo/{intf_sel_dn}.json?'
+                                                    f'query-target=subtree&target-subtree-class=infraRsAccBaseGrp').json()['imdata'])
+
+        policy_group = GenericClass.load(self.get(f'/api/mo/{policy_group_ref.attributes.tDn}.json?{FCCO}').json()['imdata'])
+
+        return profile, selector, policy_group
+
+    def get_interface_policies_from_endpoint(self, mac: str=None, ip: str=None):
+        # fvRsCEpToPathEp (class that has fvCEp dn and ties it to an interface policy group
+        if not mac and not ip:
+            raise ValueError('"mac" or "ip" argument is required')
+
+        # What is really needed to complete this function is the MAC address
+        if ip:
+            ip = APICObject.load(self.get(f'/api/class/fvIp.json?'
+                                          f'query-target-filter=eq(fvIp.addr,"{ip}")').json()['imdata'])
+            if not ip:
+                return 404, {'error': 'Endpoint IP address was not found'}
+
+            mac = MAC_IP_SEARCH.search(ip.attributes.dn).group(1)
+
+        mac = format_mac_addresses([mac])[0]
+
+        path = APICObject.load(self.get(f'/api/class/fvRsCEpToPathEp.json?'
+                                        f'query-target-filter=wcard(fvRsCEpToPathEp.dn,"{mac}")').json()['imdata'])
+
+        if not path:
+            return 404, {'error': f'No fabric path was found for mac address {mac}'}
+
+        nodes, intf = PATH_SEARCH.search(path.attributes.dn).groups()
+
+        if not re.match(r'eth\d+/\d+', intf):
+            pg = GenericClass.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}.json?{FCCO}').json()['imdata'])
+
+            base_grp = APICObject.load(self.get(f'/api/class/infraRsAccBaseGrp.json?query-target-filter=eq(infraRsAccBaseGrp.tDn,"{pg.attributes.dn}")').json()['imdata'])
+            profile_name, selector_name = InterfaceSelector.search(base_grp.attributes.dn).groups()
+
+            profile = APICObject.load(self.get(f'/api/mo/uni/infra/accportprof-{profile_name}.json?{FCCO}').json()['imdata'])
+
+            selector = next(sel for sel in profile.get_child_class_iter(class_='infraHPortS') if sel.attributes.name == selector_name)
+
+            # This means we have an interface policy group name already, easy
+            aep_ref = GenericClass.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}/rsattEntP.json').json()['imdata'])
+        else:
+            intf_int = re.search(r'eth\d+/(\d+)', intf).group(1)
+            # Retrieves the interface policy group used by the interface
+            profile, selector, pg = self.resolve_interface_policies(node=int(re.search('\d+', nodes).group()), interface=intf_int)
+
+            aep_ref = pg.get_child_class('infraRsAttEntP')
+
+        return_data = {
+            'nodes': nodes,
+            'interface': intf,
+            'aep': AEP.search(aep_ref.attributes.tDn).group('name'),
+            'interface_profile': profile.attributes.name,
+            'interface_selector': selector.attributes.name
+        }
+
+        return 200, return_data
 
     def update_static_route(self, tenant: str, cidr: str, new_next_hop: str):
         routes = self.get(f'/api/class/ipRouteP.json'
@@ -5369,6 +5459,103 @@ def create_custom_epg_v2(env: str, req_data: dict):
     return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan,
                  'Message': f'Please add the appropriate L3Out profile to {bd_name}',
                  'AppInstance': inst.json(), 'InstancePath': f'{inst.application}/{inst}'}
+
+
+def create_custom_epg_drt(env: str, req_data: dict):
+    with APIC(env=env) as apic:
+        ap_name = ACI_NAME.sub('-', req_data['AppProfileName'])
+        epg_name = ACI_NAME.sub('-', req_data['EPGName'])
+        bd_name = ACI_NAME.sub('-', req_data['BridgeDomainName'])
+        description = req_data['Description']
+        subnets = req_data['Subnets']
+        tn_name = req_data['TenantName']
+        vrf_name = req_data['VRFName']
+
+        # Define Tenant
+        tn = Tenant()
+        tn.attributes.name = tn_name
+        tn.attributes.status = 'modified'
+
+        # Force remove any specific division mnemonics from the application profile name
+        ap_name = DIV_REMOVE.sub('', ap_name)
+
+        # Define Application Profile
+        ap = AP()
+        ap.attributes.name = ap_name
+        ap.attributes.status = 'created,modified'
+
+        # Define Endpoint Group
+        epg = EPG()
+        epg.attributes.name = epg_name
+        epg.attributes.descr = description
+        epg.attributes.status = 'created'
+        epg.domain(name=apic.env.PhysicalDomain)
+
+        # Check to see if BD already exists
+        bd_exists = apic.bd_exists(tn=tn_name, bd_name=bd_name)
+
+        if bool(bd_exists):
+            bd = BD.load(bd_exists)
+            for subnet in subnets:
+                network = IPv4Network(subnet)
+                gateway = network.network_address + 1
+                bd.add_subnet(subnet=f'{gateway}/{network.prefixlen}', description=description)
+            bd.attributes.status = 'modified'
+        else:
+            bd = BD()
+            bd.layer3()
+            # Add Subnet to Bridge Domain and set Description on Subnet
+            for subnet in subnets:
+                network = IPv4Network(subnet)
+                gateway = network.network_address + 1
+                bd.add_subnet(subnet=f'{gateway}/{network.prefixlen}', description=description)
+            # Configure the bridge domain to use the environment VRF
+            bd.use_vrf(name=vrf_name)
+            # Attach the Core L3Out to the Bridge Domain
+            bd.attributes.name = bd_name
+            bd.attributes.status = 'created,modified'
+
+        # Assign BD to EPG
+        epg.assign_bd(bd.attributes.name)
+
+        # Attach Bridge Domain and Application Profile as child objects of Tenant
+        tn.children.append(bd)
+        tn.children.append(ap)
+        # Attach EPG as child object of Application Profile
+        ap.children.append(epg)
+
+        # POST the configuration to APIC
+        epg_r = apic.post(configuration=tn.json())
+
+        # Check response status.  Abort if not OK.
+        if not epg_r.ok:
+            return 400, [epg_r.status_code, epg_r.reason, epg_r.json(), tn.json()]
+
+        # Get status of aep-Placeholders and assign EPG to it
+        aep = AEP()
+        aep.attributes.name = 'aep-Placeholders'
+
+        if not apic.exists(infraAttEntityP='aep-Placeholders'):
+            aep.attributes.status = 'created'
+            dom_p = GenericClass('infraRsDomP')
+            dom_p.attributes.tDn = f'uni/phys-{apic.env.PhysicalDomain}'
+            aep.children.append(dom_p)
+        else:
+            aep.attributes.status = 'modified'
+
+        # Get the EPG
+        g_epg = EPG.load(apic.collect_epgs(tn=tn_name, epg=epg.attributes.name))
+
+        # Get next available VLAN for the EPG
+        vlan = apic.get_next_vlan()
+
+        # Add the EPG to the AEP with the VLAN returned
+        aep.add_epg(epg_dn=g_epg.attributes.dn, encap=vlan)
+        # POST the AEP configuration to APIC
+        apic.post(configuration=aep.json(), uri=aep.post_uri)
+
+    return 200, {'EPG Name': epg.attributes.name, 'Subnets': subnets, 'VLAN': vlan,
+                 'Message': f'Please add the appropriate L3Out profile to {bd_name}'}
 
 
 def create_new_admz_epg(env: str, req_data: dict):
