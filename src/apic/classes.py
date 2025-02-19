@@ -314,7 +314,7 @@ class AEP(APICObject):
 
     _dn_template = 'uni/infra/attentp-{name}'
     _dn_attributes = ['name']
-    search = re.compile(r'uni/infra/attentp-(?P<name>[^/\]]+)')
+    search = re.compile(r'uni/infra/attentp-(?P<name>[^/\]]+)').search
     tf_resource = 'aci_attachable_access_entity_profile'
 
     def __init__(self, **kwargs):
@@ -1124,7 +1124,7 @@ class InterfaceSelector(APICObject):
         'status': 'created,modified'
     }
 
-    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<name>[^-\w]+)-typ-range').search
+    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<name>[-\w]+)-typ-range').search
 
     def __init__(self, **kwargs):
         self.children = []
@@ -1143,7 +1143,7 @@ class InterfaceBlock(APICObject):
         'status': 'created,modified'
     }
 
-    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<infraHPortS>[^-\w]+)-typ-range/portblk-(?P<name>[^/\]]+)').search
+    search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/]+)/hports-(?P<infraHPortS>[-\w]+)-typ-range/portblk-(?P<name>[-\w]+)').search
 
     _dn_attributes = ['profile', 'selector', 'name']
     _dn_template = 'uni/infra/accportprof-{profile}/hports-{selector}/portblk-{name}'
@@ -1318,6 +1318,7 @@ defined_classes = {
     'infraAccBndlGrp': InterfacePolicyGroup,
     'infraAccPortP': InterfaceProfile,
     'infraRsAccPortP': InfraRsAccPortP,
+    'infraPortBlk': InterfaceBlock,
     'fabricRsOosPath': OutOfServicePort,
     'lacpLagPol': InterfacePolicy,
     'cdpIfPol': InterfacePolicy,
