@@ -249,6 +249,8 @@ class GenericClass:
 
     @classmethod
     def load(cls, json_data: dict or list):
+        if not json_data:
+            return None
         if isinstance(json_data, dict):
             pass
         else:
