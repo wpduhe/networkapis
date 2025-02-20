@@ -667,7 +667,7 @@ class Subnet(APICObject):
         'virtual': 'no'
     }
 
-    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/BD-(?P<bd>[^/\]]+)/subnet-\[(?P<ip>[^]]+)]').search
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/BD-(?P<fvBD>[^/\]]+)/subnet-\[(?P<ip>[^]]+)]').search
     tf_resource = 'aci_subnet'
 
     _dn_attributes = ['tenant', 'bd', 'ip_network']
@@ -806,6 +806,8 @@ class MaintenancePolicy(APICObject):
         'name': ''
     }
 
+    search = re.compile(r'uni/fabric/maintpol-(?P<name>[^/\]]+)').search
+
     post_uri = '/api/mo/uni/fabric.json'
 
     _dn_attributes = ['name']
@@ -827,6 +829,8 @@ class MaintenanceGroup(APICObject):
     attrs = {
         'name': ''
     }
+
+    search = re.compile(r'uni/fabric/maintgrp-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni/fabric.json'
 
     _dn_attributes = ['name']
@@ -854,6 +858,8 @@ class FirmwareGroup(APICObject):
         'type': 'range',
         'status': 'modified'
     }
+
+    search = re.compile(r'uni/fabric/fwgrp-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni/fabric.json'
 
     def __init__(self, **kwargs):
@@ -871,6 +877,8 @@ class FabricNodeBlock(APICObject):
         'to_': '',
         'status': 'created'
     }
+
+    search = re.compile(r'uni/fabric/maintgrp-(?P<maintMaintGrp>[^/\]]+)/nodeblk-(?P<name>[-\w+]+)').search
 
     _dn_attributes = ['group', 'node']
     _dn_template = 'uni/fabric/maintgrp-{group}/nodeblk-blk{node}-{node}'
@@ -1049,7 +1057,8 @@ class InterfacePolicyGroup(APICObject):
         'status': 'created,modified'
     }
 
-    search = re.compile(r'uni/infra/funcprof/accportgrp-(?P<name>[^/\]]+)').search
+    search = re.compile(r'uni/infra/funcprof/acc(?:portgrp|bundle)-(?P<name>[^/\]]+)').search
+
     post_uri = '/api/mo/uni/infra/funcprof.json'
 
     def __init__(self, **kwargs):
