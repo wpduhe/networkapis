@@ -2232,9 +2232,12 @@ class APIC:
             subnet = apic.collect_subnets(ip=ip)
 
             if isinstance(subnet, str):
-                return 404, {'message': 'No Subnet found matching IP'}
+                return 404, {'message': 'No Subnet found matching the provided IP'}
             else:
-                subnet = GenericClass.load(subnet)
+                subnet = APICObject.load(subnet)
+
+            if not subnet:
+                return 404, {'message': 'No Subnet found matching the provided IP'}
 
             if subnet.class_ == 'l3extRsPathL3OutAtt':
                 l3out = re.search('out-(.*)', subnet.attributes.dn.split('/')[2])[1]
