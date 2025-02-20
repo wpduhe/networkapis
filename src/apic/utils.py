@@ -2,14 +2,11 @@ from typing import Tuple, List
 from types import SimpleNamespace
 from base64 import b64encode
 from datetime import datetime
-# from openpyxl.writer.excel import save_virtual_workbook
 from copy import deepcopy
 from ipaddress import IPv4Address, AddressValueError
 from apic.classes import *
 from ipam.utils import ManagementJob, NetworkAPIIPAM
 from data.environments import ACIEnvironment
-# from smb.SMBConnection import SMBConnection
-# from smb.base import OperationFailure
 from apic.exceptions import *
 from githubapi.utils import GithubAPI
 from OpenSSL.crypto import FILETYPE_PEM, load_privatekey, sign
@@ -20,13 +17,10 @@ import json
 import requests
 import random
 import os
-# import openpyxl
 import socket
-# import io
 import urllib3
 import logging
 import string
-import yaml
 
 
 # TODO : moquery -c ethpmFcot : APICObject where transceiver type can be retrieved
@@ -2396,7 +2390,7 @@ class APIC:
     def get_interface_policies_from_endpoint(self, mac: str=None, ip: str=None):
         # fvRsCEpToPathEp (class that has fvCEp dn and ties it to an interface policy group
         if not mac and not ip:
-            raise ValueError('"mac" or "ip" argument is required')
+            raise ValueError('"mac" or "ip" value is required')
 
         # What is really needed to complete this function is the MAC address
         if ip:
