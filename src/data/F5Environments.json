@@ -369,7 +369,7 @@
             "10.192.1.114"
         ],
         "iPPoolsField": [
-            "10.90.242.0/24"
+            "10.90.242.0/23"
         ],
         "nameField": "FRDC Something New",
         "deviceGroupNameField": "dg-01",
