@@ -1,11 +1,39 @@
+from apic.classes import *
+from apic.utils import APIC
 import unittest
 import requests
 import urllib3
 import random
+import logging
+import time
 import os
+import sys
 
 
 urllib3.disable_warnings()
+
+logging.Formatter.converter = time.gmtime
+formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03dZ - %(name)s - %(levelname)s - %(message)s',
+                              datefmt='%Y-%m-%dT%H:%M:%S')
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(formatter)
+logging.basicConfig(level=logging.DEBUG, handlers=[ch])  # ensures root logger is set to DEBUG
+logger = logging.getLogger(__name__)
+# Suppress annoying logging from libraries below
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
+logging.getLogger('flask_cors.core').setLevel(logging.WARNING)
+logging.getLogger('flask_cors.extension').setLevel(logging.WARNING)
+logging.getLogger('paramiko.transport').level = logging.WARNING
+logging.getLogger('netmiko').level = logging.WARNING
+logging.getLogger('icontrol').level = logging.WARNING
+logging.getLogger('flask_cors').level = logging.DEBUG
+logging.getLogger('botocore').level = logging.WARNING
+logging.getLogger('boto3').level = logging.WARNING
+logging.getLogger('github').level = logging.WARNING
+logging.getLogger('zeep').level = logging.WARNING
+logger.debug('Logging initialized.')
+
 
 # Development URL
 URL = 'https://pyapisdev.ocp.app.medcity.net'
@@ -69,6 +97,78 @@ class MainTests(unittest.TestCase):
     #     """Asserts that the server has started"""
     #     r = requests.get(URL + '/apis/getStatus', verify=False)
     #     self.assertEqual(r.status_code, 200)
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    # APICObject Tests
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+    def test_002_apic_classes(self):
+        things = ['AEP', 'AP', 'APICObject', 'Attributes', 'BD', 'Context', 'Domain', 'EPG', 'EncapBlock', 'Fabric',
+                  'FabricExplicitGEp', 'FabricNode', 'FabricNodeBlock', 'FabricNodeEp', 'FabricProtPol',
+                  'FabricRsVpcInstPol',
+                  'FirmwareGroup', 'FvRsBDToOut', 'FvRsBd', 'FvRsCtx', 'FvRsDomAtt', 'GenericClass', 'IPv4Network',
+                  'Infra',
+                  'InfraGeneric', 'InfraNodeBlock', 'InfraRsAccPortP', 'InfraRsDomAtt', 'InfraRsDomP',
+                  'InfraRsFuncToEpg',
+                  'InterfaceBlock', 'InterfacePolicy', 'InterfacePolicyGroup', 'InterfaceProfile', 'InterfaceSelector',
+                  'L3Out',
+                  'L3OutDomain', 'L3OutVRF', 'L3extIP', 'L3extInstP', 'L3extLIfP', 'L3extLNodeP', 'L3extPath',
+                  'L3extSubnet',
+                  'LeafSelector', 'MaintenanceGroup', 'MaintenancePolicy', 'NodeIdentityPolicy', 'OOBAddress',
+                  'OSPFExternalPolicy', 'OutOfServicePort', 'SNMPClientP', 'Subnet', 'SwitchProfile', 'Tenant', 'Uni',
+                  'VLANPool']
+
+        def load(x: dict):
+            return APICObject.load(x)
+
+        for k, v in defined_classes.items():
+            # Tests APICObject.load for all defined classes in apic.classes
+            logger.debug(f'Testing {k} as {v}')
+            if k in ['vmmDomP']:  # Not testing this as we do not use it in our fabrics
+                continue
+            js = APIC(env='xrdc-az1').get(f'/api/class/{k}.json').json()['imdata'][0]
+            obj = load(js)
+            self.assertIsInstance(obj, v, f'{obj.self_json()} is not type {v}')
+            self.assertIsInstance(obj.json(), dict)
+
+            if isinstance(obj, AEP):
+                logger.debug('Testing AEP.add_epg()')
+                obj.add_epg(epg_dn='uni/tn-TEST/ap-TEST/epg-TEST', encap=1100)
+                infra_generic = obj.get_child_class(InfraGeneric.class_)
+                self.assertIsInstance(infra_generic, InfraGeneric,
+                                      f'{AEP} failed to add {InfraGeneric} to child objects')
+                func_to_epg = infra_generic.get_child_class(InfraRsFuncToEpg.class_)
+                self.assertIsInstance(func_to_epg, InfraRsFuncToEpg)
+                self.assertEqual(func_to_epg.attributes.encap, 'vlan-1100',
+                                 f'{AEP} failed to generate correct encapsulation for {InfraRsFuncToEpg}')
+                logger.debug('Testing AEP.use_domain()')
+                obj.use_domain('TEST')
+                dom = obj.get_child_class(InfraRsDomP.class_)
+                self.assertIsInstance(dom, InfraRsDomP)
+                self.assertEqual(dom.attributes.tDn, 'uni/phys-TEST')
+
+            # TODO: Create test for SwitchProfile
+
+            # TODO: Create test for EPG
+
+            # TODO: Create test for BD
+
+            # TODO: Create test for Subnet
+
+            # TODO: Create test for MaintenancePolicy
+
+            # TODO: Create test for MaintenanceGroup
+
+            # TODO: Create test for FabricNodeBlock
+
+            # TODO: Create test for FabricProtPol
+
+            # TODO: Create test for InterfacePolicyGroup
+
+            # TODO: Create test for EncapBlock
+
+            # TODO: Create test for L3Out
+
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # ACI API Tests
@@ -300,5 +400,5 @@ class MainTests(unittest.TestCase):
     def test_161_f5_vip_clone(self):
         """Asserts quite a bit.  This one will have to be well-thought"""
         # Current state is that it returns HTTP 202
-        # The question is whether or not to keep it async
+        # The question is whether to keep it async
         pass
