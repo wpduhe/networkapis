@@ -36,8 +36,11 @@ import base64
 
 
 # Set Timezone for OpenShift environment
-os.environ['TZ'] = 'America/Chicago'
-time.tzset()
+try:
+    os.environ['TZ'] = 'America/Chicago'
+    time.tzset()
+except AttributeError:
+    pass
 
 # Constants
 UPDATE_SPREADSHEET_KEY = 'updatespreadsheetkey'
