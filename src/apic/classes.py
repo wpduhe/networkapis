@@ -89,6 +89,7 @@ class APICObject:
     children: list
     class_: str
     attributes: Attributes
+    attrs: dict
     _dn_attributes: list
     _dn_template: str
     tf_resource: str
@@ -96,6 +97,20 @@ class APICObject:
     def __iter__(self):
         for k, v in self.attributes.__dict__.items():
             yield k, v
+
+    def __init__(self, *args, **kwargs):
+        if self.attrs:
+            self.attributes = Attributes(**self.attrs)
+        else:
+            self.attributes = Attributes()
+        self.children = []
+        if kwargs:
+            self._set_attributes(**kwargs)
+
+        self._customize_(*args, **kwargs)
+
+    def _customize_(self, *args, **kwargs):
+        pass
 
     @classmethod
     def load(cls, json_data: dict or list):
@@ -110,13 +125,13 @@ class APICObject:
         _class_ = defined_classes.get(class_name)
 
         if _class_:
-            obj = _class_()
+            obj = _class_(**json_data[class_name]['attributes'])
         else:
-            obj = GenericClass(class_name)
+            obj = GenericClass(class_name, **json_data[class_name]['attributes'])
 
-        obj.attributes = Attributes.load(json_data[obj.class_]['attributes'])
-        if 'children' in json_data[obj.class_].keys() and len(json_data[obj.class_]['children']) > 0:
-            for child in json_data[obj.class_]['children']:
+        # obj.attributes = Attributes.load(json_data[obj.class_]['attributes'])
+        if 'children' in json_data[class_name].keys() and len(json_data[class_name]['children']) > 0:
+            for child in json_data[class_name]['children']:
                 child = cls.load(child)
                 obj.children.append(child)
 
@@ -319,11 +334,7 @@ class AEP(APICObject):
     search = re.compile(r'uni/infra/attentp-(?P<name>[^/\]]+)').search
     tf_resource = 'aci_attachable_access_entity_profile'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
+    def _customize_(self, **kwargs):
         self.infra_generic = None
 
     def add_epg(self, epg_dn: str, encap: int):
@@ -368,10 +379,6 @@ class InfraGeneric(APICObject):
     }
     tf_resource = 'aci_access_generic'
 
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-
 
 class InfraRsDomP(APICObject):
     class_ = 'infraRsDomP'
@@ -379,12 +386,6 @@ class InfraRsDomP(APICObject):
         'tDn': '',
         'status': 'created,modified'
     }
-
-    def __init__(self, **kwargs):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
-        if kwargs:
-            self._set_attributes()
 
 
 class SwitchProfile(APICObject):
@@ -399,12 +400,6 @@ class SwitchProfile(APICObject):
     _dn_template = 'uni/infra/nprof-{name}'
     search = re.compile(r'uni/infra/nprof-(?P<name>[^/\]]+)').search
     tf_resource = 'aci_leaf_profile'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes()
 
     def create_switch_profile(self, name: str, nodes: list):
         if len(nodes) > 2:
@@ -439,12 +434,6 @@ class LeafSelector(APICObject):
 
     search = re.compile(r'uni/infra/nprof-(?P<infraNodeP>[^/]+)/leaves-(?P<name>[-\w]+)-typ-range').search
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class InfraNodeBlock(APICObject):
     class_ = 'infraNodeBlk'
@@ -455,10 +444,6 @@ class InfraNodeBlock(APICObject):
     }
 
     search = re.compile(r'uni/infra/nprof-(?P<infraNodeP>[^/]+)/leaves-(?P<infraLeafS>[-\w]+)-typ-range/nodeblk-(?P<name>[^/\]]+)').search
-
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
 
 
 class InfraRsFuncToEpg(APICObject):
@@ -477,18 +462,6 @@ class InfraRsFuncToEpg(APICObject):
     _dn_attributes = ['aep', 'tenant', 'app_profile', 'epg']
     _dn_template = 'uni/infra/attentp-{aep}/gen-default/rsfuncToEpg-[uni/tn-{tenant}/ap-{app_profile}/epg-{epg}]'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
-    # def create(self, aep: str, epg_dn: str, encap: int or str):
-    #     self.attributes.tDn = epg_dn
-    #     self.attributes.dn = f'uni/infra/attentp-{aep}/gen-default/rsfuncToEpg-[{epg_dn}]'
-    #     self.attributes.encap = f'vlan-{encap}'
-    #     return None
-
 
 class Tenant(APICObject):
     class_ = 'fvTenant'
@@ -501,12 +474,6 @@ class Tenant(APICObject):
     search = re.compile(r'uni/tn-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni.json'
     tf_resource = 'aci_tenant'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
 
 
 class AP(APICObject):
@@ -521,13 +488,6 @@ class AP(APICObject):
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/ap-{name}'
     tf_resource = 'aci_application_profile'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-        self.create_modify()
 
 
 class EPG(APICObject):
@@ -544,12 +504,6 @@ class EPG(APICObject):
     _dn_template = 'uni/tn-{tenant}/ap-{app_profile}/epg-{name}'
 
     tf_resource = 'aci_application_epg'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
 
     def assign_bd(self, name):
         fvrsbd = self.pop_child_class(class_=FvRsBd.class_)
@@ -591,12 +545,6 @@ class BD(APICObject):
 
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/BD-{name}'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
 
     def layer2(self):
         self.attributes.arpFlood = 'yes'
@@ -641,10 +589,11 @@ class FvRsBd(APICObject):
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/\]]+)/ap-(?P<fvAp>[^/\]]+)/epg-(?P<fvAEPg>[^/\]]+)/rsbd').search
 
-    def __init__(self, name: str=''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
+    def _customize_(self, name: str='', **kwargs):
         self.attributes.tnFvBDName = name
+        if 'name' in dir(self.attributes):
+            self.attributes.__delattr__('name')
+
 
 
 class FvRsBDToOut(APICObject):
@@ -653,10 +602,16 @@ class FvRsBDToOut(APICObject):
         'tnL3extOutName': ''
     }
 
-    def __init__(self, name: str=''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
+    # def __init__(self, name: str=''):
+    #     self.children = []
+    #     self.attributes = Attributes(**self.attrs)
+    #     self.attributes.tnL3extOutName = name
+
+    def _customize_(self, name: str='', **kwargs):
         self.attributes.tnL3extOutName = name
+        if 'name' in dir(self.attributes):
+            self.attributes.__delattr__('name')
+
 
 
 class Subnet(APICObject):
@@ -675,15 +630,11 @@ class Subnet(APICObject):
     _dn_attributes = ['tenant', 'bd', 'ip_network']
     _dn_template = 'uni/tn-{tenant}/BD-{bd}/subnet-[{ip_network}]'
 
-    def __init__(self, subnet: str=''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if subnet != '':
-            assert IPv4Network(subnet, strict=False)
-            self.attributes.ip = subnet
-            self.attributes.scope = 'public'
-            self.create()
-
+    def _customize_(self, ip: str='', **kwargs):
+        assert IPv4Network(ip, strict=False), 'Invalid subnet was provided'
+        self.attributes.ip = ip
+        self.attributes.scope = 'public'
+        self.create()
 
 class Domain(APICObject):
     class_ = 'physDomP'
@@ -692,12 +643,6 @@ class Domain(APICObject):
         'name': ''
     }
     post_uri = '/api/mo/uni.json'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
 
     def vmm(self):
         self.class_ = 'vmmDomP'
@@ -709,18 +654,6 @@ class Domain(APICObject):
         self.class_ = 'physDomP'
 
 
-class InfraRsDomAtt(APICObject):
-    class_ = 'infraRsDomAtt'
-    attrs = {
-        'tDn': ''
-    }
-
-    def __init__(self, name: str=''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        self.attributes.tDn = f'uni/phys-{name}'
-
-
 class FvRsDomAtt(APICObject):
     class_ = 'fvRsDomAtt'
     attrs = {
@@ -729,10 +662,10 @@ class FvRsDomAtt(APICObject):
 
     tf_resource = 'aci_epg_to_domain'
 
-    def __init__(self, name: str = ''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
+    def _customize_(self, name: str='', **kwargs):
         self.attributes.tDn = f'uni/phys-{name}'
+        if 'name' in dir(self.attributes):
+            self.attributes.__delattr__('name')
 
 
 class Context(APICObject):
@@ -746,12 +679,6 @@ class Context(APICObject):
     _dn_attributes = ['tenant', 'name']
     _dn_template = 'uni/tn-{tenant}/ctx-{name}'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class FvRsCtx(APICObject):
     class_ = 'fvRsCtx'
@@ -759,10 +686,10 @@ class FvRsCtx(APICObject):
         'tnFvCtxName': ''
     }
 
-    def __init__(self, name: str=''):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
+    def _customize_(self, name: str='', **kwargs):
         self.attributes.tnFvCtxName = name
+        if 'name' in dir(self.attributes):
+            self.attributes.__delattr__('name')
 
 
 class Uni(APICObject):
@@ -772,10 +699,6 @@ class Uni(APICObject):
         'status': 'modified'
     }
 
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-
 
 class Infra(APICObject):
     class_ = 'infraInfra'
@@ -783,10 +706,6 @@ class Infra(APICObject):
         'dn': 'uni/infra',
         'status': 'modified'
     }
-
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
 
 
 class Fabric(APICObject):
@@ -796,10 +715,6 @@ class Fabric(APICObject):
         'status': 'modified'
     }
     post_uri = '/api/mo/uni.json'
-
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
 
 
 class MaintenancePolicy(APICObject):
@@ -814,13 +729,6 @@ class MaintenancePolicy(APICObject):
 
     _dn_attributes = ['name']
     _dn_template = 'uni/fabric/maintpol-{name}'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        self.create_modify()
-        if kwargs:
-            self._set_attributes(**kwargs)
 
     def set_firmware_version(self, version: str):
         self.attributes.__setattr__('version', 'n9000-1%s' % version)
@@ -837,13 +745,6 @@ class MaintenanceGroup(APICObject):
 
     _dn_attributes = ['name']
     _dn_template = 'uni/fabric/maintgrp-{name}'
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        self.create_modify()
-        if kwargs:
-            self._set_attributes(**kwargs)
 
     def use_maintenance_policy(self, name: str):
         ref = GenericClass(apic_class='maintRsMgrpp')
@@ -864,12 +765,6 @@ class FirmwareGroup(APICObject):
     search = re.compile(r'uni/fabric/fwgrp-(?P<name>[^/\]]+)').search
     post_uri = '/api/mo/uni/fabric.json'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class FabricNodeBlock(APICObject):
     class_ = 'fabricNodeBlk'
@@ -885,10 +780,7 @@ class FabricNodeBlock(APICObject):
     _dn_attributes = ['group', 'node']
     _dn_template = 'uni/fabric/maintgrp-{group}/nodeblk-blk{node}-{node}'
 
-    def __init__(self, *args):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-
+    def _customize_(self, *args, **kwargs):
         if args:
             self.attributes.name = f'blk{args[0]}-{args[-1]}'
             self.attributes.from_ = str(args[0])
@@ -905,12 +797,6 @@ class OOBAddress(APICObject):
     }
     post_uri = '/api/mo/uni/tn-mgmt/mgmtp-default/oob-default.json'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class NodeIdentityPolicy(APICObject):
     class_ = 'fabricNodeIdentP'
@@ -923,12 +809,6 @@ class NodeIdentityPolicy(APICObject):
     }
     post_uri = '/api/mo/uni/controller/nodeidentpol.json'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class FabricNode(APICObject):
     class_ = 'fabricNode'
@@ -940,12 +820,6 @@ class FabricNode(APICObject):
         'status': 'created'
     }
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class FabricNodeEp(APICObject):
     class_ = 'fabricNodePEp'
@@ -953,10 +827,6 @@ class FabricNodeEp(APICObject):
         'id': '{{serial}}',
         'status': 'created,modified'
     }
-
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
 
 
 class FabricExplicitGEp(APICObject):
@@ -967,12 +837,6 @@ class FabricExplicitGEp(APICObject):
         'status': 'created'
     }
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class FabricProtPol(APICObject):
     class_ = 'fabricProtPol'
@@ -981,10 +845,6 @@ class FabricProtPol(APICObject):
         'status': 'modified'
     }
     post_uri = '/api/mo/uni/fabric.json'
-
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
 
     def add_new_vpc_pair(self, nodes: list):
         pair = FabricExplicitGEp()
@@ -1013,42 +873,71 @@ class FabricRsVpcInstPol(APICObject):
         'status': 'created'
     }
 
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
+
+# class InterfacePolicy(APICObject):
+#     class_ = 'cdpIfPol'
+#     attrs = {
+#         'name': '',
+#         'status': 'created,modified'
+#     }
+#
+#     def _customize_(self, policy_type: str, **kwargs):
+#         policy_type = policy_type.lower()
+#
+#         if policy_type in ['cdp', 'lldp', 'port-channel']:
+#             if policy_type == 'cdp':
+#                 self.class_ = 'cdpIfPol'
+#                 self.attributes.adminSt = 'enabled'
+#             elif policy_type == 'lldp':
+#                 self.class_ = 'lldpIfPol'
+#                 self.attributes.adminRxSt = 'enabled'
+#                 self.attributes.adminTxSt = 'enabled'
+#             elif policy_type == 'port-channel':
+#                 self.class_ = 'lacpLagPol'
+#                 self.attributes.ctrl = 'fast-sel-hot-stdby,graceful-conv,susp-individual'
+#                 self.attributes.maxLinks = '16'
+#                 self.attributes.minLinks = '1'
+#                 self.attributes.mode = 'active'
+#         else:
+#             raise Exception('This interface policy type is not yet supported')
 
 
-class InterfacePolicy(APICObject):
-    class_ = ''
+class IfSpeedPolicy(APICObject):
+    class_ = 'fabricHIfPol'
+    attrs = {}
+
+    post_uri = '/api/mo/uni/infra.json'
+
+
+class IfBondPolicy(APICObject):
+    class_ = 'lacpLagPol'
     attrs = {
-        'name': '',
-        'status': 'created,modified'
+        'ctrl': 'fast-sel-hot-stdby,graceful-conv,susp-individual',
+        'maxLinks': '16',
+        'minLinks': '1',
+        'mode': 'active'
     }
 
-    def __init__(self, policy_type: str, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
+    post_uri = '/api/mo/uni/infra.json'
 
-        policy_type = policy_type.lower()
 
-        if policy_type in ['cdp', 'lldp', 'port-channel']:
-            if policy_type == 'cdp':
-                self.class_ = 'cdpIfPol'
-                self.attributes.adminSt = 'enabled'
-            elif policy_type == 'lldp':
-                self.class_ = 'lldpIfPol'
-                self.attributes.adminRxSt = 'enabled'
-                self.attributes.adminTxSt = 'enabled'
-            elif policy_type == 'port-channel':
-                self.class_ = 'lacpLagPol'
-                self.attributes.ctrl = 'fast-sel-hot-stdby,graceful-conv,susp-individual'
-                self.attributes.maxLinks = '16'
-                self.attributes.minLinks = '1'
-                self.attributes.mode = 'active'
-        else:
-            raise Exception('This interface policy type is not yet supported')
+class IfCDPPolicy(APICObject):
+    class_ = 'cdpIfPol'
+    attrs = {
+        'adminSt': 'enabled'
+    }
+
+    post_uri = '/api/mo/uni/infra.json'
+
+
+class IfLLDPPolicy(APICObject):
+    class_ = 'lldpIfPol'
+    attrs = {
+        'adminRxSt': 'enabled',
+        'adminTxSt': 'enabled'
+    }
+
+    post_uri = '/api/mo/uni/infra.json'
 
 
 class InterfacePolicyGroup(APICObject):
@@ -1063,11 +952,7 @@ class InterfacePolicyGroup(APICObject):
 
     post_uri = '/api/mo/uni/infra/funcprof.json'
 
-    def __init__(self, **kwargs):
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
+    def _customize_(self, **kwargs):
         # CDP and LLDP will always be enabled by default
         cdp_enable = GenericClass('infraRsCdpIfPol')
         cdp_enable.attributes.tnCdpIfPolName = 'CDP-Enable'
@@ -1087,6 +972,13 @@ class InterfacePolicyGroup(APICObject):
         aep.attributes.tDn = f'uni/infra/attentp-{aep_name}'
         self.children.append(aep)
 
+    def link_speed(self, speed: int):
+        """Set speed of interface in Gbps"""
+        speed = (speed if speed in [1, 10, 25, 100] else 'default')
+        llp = GenericClass('infraRsHIfPol',
+                           tnFabricHIfPolName=(f'system-link-level-{speed}G-auto' if isinstance(speed, int) else speed))
+        self.children += [llp]
+
 
 class InterfaceProfile(APICObject):
     class_ = 'infraAccPortP'
@@ -1102,12 +994,6 @@ class InterfaceProfile(APICObject):
     _dn_attributes = ['name']
     _dn_template = 'uni/infra/accportprof-{name}'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class InfraRsAccPortP(APICObject):
     class_ = 'infraRsAccPortP'
@@ -1121,10 +1007,6 @@ class InfraRsAccPortP(APICObject):
     _dn_attributes = ['switch_profile', 'name']
     _dn_template = 'uni/infra/nprof-{switch_profile}/rsaccPortP-[uni/infra/accportprof-{name}]'
 
-    def __init__(self):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-
 
 class InterfaceSelector(APICObject):
     class_ = 'infraHPortS'
@@ -1136,12 +1018,6 @@ class InterfaceSelector(APICObject):
     }
 
     search = re.compile(r'uni/infra/accportprof-(?P<infraAccPortP>[^/\]]+)/hports-(?P<name>[-\w]+)-typ-range').search
-
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
 
 
 class InterfaceBlock(APICObject):
@@ -1159,11 +1035,7 @@ class InterfaceBlock(APICObject):
     _dn_attributes = ['profile', 'selector', 'name']
     _dn_template = 'uni/infra/accportprof-{profile}/hports-{selector}/portblk-{name}'
 
-    def __init__(self, **kwargs):
-        self.children = []
-        self.attributes = Attributes(**self.attrs)
-        if kwargs:
-            self._set_attributes(**kwargs)
+    def _customize_(self, **kwargs):
         self.attributes.name = 'block%s' % ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
 
 
@@ -1175,10 +1047,8 @@ class SNMPClientP(APICObject):
         'addr': ''
     }
 
-    def __init__(self, addr: str):
-        self.attributes = Attributes(**self.attrs)
+    def _customize_(self, addr: str, **kwargs):
         self.attributes.dn = f'uni/fabric/snmppol-default/clgrp-snmpClients/client-[{addr}]'
-        self.children = []
 
 
 class VLANPool(APICObject):
@@ -1188,10 +1058,8 @@ class VLANPool(APICObject):
         'allocMode': 'dynamic'
     }
 
-    def __init__(self, name):
-        self.attributes = Attributes(**self.attrs)
+    def _customize_(self, name: str, **kwargs):
         self.attributes.dn = f'uni/infra/vlanns-[{name}]-dynamic'
-        self.children = []
 
 
 class EncapBlock(APICObject):
@@ -1202,10 +1070,6 @@ class EncapBlock(APICObject):
         'from': 'vlan-2',
         'to': 'vlan-3966'
     }
-
-    def __init__(self):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
 
     def set_range(self, *vlan_range):
         self.attributes.__setattr__('from', f'vlan-{vlan_range[0]}')
@@ -1221,10 +1085,6 @@ class OutOfServicePort(APICObject):
     _dn_template = 'uni/fabric/outofsvc/rsoosPath-[topology/pod-{pod}/paths-{node}/pathep-[eth1/{port}]]'
     _dn_attributes = ['pod', 'node', 'port']
 
-    def __init__(self):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
-
 
 class OSPFExternalPolicy(APICObject):
     class_ = 'ospfExtP'
@@ -1236,12 +1096,6 @@ class OSPFExternalPolicy(APICObject):
         'multipodInternal': 'no'
     }
 
-    def __init__(self, **kwargs):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
-        if kwargs:
-            self._set_attributes(**kwargs)
-
 
 class L3OutVRF(APICObject):
     class_ = 'l3extRsEctx'
@@ -1249,10 +1103,10 @@ class L3OutVRF(APICObject):
         'tnFvCtxName': ''
     }
 
-    def __init__(self, name: str):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
+    def _customize_(self, name: str='', **kwargs):
         self.attributes.tnFvCtxName = name
+        if 'name' in dir(self.attributes):
+            self.attributes.__delattr__('name')
 
 
 class L3OutDomain(APICObject):
@@ -1260,12 +1114,6 @@ class L3OutDomain(APICObject):
     attrs = {
         'tDn': ''
     }
-
-    def __init__(self, **kwargs):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
-        if kwargs:
-            self._set_attributes(**kwargs)
 
 
 class L3Out(APICObject):
@@ -1276,11 +1124,7 @@ class L3Out(APICObject):
         'descr': ''
     }
 
-    def __init__(self, **kwargs):
-        self.attributes = Attributes(**self.attrs)
-        self.children = []
-        if kwargs:
-            self._set_attributes(**kwargs)
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<name>[^/\]]+)').search
 
     def ospf_area(self, ospf_area: str) -> OSPFExternalPolicy:
         if IPv4Network(ospf_area):
@@ -1291,6 +1135,48 @@ class L3Out(APICObject):
     def vrf(self, name: str):
         _ = L3OutVRF(name=name)
         self.children.append(_)
+
+
+class L3extIP(APICObject):
+    class_ = 'l3extIp'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<l3extPath>[^]]+]])/mem-[.]/addr-\[(?P<addr>[^]]+)]').search
+
+
+class L3extPath(APICObject):
+    class_ = 'l3extRsPathL3OutAtt'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<path>[^]]+]])').search
+
+
+class L3extSubnet(APICObject):
+    class_ = 'l3extSubnet'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/instP-(?P<l3extInstP>[^/]+)/extsubnet-\[(?P<ip>[^]]+)]').search
+
+
+class L3extLNodeP(APICObject):
+    class_ = 'l3extLNodeP'
+    attrs = {'name': ''}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<name>[^/\]]+)').search
+
+
+class L3extLIfP(APICObject):
+    class_ = 'l3extLIfP'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/\]]+)/lifp-(?P<name>[^/\]]+)').search
+
+
+class L3extInstP(APICObject):
+    class_ = 'l3extInstP'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/instP-(?P<name>[^/]+)').search
 
 
 defined_classes = {
@@ -1311,7 +1197,6 @@ defined_classes = {
     'vmmDomP': Domain,
     'l3extDomP': Domain,
     'fvRsDomAtt': FvRsDomAtt,  # Domain association to tenant objects
-    'infraRsDomAtt': InfraRsDomAtt,  # Domain association to infra objects
     'infraRsDomP': InfraRsDomP,
     'fvCtx': Context,  # Also called VRF
     'fvRsCtx': FvRsCtx,
@@ -1331,7 +1216,13 @@ defined_classes = {
     'infraRsAccPortP': InfraRsAccPortP,
     'infraPortBlk': InterfaceBlock,
     'fabricRsOosPath': OutOfServicePort,
-    'lacpLagPol': InterfacePolicy,
-    'cdpIfPol': InterfacePolicy,
-    'lldpIfPol': InterfacePolicy
+    'fabricHIfPol': IfSpeedPolicy,
+    'lacpLagPol': IfBondPolicy,
+    'cdpIfPol': IfCDPPolicy,
+    'lldpIfPol': IfLLDPPolicy,
+    'l3extIp': L3extIP,
+    'l3extRsPathL3OutAtt': L3extPath,
+    'l3extSubnet': L3extSubnet,
+    'l3extLNodeP': L3extLNodeP,
+    'l3extLIfP': L3extLIfP
 }
