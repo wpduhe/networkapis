@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Any
 from types import SimpleNamespace
 from base64 import b64encode
 from datetime import datetime
@@ -486,6 +486,36 @@ class APIC:
                 return matching_networks
         else:
             return [network[1].json() for network in networks]
+
+    def collect_subnets_new(self, ip: str='') -> List[Any]:
+        """Returns a list of APICObjects that overlap with the specified IP address/prefix"""
+        bd_subnets = [APICObject.load(_) for _ in self.get('/api/class/fvSubnet.json').json()['imdata']]
+        ext_subnets = [APICObject.load(_) for _ in self.get('/api/class/l3extSubnet.json?query-target-filter=ne(l3extSubnet.ip,"0.0.0.0/0")').json()['imdata']]
+        ext_subnets = [_ for _ in ext_subnets if _.attributes.ip != '0.0.0.0/0']
+        intf_subnets = [APICObject.load(_) for _ in self.get('/api/class/l3extRsPathL3OutAtt.json').json()['imdata']]
+        intf_subnets = [_ for _ in intf_subnets if _.attributes.addr != '0.0.0.0']
+        # Also get these l3extIp (this accounts for L3Out SVIs)
+        l3_svis = [APICObject.load(_) for _ in self.get('/api/class/l3extIp.json').json()['imdata']]
+
+
+        for subnet in ext_subnets[:]:
+            if 'import-security' not in subnet.attributes.scope:
+                ext_subnets.remove(subnet)
+
+        # Filter for overlapping fvSubnets
+        networks = [_ for _ in bd_subnets
+                    if IPv4Network(_.attributes.ip, strict=False).overlaps(IPv4Network((ip if ip else '0.0.0.0/0')))]
+        # Filter for overlapping l3extSubnets
+        networks += [_ for _ in ext_subnets
+                     if IPv4Network(_.attributes.ip, strict=False).overlaps(IPv4Network((ip if ip else '0.0.0.0/0')))]
+        # Filter for overlapping l3extRsPathL3OutAtt
+        networks += [_ for _ in intf_subnets
+                     if IPv4Network(_.attributes.addr, strict=False).overlaps(IPv4Network((ip if ip else '0.0.0.0/0')))]
+        # Filter for overlapping l3extIp
+        networks += [_ for _ in l3_svis
+                     if IPv4Network(_.attributes.addr, strict=False).overlaps(IPv4Network((ip if ip else '0.0.0.0/0')))]
+
+        return networks
 
     def collect_epgs(self, tn: str='', epg: str=''):
         """
@@ -2227,7 +2257,7 @@ class APIC:
         return None
 
     @classmethod
-    def get_bd_by_ip(cls, environment: str, ip: str):
+    def get_bd_by_ip_old(cls, environment: str, ip: str):
         with cls(env=environment) as apic:
             subnet = apic.collect_subnets(ip=ip)
 
@@ -2267,6 +2297,67 @@ class APIC:
                 return 200, {'environment': apic.env.Name, 'tenant': bridge_domain.group(1),
                              'bridge_domain': bridge_domain.group(2), 'subnet': subnet, 'all_bd_subnets': subnets,
                              'inuse_by': epgs}
+
+    @classmethod
+    def get_bd_by_ip(cls, environment: str, ip: str):
+        apic = cls(env=environment)
+
+        subnet_results = apic.collect_subnets_new(ip)
+
+        if not subnet_results:
+            return 404, {'message': 'No Subnet found matching the provided IP'}
+
+        if {_.class_ for _ in subnet_results} == {Subnet.class_}:
+            tn_name, bd_name, ip = Subnet.search(subnet_results[0].attributes.dn).groups()
+            bd_dn = BD.search(subnet_results[0].attributes.dn).group()
+            bd = APICObject.load(apic.get(f'/api/mo/{bd_dn}.json?{FCCO}').json()['imdata'])
+            all_bd_subnets = [str(IPv4Network(_.attributes.ip, strict=False))
+                              for _ in bd.get_child_class_iter(Subnet.class_)]
+            subnet = str(IPv4Network(ip, strict=False))
+            rsbds = [APICObject.load(_) for _ in apic.get(f'/api/class/fvRsBd.json').json()['imdata']]
+            epgs = [EPG.search(_.attributes.dn).group() for _ in rsbds if _.attributes.tDn == bd.attributes.dn]
+
+            return 200, {'environment': apic.env.Name, 'tenant': tn_name,
+                         'bridge_domain': bd_name, 'subnet': subnet, 'all_bd_subnets': all_bd_subnets,
+                         'inuse_by': epgs}
+
+        elif {_.class_ for _ in subnet_results} == {L3extPath.class_}:
+            paths = []
+            for result in subnet_results:
+                paths += [{
+                    'l3out': L3Out.search(result.attributes.dn).group('name'),
+                    'path': L3extPath.search(result.attributes.dn).group('path'),
+                    'intf_type': result.attributes.ifInstT,
+                    'encap': result.attributes.encap,
+                    'subnet': str(IPv4Network(result.attributes.addr, strict=False))
+                }]
+            return 200, {'environment': apic.env.Name, 'l3out_paths': paths}
+        elif {_.class_ for _ in subnet_results} == {L3extSubnet.class_}:
+            ext_subnets = []
+            for result in subnet_results:
+                # TODO: Maybe find the next hop address for the static route?  Yes
+                ext_subnets += [{
+                    'l3out': L3Out.search(result.attributes.dn).group('name'),
+                    'external_epg': L3extSubnet.search(result.attributes.dn).group('l3extInstP'),
+                    'subnet': str(IPv4Network(result.attributes.ip))
+                }]
+            return 200, {'environment': apic.env.Name, 'external_networks': ext_subnets}
+        elif L3extIP.class_ in {_.class_ for _ in subnet_results}:
+            l3_ips = []
+            subnet_results = [_ for _ in subnet_results if isinstance(_, L3extIP)]
+            for result in subnet_results:
+                path = APICObject.load(apic.get(f'/api/mo/{L3extPath.search(result.attributes.dn).group()}.json').json()['imdata'])
+                l3_ips += [{
+                    'l3out': L3Out.search(result.attributes.dn).group('name'),
+                    'path': L3extPath.search(result.attributes.dn).group('path'),
+                    'intf_type': 'ext-svi',
+                    'encap': path.attributes.encap,
+                    'subnet': str(IPv4Network(result.attributes.addr, strict=False))
+                }]
+            return 200, {'environment': apic.env.Name, 'l3out_paths': l3_ips}
+        else:
+            logging.info(f'Need to be accounting for this: {list(_.class_ for _ in subnet_results)}')
+            return 400, {'error': 'I do not know what you want you want from me'}
 
     @classmethod
     def tag_epgs(cls, env: str, epgs: list):
