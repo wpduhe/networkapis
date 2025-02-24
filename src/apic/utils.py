@@ -2836,7 +2836,7 @@ class APIC:
 
                 sele.children.append(new_block)
 
-        # Stage ALL of the old blocks to be deleted
+        # Stage ALL the old blocks to be deleted
         for block in blocks:
             block.attributes.status = 'deleted'
             sel = re.search('hports-([^/]*)-typ-', block.attributes.dn).group(1)
@@ -3349,7 +3349,7 @@ class APIC:
             _ = self.post(subnet.self_json())
 
         net = ipam.get_network(network.with_prefixlen).json()
-        resp = ipam.delete_network(network=network.with_prefixlen, data=net)
+        _ = ipam.delete_network(network=network.with_prefixlen, data=net)
 
         print([s.self_json() for s in subnets])
 
@@ -5762,8 +5762,8 @@ def add_new_leaf_pair(env: str, rack1: str, serial1: str, rack2: str, serial2: s
                                                          {'Request Body': oob_address2.json(),
                                                           'Response Body': json.loads(r2.text)}}
 
-        config1, r1 = apic.assign_leaf_to_maint_group(apic.env.StagingMaintenanceGroup, node1)
-        config2, r2 = apic.assign_leaf_to_maint_group(apic.env.StagingMaintenanceGroup, node2)
+        config1, r1 = apic.assign_leaf_to_maint_group(STAGING, node1)
+        config2, r2 = apic.assign_leaf_to_maint_group(STAGING, node2)
 
         response[f'{node1} Firmware Staging'] = {f'{r1.status_code} | {r1.reason}': {'Request Body': config1.json(),
                                                                                      'Response Body': json.loads(
