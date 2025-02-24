@@ -199,6 +199,13 @@ class APICObject:
         else:
             return None
 
+    def pop_child_class_iter(self, class_):
+        children = []
+        for child in self.children[:]:
+            if child.class_ == class_:
+                children += [self.children.pop(child)]
+        return children
+
     def get_child_class(self, class_):
         if class_ in [_.class_ for _ in self.children]:
             child = next(c for c in self.children if c.class_ == class_)
