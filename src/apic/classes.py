@@ -975,16 +975,37 @@ class InterfacePolicyGroup(APICObject):
         self.children.append(po_policy)
 
     def use_aep(self, aep_name: str):
-        aep = GenericClass('infraRsAttEntP')
-        aep.attributes.tDn = f'uni/infra/attentp-{aep_name}'
-        self.children.append(aep)
+        aep = self.get_child_class('infraRsAttEntp')
 
-    def link_speed(self, speed: int):
+        if aep:
+            aep.attributes.tDn = f'uni/infra/attentp-{aep_name}'
+        else:
+            aep = GenericClass('infraRsAttEntP', tDn=f'uni/infra/attentp-{aep_name}')
+            self.children.append(aep)
+
+    def link_speed(self, speed: int=None):
         """Set speed of interface in Gbps"""
         speed = (speed if speed in [1, 10, 25, 100] else 'default')
-        llp = GenericClass('infraRsHIfPol',
-                           tnFabricHIfPolName=(f'system-link-level-{speed}G-auto' if isinstance(speed, int) else speed))
-        self.children += [llp]
+
+        llp = self.get_child_class('infraRsHIfPol')
+
+        if llp:
+            llp.attributes.tnFabricHIfPolName=(f'system-link-level-{speed}G-auto' if isinstance(speed, int) else speed)
+        else:
+            llp = GenericClass('infraRsHIfPol',
+                               tnFabricHIfPolName=(f'system-link-level-{speed}G-auto' if isinstance(speed, int) else speed))
+            self.children += [llp]
+
+
+class InterfacePortGroup(InterfacePolicyGroup):
+    class_ = 'infraAccPortGrp'
+    search = re.compile(r'uni/infra/funcprof/accportgrp-(?P<name>[^/\]]+)').search
+
+
+class InterfaceBundleGroup(InterfacePolicyGroup):
+    class_ = 'infraAccBndlGrp'
+    search = re.compile(r'uni/infra/funcprof/accbundle-(?P<name>[^/\]]+)').search
+
 
 
 class InterfaceProfile(APICObject):
@@ -1217,8 +1238,8 @@ defined_classes = {
     'fabricNode': FabricNode,
     'fabricExplicitGEp': FabricExplicitGEp,  # VPC Domain definition
     'fabricRsVpcInstPol': FabricRsVpcInstPol,  # Default VPC policy found in fabrics
-    'infraAccPortGrp': InterfacePolicyGroup,
-    'infraAccBndlGrp': InterfacePolicyGroup,
+    'infraAccPortGrp': InterfacePortGroup,
+    'infraAccBndlGrp': InterfaceBundleGroup,
     'infraAccPortP': InterfaceProfile,
     'infraRsAccPortP': InfraRsAccPortP,
     'infraPortBlk': InterfaceBlock,
