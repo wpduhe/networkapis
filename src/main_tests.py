@@ -36,7 +36,7 @@ logger.debug('Logging initialized.')
 
 
 # Development URL
-URL = 'https://pyapisdev.ocp.app.medcity.net'
+URL = 'https://pyapis.ocp.app.medcity.net'
 
 # Sandbox URL
 # URL = 'http://py-ap-is-duhes-stuff-snd.apps.ops2.paas.medcity.net'
@@ -103,21 +103,6 @@ class MainTests(unittest.TestCase):
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
     def test_002_apic_classes(self):
-        things = ['AEP', 'AP', 'APICObject', 'Attributes', 'BD', 'Context', 'Domain', 'EPG', 'EncapBlock', 'Fabric',
-                  'FabricExplicitGEp', 'FabricNode', 'FabricNodeBlock', 'FabricNodeEp', 'FabricProtPol',
-                  'FabricRsVpcInstPol',
-                  'FirmwareGroup', 'FvRsBDToOut', 'FvRsBd', 'FvRsCtx', 'FvRsDomAtt', 'GenericClass', 'IPv4Network',
-                  'Infra',
-                  'InfraGeneric', 'InfraNodeBlock', 'InfraRsAccPortP', 'InfraRsDomAtt', 'InfraRsDomP',
-                  'InfraRsFuncToEpg',
-                  'InterfaceBlock', 'InterfacePolicy', 'InterfacePolicyGroup', 'InterfaceProfile', 'InterfaceSelector',
-                  'L3Out',
-                  'L3OutDomain', 'L3OutVRF', 'L3extIP', 'L3extInstP', 'L3extLIfP', 'L3extLNodeP', 'L3extPath',
-                  'L3extSubnet',
-                  'LeafSelector', 'MaintenanceGroup', 'MaintenancePolicy', 'NodeIdentityPolicy', 'OOBAddress',
-                  'OSPFExternalPolicy', 'OutOfServicePort', 'SNMPClientP', 'Subnet', 'SwitchProfile', 'Tenant', 'Uni',
-                  'VLANPool']
-
         def load(x: dict):
             return APICObject.load(x)
 
@@ -133,41 +118,110 @@ class MainTests(unittest.TestCase):
 
             if isinstance(obj, AEP):
                 logger.debug('Testing AEP.add_epg()')
-                obj.add_epg(epg_dn='uni/tn-TEST/ap-TEST/epg-TEST', encap=1100)
+                obj.add_epg(epg_dn='uni/tn-TEST/ap-TEST/epg-TEST1', encap=1100)
                 infra_generic = obj.get_child_class(InfraGeneric.class_)
                 self.assertIsInstance(infra_generic, InfraGeneric,
                                       f'{AEP} failed to add {InfraGeneric} to child objects')
+                self.assertEqual(len(infra_generic.get_child_class_iter(InfraRsFuncToEpg.class_)), 1)
                 func_to_epg = infra_generic.get_child_class(InfraRsFuncToEpg.class_)
                 self.assertIsInstance(func_to_epg, InfraRsFuncToEpg)
                 self.assertEqual(func_to_epg.attributes.encap, 'vlan-1100',
                                  f'{AEP} failed to generate correct encapsulation for {InfraRsFuncToEpg}')
+
+                obj.add_epg(epg_dn='uni/tn-TEST/ap-TEST/epg-TEST2', encap=1101)
+                self.assertEqual(len(infra_generic.get_child_class_iter(InfraRsFuncToEpg.class_)), 2)
+                func_to_epg = infra_generic.get_child_class(InfraRsFuncToEpg.class_)
+
+
                 logger.debug('Testing AEP.use_domain()')
                 obj.use_domain('TEST')
                 dom = obj.get_child_class(InfraRsDomP.class_)
                 self.assertIsInstance(dom, InfraRsDomP)
                 self.assertEqual(dom.attributes.tDn, 'uni/phys-TEST')
 
-            # TODO: Create test for SwitchProfile
+            if isinstance(obj, SwitchProfile):
+                logger.debug('Testing SwitchProfile.create_switch_profile')
+                self.assertRaises(ValueError, obj.create_switch_profile, name='TEST', nodes=[103, 104, 105])
+                obj.create_switch_profile(name='TEST', nodes=[103, 104])
+                self.assertEqual(len(obj.get_child_class_iter(LeafSelector.class_)), 1)
+                sel = obj.get_child_class(LeafSelector.class_)
+                self.assertEqual(sel.attributes.name, 'LF-103-104')
+                self.assertEqual(sel.attributes.type, 'range')
+                self.assertEqual(len(sel.get_child_class_iter(InfraNodeBlock.class_)), 1)
+                blk = sel.get_child_class(InfraNodeBlock.class_)
+                self.assertEqual(blk.attributes.name, 'LF-103-104')
+                self.assertEqual(blk.attributes.from_, '103')
+                self.assertEqual(blk.attributes.to_, '104')
 
-            # TODO: Create test for EPG
+            if isinstance(obj, EPG):
+                logger.debug('Testing EPG.assign_bd')
+                obj.assign_bd(name='Test')
+                self.assertEqual(len(obj.get_child_class_iter(FvRsBd.class_)), 1)
+                self.assertEqual(obj.get_child_class(FvRsBd.class_).attributes.tnFvBDName, 'Test')
+                obj.assign_bd(name='Test-01')
+                self.assertEqual(len(obj.get_child_class_iter(FvRsBd.class_)), 1)
+                self.assertEqual(obj.get_child_class(FvRsBd.class_).attributes.tnFvBDName, 'Test-01')
+                logger.debug('Testing EPG.domain')
+                obj.domain(name='phy-dom-TEST')
+                self.assertEqual(len(obj.get_child_class_iter(FvRsDomAtt.class_)), 1)
+                dom = obj.get_child_class(FvRsDomAtt.class_)
+                self.assertEqual(dom.attributes.tDn, 'uni/phys-phy-dom-TEST')
+                self.assertRaises(AttributeError, dom.attributes.__getattribute__, 'name')
+                obj.domain(name='phy-dom-TEST-01')
+                self.assertEqual(len(obj.get_child_class_iter(FvRsDomAtt.class_)), 2)
 
-            # TODO: Create test for BD
+            if isinstance(obj, BD):
+                logger.debug('Testing specifics for BD')
+                obj = BD()
 
-            # TODO: Create test for Subnet
+                logger.debug('Testing BD.use_vrf')
+                obj.use_vrf(name='vrf-test1')
+                fvRsCtx = obj.get_child_class(FvRsCtx.class_)
+                self.assertEqual(len(obj.get_child_class_iter(FvRsCtx.class_)), 1)
+                self.assertEqual(fvRsCtx.attributes.tnFvCtxName, 'vrf-test1')
+                obj.use_vrf(name='vrf-test2')
+                fvRsCtx = obj.get_child_class(FvRsCtx.class_)
+                self.assertEqual(len(obj.get_child_class_iter(FvRsCtx.class_)), 1)
+                self.assertEqual(fvRsCtx.attributes.tnFvCtxName, 'vrf-test2')
 
-            # TODO: Create test for MaintenancePolicy
+                logger.debug('Testing BD.layer3')
+                obj.layer3()
+                self.assertEqual(obj.attributes.arpFlood, 'no')
+                self.assertEqual(obj.attributes.unicastRoute, 'yes')
+                self.assertEqual(obj.attributes.unkMacUcastAct, 'proxy')
+                self.assertEqual(obj.attributes.ipLearning, 'yes')
 
-            # TODO: Create test for MaintenanceGroup
+                logger.debug('Testing BD.add_subnet')
+                obj.add_subnet(subnet='192.168.1.1/28', description='test1')
+                self.assertEqual(len(obj.get_child_class_iter(Subnet.class_)), 1)
+                obj.add_subnet(subnet='192.168.1.17/28', description='test2')
+                self.assertEqual(len(obj.get_child_class_iter(Subnet.class_)), 2)
+
+                logger.debug('Testing BD.layer2')
+                obj.layer2()
+                self.assertEqual(obj.attributes.arpFlood, 'yes')
+                self.assertEqual(obj.attributes.unicastRoute, 'no')
+                self.assertEqual(obj.attributes.unkMacUcastAct, 'flood')
 
             # TODO: Create test for FabricNodeBlock
+            if isinstance(obj, FabricNodeBlock):
+                pass
 
             # TODO: Create test for FabricProtPol
+            if isinstance(obj, FabricProtPol):
+                pass
 
             # TODO: Create test for InterfacePolicyGroup
+            if isinstance(obj, InterfacePolicyGroup):
+                pass
 
             # TODO: Create test for EncapBlock
+            if isinstance(obj, EncapBlock):
+                pass
 
             # TODO: Create test for L3Out
+            if isinstance(obj, L3Out):
+                pass
 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
