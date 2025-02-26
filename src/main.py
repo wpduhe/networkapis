@@ -963,7 +963,6 @@ def purge_epg_and_vlan(request: Request, az: str, req_data: PurgeEPGAndVLAN):
     return Response(status_code=status, content=json.dumps(resp), media_type='application/json')
 
 
-
 @app.get('/apis/aci/{az}/verify_leaf_uplinks', tags=['ACI'])
 def verify_leaf_uplinks(request: Request, az: str):
     """Verifies that all fabric leafs have an uplink to multiple spines"""
@@ -1313,7 +1312,6 @@ def document_app_instance(request: Request, az: str, tenant_name: str, app_profi
     res_logit(document_app_instance, request)
 
     return Response(status_code=status, content=json.dumps(data), media_type='application/json')
-
 
 
 @app.post('/apis/appinst/{application}/{instance}/create_drt', tags=['AppInstance'])
