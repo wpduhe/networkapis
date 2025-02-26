@@ -36,7 +36,7 @@ logger.debug('Logging initialized.')
 
 
 # Development URL
-URL = 'https://pyapis.ocp.app.medcity.net'
+URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
 
 # Sandbox URL
 # URL = 'http://py-ap-is-duhes-stuff-snd.apps.ops2.paas.medcity.net'
@@ -90,8 +90,7 @@ NCM_DATA = {
     'Trusted': True
 }
 
-
-class MainTests(unittest.TestCase):
+class APICCLassTests(unittest.TestCase):
 
     # def test_001_check_status(self):
     #     """Asserts that the server has started"""
@@ -203,9 +202,10 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(obj.attributes.unicastRoute, 'no')
                 self.assertEqual(obj.attributes.unkMacUcastAct, 'flood')
 
-            # TODO: Create test for FabricNodeBlock
             if isinstance(obj, FabricNodeBlock):
-                pass
+                logger.debug('Testing FabricNodeBlock specifics')
+                self.assertRaises(TypeError, FabricNodeBlock, 103, 104, 105)
+                obj = FabricNodeBlock(103, 104)
 
             # TODO: Create test for FabricProtPol
             if isinstance(obj, FabricProtPol):
@@ -223,6 +223,13 @@ class MainTests(unittest.TestCase):
             if isinstance(obj, L3Out):
                 pass
 
+
+class MainTests(unittest.TestCase):
+
+    # def test_001_check_status(self):
+    #     """Asserts that the server has started"""
+    #     r = requests.get(URL + '/apis/getStatus', verify=False)
+    #     self.assertEqual(r.status_code, 200)
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     # ACI API Tests
