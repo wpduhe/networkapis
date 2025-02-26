@@ -1,4 +1,5 @@
 from ipaddress import IPv4Network
+from typing import List, Any
 import string
 import random
 import re
@@ -86,6 +87,7 @@ class Attributes:
 
 
 class APICObject:
+    """Base class to load any Cisco APIC class. JSON only"""
     children: list
     class_: str
     attributes: Attributes
@@ -95,6 +97,7 @@ class APICObject:
     tf_resource: str
 
     def __iter__(self):
+        """Iterates over keys and values of the object's attributes"""
         for k, v in self.attributes.__dict__.items():
             yield k, v
 
@@ -113,13 +116,14 @@ class APICObject:
         pass
 
     @classmethod
-    def load(cls, json_data: dict or list):
+    def load(cls, json_data: dict or list) -> Any | List[Any]:
+        """Returns list of APICObjects if given a list of objects, otherwise returns a single APICObject"""
         if not json_data:
             return None
         if isinstance(json_data, dict):
             pass
         else:
-            json_data = json_data[0]
+            return [cls.load(_) for _ in json_data]
 
         class_name = list(json_data.keys())[0]
         _class_ = defined_classes.get(class_name)
@@ -137,7 +141,8 @@ class APICObject:
 
         return obj
 
-    def json(self, empty_fields: bool=False):
+    def json(self, empty_fields: bool=False) -> dict:
+        """Returns dictionary representation of the APICObject and its subcomponents"""
         try:
             self._dn_constructor()
         except AttributeError:
@@ -159,7 +164,8 @@ class APICObject:
 
         return json_data
 
-    def self_json(self):
+    def self_json(self) -> dict:
+        """Returns dictionary representation of the APICObject"""
         try:
             self._dn_constructor()
         except AttributeError:
@@ -174,15 +180,19 @@ class APICObject:
         return json_data
 
     def modify(self):
+        """Sets the state of the APICObject to 'modified'"""
         self.attributes.__setattr__('status', 'modified')
 
     def create_modify(self):
+        """Sets the state of the APICObject to 'created,modified'"""
         self.attributes.__setattr__('status', 'created,modified')
 
     def create(self):
+        """Sets the state of the APICObject to 'created'"""
         self.attributes.__setattr__('status', 'created')
 
     def delete(self):
+        """Sets the state of the APICObject to 'deleted'"""
         self.attributes.__setattr__('status', 'deleted')
 
     def _dn_constructor(self):
@@ -193,6 +203,7 @@ class APICObject:
         self.attributes.dn = re.sub(r'\{(\w+)}', replacer, self._dn_template)
 
     def pop_child_class(self, class_):
+        """Locates, removes, and returns the first child object matching the specified class"""
         if class_ in [_.class_ for _ in self.children]:
             child = self.children.pop(self.children.index(next(c for c in self.children if c.class_ == class_)))
             return child
@@ -200,6 +211,7 @@ class APICObject:
             return None
 
     def pop_child_class_iter(self, class_):
+        """Removes and returns a list of all child objects matching the specified class"""
         children = []
         for child in self.children[:]:
             if child.class_ == class_:
@@ -207,6 +219,7 @@ class APICObject:
         return children
 
     def get_child_class(self, class_):
+        """Returns the first child object matching the specified class"""
         if class_ in [_.class_ for _ in self.children]:
             child = next(c for c in self.children if c.class_ == class_)
             return child
@@ -214,9 +227,11 @@ class APICObject:
             return None
 
     def get_child_class_iter(self, class_):
+        """Returns a list of child objects matching the specified class"""
         return [c for c in self.children if c.class_ == class_]
 
     def get_child_tdn(self, dn: str):
+        """Returns the first child object with the attribute tDn matching the specified distinguished name"""
         try:
             child = next(c for c in self.children if c.attributes.tdn == dn)
             return child
@@ -224,11 +239,13 @@ class APICObject:
             return None
 
     def remove_admin_props(self):
+        """Removes all attributes that a not configurable"""
         self.attributes.remove_admin_props()
         for child in self.children:
             child.remove_admin_props()
 
     def _set_attributes(self, **kwargs):
+        """Applies keyword arguments as attributes to the APICObject"""
         for k, v in kwargs.items():
             self.attributes.__setattr__(k, v)
 
@@ -788,6 +805,8 @@ class FabricNodeBlock(APICObject):
     _dn_template = 'uni/fabric/maintgrp-{group}/nodeblk-blk{node}-{node}'
 
     def _customize_(self, *args, **kwargs):
+        if len(args) > 2:
+            raise TypeError(f'FabricNodeBlock received {len(args)} arguments, accepts a maximum of 2')
         if args:
             self.attributes.name = f'blk{args[0]}-{args[-1]}'
             self.attributes.from_ = str(args[0])
