@@ -96,26 +96,19 @@ session.trust_env = False
 
 class APICCLassTests(unittest.TestCase):
 
-    # def test_001_check_status(self):
-    #     """Asserts that the server has started"""
-    #     r = requests.get(URL + '/apis/getStatus', verify=False)
-    #     self.assertEqual(r.status_code, 200)
-
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    # APICObject Tests
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
     def test_002_apic_classes(self):
-        def load(x: dict):
-            return APICObject.load(x)
-
         for k, v in defined_classes.items():
             # Tests APICObject.load for all defined classes in apic.classes
             logger.debug(f'Testing {k} as {v}')
             if k in ['vmmDomP']:  # Not testing this as we do not use it in our fabrics
                 continue
+            elif k == InfraRsFuncToEpg.class_:
+                # Assert that APICObject loads lists
+                objs = APICObject.load(APIC(env=DEV_ENV).get_class(InfraRsFuncToEpg.class_).json()['imdata'])
+                self.assertIsInstance(objs, list)
+
             js = APIC(env='xrdc-az1').get(f'/api/class/{k}.json').json()['imdata'][0]
-            obj = load(js)
+            obj = APICObject.load(js)
             self.assertIsInstance(obj, v, f'{obj.self_json()} is not type {v}')
             self.assertIsInstance(obj.json(), dict)
 
@@ -467,7 +460,6 @@ class ACIAPITests(unittest.TestCase):
         logger.debug(r.json())
         self.assertIsInstance(r.json()['aep'], str)
 
-
     # def test_017_aci_create_custom_epg(self):
     #     """
     #     Asserts the following:
@@ -492,6 +484,7 @@ class PACFileTesting(unittest.TestCase):
           - pac_file GET request with 'loc' and 'mobile=True' parameter returns mobile PAC file for each PROXY_LOCATION
         """
         r = requests.get(URL + '/apis/pac_file', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         self.assertIsInstance(r.json(), dict)
         self.assertIn('Direct Rules', r.json().keys())
@@ -499,28 +492,34 @@ class PACFileTesting(unittest.TestCase):
 
         for location in PROXY_LOCATIONS:
             r = requests.get(URL + f'/apis/pac_file?loc={location}', verify=False)
+            logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
             self.assertEqual(r.status_code, 200)
             self.assertIn(f'proxy.{location}.medcity.net:80', r.text)
             r = requests.get(URL + f'/apis/pac_file?loc={location}&mobile=True', verify=False)
+            logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
             self.assertEqual(r.status_code, 200)
             self.assertIn(f'proxy.{location}.medcity.net:9992', r.text)
 
     def test_101_pac_post_pac_file(self):
         """Asserts that additions can be made to the PAC file"""
         r = requests.post(URL + f'/apis/pac_file', json=PAC_JSON, verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
 
         # Ensure the request created what we expect
         r = requests.get(URL + f'/apis/pac_file?host={PAC_JSON["host_exp"]}&pilot=true', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), PAC_POST_VALIDATION)
 
     def test_102_pac_delete_pac_file(self):
         """Asserts that deletions can be conducted from the PAC file"""
         r = requests.delete(URL + f'/apis/pac_file', json=PAC_JSON, verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
 
         r = requests.get(URL + f'/apis/pac_file?host={PAC_JSON["host_exp"]}', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), PAC_DELETE_VALIDATION)
 
@@ -549,6 +548,7 @@ class PACFileTesting(unittest.TestCase):
     def test_160_f5_get_environment_list(self):
         """Asserts that JSON data is loaded, parsed, and returned via API"""
         r = requests.get(URL + '/apis/f5/environment_list', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         self.assertIsInstance(r.json(), list)
 
