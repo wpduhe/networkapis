@@ -286,7 +286,7 @@ class ACIAPITests(unittest.TestCase):
         logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
-        aeps = APICObject.load(APIC(env=DEV_ENV).get_class('infraRsAttEntP').json()['imdata'])
+        aeps = APICObject.load(APIC(env=DEV_ENV).get_class_config_only('infraRsAttEntP').json()['imdata'])
         aep = aeps[random.randint(0, len(aeps) - 1)]
         aep_name = AEP.search(aep.attributes.tDn).group('name')
 
@@ -315,7 +315,7 @@ class ACIAPITests(unittest.TestCase):
     def test_007_aci_get_bd_by_ip_fvsubnet(self):
         """Asserts get_bd_by_ip() returns data given an IP from a fvSubnet. Looking for bridge_domain"""
         # Retrieve random subnet to test
-        r = APICObject.load(APIC(env='qol-az1').get_class('fvSubnet').json()['imdata'])
+        r = APICObject.load(APIC(env='qol-az1').get_class_config_only('fvSubnet').json()['imdata'])
         subnet = r[random.randint(0, len(r) - 1)]
         ip = IPv4Network(subnet.attributes.ip, strict=False).network_address + 1
 
@@ -330,7 +330,7 @@ class ACIAPITests(unittest.TestCase):
     def test_008_aci_get_bd_by_ip_external_epg(self):
         """Asserts get_bd_by_ip() returns data given an IP from an external EPG"""
         # Retrieve random l3extSubnet to test
-        r = APICObject.load(APIC(env='qol-az1').get_class('l3extSubnet').json()['imdata'])
+        r = APICObject.load(APIC(env='qol-az1').get_class_config_only('l3extSubnet').json()['imdata'])
         r = [_ for _ in r if _.attributes.ip != '0.0.0.0/0']
         r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']
         subnet = r[random.randint(0, len(r) - 1)]
@@ -347,7 +347,7 @@ class ACIAPITests(unittest.TestCase):
     def test_009_aci_get_bd_by_ip_interface(self):
         """Asserts get_bd_by_ip() returns data given an IP from an interface on an L3Out"""
         # Retrieve random l3extRsPathL3OutAtt to test
-        r = APICObject.load(APIC(env='qol-az1').get_class(L3extPath.class_).json()['imdata'])
+        r = APICObject.load(APIC(env='qol-az1').get_class_config_only(L3extPath.class_).json()['imdata'])
         r = [_ for _ in r if _.attributes.addr != '0.0.0.0']
         r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']  # Required because of multipod
         subnet = r[random.randint(0, len(r) - 1)]
@@ -364,7 +364,7 @@ class ACIAPITests(unittest.TestCase):
     def test_009_aci_get_bd_by_ip_svi(self):
         """Asserts get_bd_by_ip() returns data given an IP from an interface on an L3Out"""
         # Retrieve random l3extIp to test
-        r = APICObject.load(APIC(env='xrdc-az1').get_class(L3extIP.class_).json()['imdata'])
+        r = APICObject.load(APIC(env='xrdc-az1').get_class_config_only(L3extIP.class_).json()['imdata'])
         r = [_ for _ in r if _.attributes.addr != '0.0.0.0']
         r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']  # Required because of multipod
         subnet = r[random.randint(0, len(r) - 1)]
@@ -456,6 +456,17 @@ class ACIAPITests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         logger.debug(r.json())
         self.assertGreater(len(r.json()), 0)
+
+    def test_017_aci_get_interface_policies_by_endpoint(self):
+        ips = APICObject.load(APIC(env=DEV_ENV).get_class('fvIp').json()['imdata'])
+        ip = ips[random.randint(0, len(ips) - 1)]
+
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/get_interface_policies_by_endpoint?ip={ip.attributes.addr}')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
+        self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()['aep'], str)
+
 
 
     # def test_017_aci_create_custom_epg(self):
