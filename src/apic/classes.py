@@ -119,7 +119,7 @@ class APICObject:
     def load(cls, json_data: dict or list) -> Any | List[Any]:
         """Returns list of APICObjects if given a list of objects, otherwise returns a single APICObject"""
         if not json_data:
-            return None
+            return []  # TODO: Revisit this from time to time
         if isinstance(json_data, dict):
             pass
         else:
