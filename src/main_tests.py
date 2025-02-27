@@ -468,7 +468,6 @@ class ACIAPITests(unittest.TestCase):
         self.assertIsInstance(r.json()['aep'], str)
 
 
-
     # def test_017_aci_create_custom_epg(self):
     #     """
     #     Asserts the following:
