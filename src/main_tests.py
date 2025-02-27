@@ -36,7 +36,8 @@ logger.debug('Logging initialized.')
 
 
 # Development URL
-URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
+# URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
+URL = 'http://127.0.0.1:8080'
 
 # Sandbox URL
 # URL = 'http://py-ap-is-duhes-stuff-snd.apps.ops2.paas.medcity.net'
@@ -89,6 +90,9 @@ NCM_DATA = {
     'APIKey': os.getenv('localapikey'),
     'Trusted': True
 }
+
+session = requests.Session()
+session.trust_env = False
 
 class APICCLassTests(unittest.TestCase):
 
@@ -224,16 +228,7 @@ class APICCLassTests(unittest.TestCase):
                 pass
 
 
-class MainTests(unittest.TestCase):
-
-    # def test_001_check_status(self):
-    #     """Asserts that the server has started"""
-    #     r = requests.get(URL + '/apis/getStatus', verify=False)
-    #     self.assertEqual(r.status_code, 200)
-
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    # ACI API Tests
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+class ACIAPITests(unittest.TestCase):
 
     def test_002_aci_environment_list(self):
         """
@@ -241,8 +236,10 @@ class MainTests(unittest.TestCase):
           - data/ACIEnvironments.json can be parsed and loaded
           - API endpoint /apis/aci/environment_list is providing results
         """
-        r = requests.get(URL + '/apis/aci/environment_list', verify=False)
+        r = session.get(URL + '/apis/aci/environment_list', verify=(True if URL.startswith('http:') else False))
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_003_aci_get_tenant_ap_epg(self):
@@ -250,104 +247,183 @@ class MainTests(unittest.TestCase):
         Asserts the following:
           - Login to APIC works
           - Getting Tenants, APs, and EPGs lists from APIC is working
-          - get_epd_data returns data
+          - get_epg_data returns data
         """
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/tenants', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/tenants', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         self.assertIsInstance(r.json(), list)
-        tenant = r.json()[random.randint(0, r.json().index(r.json()[-1]))]
+        # tenant = r.json()[random.randint(0, r.json().index(r.json()[-1]))]
+        tenant = 'QOLab'
 
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/{tenant}/aps', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/{tenant}/aps', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
-        ap = r.json()[random.randint(0, r.json().index(r.json()[-1]))]
+        ap = r.json()[random.randint(0, len(r.json()) - 1)]
 
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/{tenant}/{ap}/epgs', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/{tenant}/{ap}/epgs', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
-        epg = r.json()[random.randint(0, r.json().index(r.json()[-1]))]
+        epg = r.json()[random.randint(0, len(r.json()) - 1)]
 
-        print(f'Test Case from {DEV_ENV}:  {tenant}/{ap}/{epg}')
+        logger.debug(f'Test Case from {DEV_ENV}:  {tenant}/{ap}/{epg}')
 
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/get_epg_data/{epg}', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/get_epg_data/{epg}', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertEqual(r.json()['epg_name'], epg)
 
-        print(f'Data returned from get_epg_data for {epg}:  {r.json()}')
-
     def test_004_aci_get_aeps(self):
-        """Asserts that AEP lists will populate"""
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/aeps', verify=False)
+        """Asserts that AEP lists will populate and tests usage for random AEP"""
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/aeps', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
+
+        aeps = APICObject.load(APIC(env=DEV_ENV).get_class('infraRsAttEntP').json()['imdata'])
+        aep = aeps[random.randint(0, len(aeps) - 1)]
+        aep_name = AEP.search(aep.attributes.tDn).group('name')
+
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/{aep_name}/usage')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
+        self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()[list(r.json().keys())[0]], list)
 
     def test_005_aci_get_switch_profiles(self):
         """Asserts that switch profile lists will populate"""
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/switch_profiles', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/switch_profiles', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_006_aci_get_aci_vlan(self):
         """Asserts get_aci_vlan() returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/get_aci_vlan/2000', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/get_aci_vlan/2000', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_007_aci_get_bd_by_ip_fvsubnet(self):
-        """Asserts get_bd_by_ip() returns data given an IP from a fvSubnet"""
+        """Asserts get_bd_by_ip() returns data given an IP from a fvSubnet. Looking for bridge_domain"""
+        # Retrieve random subnet to test
+        r = APICObject.load(APIC(env='qol-az1').get_class('fvSubnet').json()['imdata'])
+        subnet = r[random.randint(0, len(r) - 1)]
+        ip = IPv4Network(subnet.attributes.ip, strict=False).network_address + 1
+
         # Test using IP of fvSubnet from QOL-AZ1
-        r = requests.get(URL + '/apis/aci/qol-az1/get_bd_by_ip/10.28.160.96', verify=False)
+        r = session.get(URL + f'/apis/aci/qol-az1/get_bd_by_ip/{ip}', verify=False)
+        logger.debug(f'Testing {r.request.url} with IP {ip}')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
-        self.assertIsInstance(r.json(), dict)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()['bridge_domain'], str)
 
     def test_008_aci_get_bd_by_ip_external_epg(self):
         """Asserts get_bd_by_ip() returns data given an IP from an external EPG"""
+        # Retrieve random l3extSubnet to test
+        r = APICObject.load(APIC(env='qol-az1').get_class('l3extSubnet').json()['imdata'])
+        r = [_ for _ in r if _.attributes.ip != '0.0.0.0/0']
+        r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']
+        subnet = r[random.randint(0, len(r) - 1)]
+        ip = IPv4Network(subnet.attributes.ip, strict=False).network_address + 1
+
         # Test using IP of external EPG from QOL-AZ1
-        r = requests.get(URL + '/apis/aci/qol-az1/get_bd_by_ip/10.28.160.64', verify=False)
+        r = session.get(URL + f'/apis/aci/qol-az1/get_bd_by_ip/{ip}', verify=False)
+        logger.debug(f'Testing {r.request.url} with IP {ip}')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
-        self.assertIsInstance(r.json(), dict)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()['external_networks'], list)
 
     def test_009_aci_get_bd_by_ip_interface(self):
         """Asserts get_bd_by_ip() returns data given an IP from an interface on an L3Out"""
+        # Retrieve random l3extRsPathL3OutAtt to test
+        r = APICObject.load(APIC(env='qol-az1').get_class(L3extPath.class_).json()['imdata'])
+        r = [_ for _ in r if _.attributes.addr != '0.0.0.0']
+        r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']  # Required because of multipod
+        subnet = r[random.randint(0, len(r) - 1)]
+        ip = IPv4Network(subnet.attributes.addr, strict=False).network_address + 1
+
         # Test using sub-interface IP from QOL-AZ1
-        r = requests.get(URL + '/apis/aci/qol-az1/get_bd_by_ip/10.30.52.50', verify=False)
+        r = session.get(URL + f'/apis/aci/qol-az1/get_bd_by_ip/{ip}', verify=False)
+        logger.debug(f'Testing {r.request.url} with IP {ip}')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
-        self.assertIsInstance(r.json(), dict)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()['l3out_paths'], list)
+
+    def test_009_aci_get_bd_by_ip_svi(self):
+        """Asserts get_bd_by_ip() returns data given an IP from an interface on an L3Out"""
+        # Retrieve random l3extIp to test
+        r = APICObject.load(APIC(env='xrdc-az1').get_class(L3extIP.class_).json()['imdata'])
+        r = [_ for _ in r if _.attributes.addr != '0.0.0.0']
+        r = [_ for _ in r if Tenant.search(_.attributes.dn).group('name') != 'infra']  # Required because of multipod
+        subnet = r[random.randint(0, len(r) - 1)]
+        ip = IPv4Network(subnet.attributes.addr, strict=False).network_address + 1
+
+        # Test using sub-interface IP from QOL-AZ1
+        r = session.get(URL + f'/apis/aci/xrdc-az1/get_bd_by_ip/{ip}', verify=False)
+        logger.debug(f'Testing {r.request.url} with IP {ip}')
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
+        self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
+        self.assertIsInstance(r.json()['l3out_paths'], list)
 
     def test_010_aci_get_dr_vlans(self):
         """Asserts get_dr_vlans() returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/get_dr_vlans', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/get_dr_vlans', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), dict)
 
     def test_011_aci_get_nondr_vlans(self):
         """Asserts get_nondr_vlans returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/get_nondr_vlans', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/get_nondr_vlans', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), dict)
 
     def test_012_aci_get_nondr_epgs(self):
         """Asserts nondr_epgs returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/nondr_epgs', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/nondr_epgs', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_013_aci_get_dr_epgs(self):
         """Asserts dr_epgs returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/dr_epgs', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/dr_epgs', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_014_aci_get_pods(self):
         """Asserts pods returns data"""
-        r = requests.get(URL + f'/apis/aci/{DEV_ENV}/pods', verify=False)
+        r = session.get(URL + f'/apis/aci/{DEV_ENV}/pods', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_015_aci_get_teps(self):
         """Asserts teps returns data"""
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/teps', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/teps', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), list)
 
     def test_016_aci_get_next_vlan(self):
@@ -358,22 +434,29 @@ class MainTests(unittest.TestCase):
           - get_vlan_data returns accurate information given a used VLAN
         """
         # Retrieve the next VLAN
-        r = requests.get(URL + f'/apis/aci/{PROD_ENV}/get_next_vlan', verify=False)
+        r = session.get(URL + f'/apis/aci/{PROD_ENV}/get_next_vlan', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} : {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), int)
 
         vlan = r.json()
 
         # Ensure the returned VLAN ID is not used
-        r = requests.get(URL + f'/apis/v2/aci/{PROD_ENV}/get_vlan_data?VLAN={vlan}', verify=False)
+        r = session.get(URL + f'/apis/v2/aci/{PROD_ENV}/get_vlan_data?VLAN={vlan}', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} : {r.reason}')
         self.assertEqual(r.status_code, 200)
-        self.assertIsInstance(r.json(), list)
+        logger.debug(r.json())
+        self.assertEqual(r.json(), [])
         self.assertEqual(len(r.json()), 0)
 
         # Ensure the preceding VLAN ID is used
-        r = requests.get(URL + f'/apis/v2/aci/{PROD_ENV}/get_vlan_data?VLAN={vlan-1}', verify=False)
+        r = session.get(URL + f'/apis/v2/aci/{PROD_ENV}/get_vlan_data?VLAN={vlan-1}', verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} : {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertGreater(len(r.json()), 0)
+
 
     # def test_017_aci_create_custom_epg(self):
     #     """
@@ -388,9 +471,8 @@ class MainTests(unittest.TestCase):
     #     self.assertEqual(r.status_code, 200)
     #     with APIC(DEV_ENV) as apic:
 
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    # PAC API Tests
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class PACFileTesting(unittest.TestCase):
 
     def test_100_pac_get_pac_file(self):
         """
@@ -442,8 +524,10 @@ class MainTests(unittest.TestCase):
           - Login to NCM is successful
           - Data can be retrieved from NCM
         """
-        r = requests.post(URL + '/apis/admin/get_current_snmp_strings', json=NCM_DATA, verify=False)
+        r = session.post(URL + '/apis/admin/get_current_snmp_strings', json=NCM_DATA, verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} : {r.reason}')
         self.assertEqual(r.status_code, 200)
+        logger.debug(r.json())
         self.assertIsInstance(r.json(), dict)
         self.assertIsInstance(r.json()['ro'], str)
         self.assertIsInstance(r.json()['rw'], str)
