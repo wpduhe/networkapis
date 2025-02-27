@@ -122,8 +122,10 @@ class APICObject:
             return []  # TODO: Revisit this from time to time
         if isinstance(json_data, dict):
             pass
-        else:
+        elif len(json_data) > 1:
             return [cls.load(_) for _ in json_data]
+        else:
+            json_data = json_data[0]
 
         class_name = list(json_data.keys())[0]
         _class_ = defined_classes.get(class_name)
@@ -653,11 +655,13 @@ class Subnet(APICObject):
 
     _dn_attributes = ['tenant', 'bd', 'ip_network']
     _dn_template = 'uni/tn-{tenant}/BD-{bd}/subnet-[{ip_network}]'
+    network: IPv4Network
 
     def _customize_(self, ip: str='', **kwargs):
         assert IPv4Network(ip, strict=False), 'Invalid subnet was provided'
         self.attributes.ip = ip
         self.attributes.scope = 'public'
+        self.network = IPv4Network(ip, strict=False)
         self.create()
 
 class Domain(APICObject):
@@ -1189,6 +1193,10 @@ class L3extIP(APICObject):
     attrs = {}
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<l3extPath>[^]]+]])/mem-[.]/addr-\[(?P<addr>[^]]+)]').search
+    network: IPv4Network
+
+    def _customize_(self, *args, **kwargs):
+        self.network = IPv4Network(self.attributes.addr, strict=False)
 
 
 class L3extPath(APICObject):
@@ -1196,6 +1204,10 @@ class L3extPath(APICObject):
     attrs = {}
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<path>[^]]+]])').search
+    network: IPv4Network
+
+    def _customize_(self, *args, **kwargs):
+        self.network = IPv4Network(self.attributes.addr, strict=False)
 
 
 class L3extSubnet(APICObject):
@@ -1203,6 +1215,10 @@ class L3extSubnet(APICObject):
     attrs = {}
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/instP-(?P<l3extInstP>[^/]+)/extsubnet-\[(?P<ip>[^]]+)]').search
+    network: IPv4Network
+
+    def _customize_(self, *args, **kwargs):
+        self.network = IPv4Network(self.attributes.ip, strict=False)
 
 
 class L3extLNodeP(APICObject):
