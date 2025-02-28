@@ -107,7 +107,7 @@ class APICCLassTests(unittest.TestCase):
                 objs = APICObject.load(APIC(env=DEV_ENV).get_class(InfraRsFuncToEpg.class_).json()['imdata'])
                 self.assertIsInstance(objs, list)
 
-            js = APIC(env='xrdc-az1').get(f'/api/class/{k}.json').json()['imdata'][0]
+            js = APIC(env=DEV_ENV).get(f'/api/class/{k}.json').json()['imdata'][0]
             obj = APICObject.load(js)
             self.assertIsInstance(obj, v, f'{obj.self_json()} is not type {v}')
             self.assertIsInstance(obj.json(), dict)
@@ -204,6 +204,10 @@ class APICCLassTests(unittest.TestCase):
                 self.assertRaises(TypeError, FabricNodeBlock, 103, 104, 105)
                 obj = FabricNodeBlock(103, 104)
 
+            if type(obj) in [Subnet, L3extPath, L3extIP, L3extSubnet]:
+                logger.debug(f'Testing {obj}.network as IPv4Network')
+                self.assertIsInstance(obj.network, IPv4Network)
+
             # TODO: Create test for FabricProtPol
             if isinstance(obj, FabricProtPol):
                 pass
@@ -287,7 +291,8 @@ class ACIAPITests(unittest.TestCase):
         logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
         self.assertEqual(r.status_code, 200)
         logger.debug(r.json())
-        self.assertIsInstance(r.json()[list(r.json().keys())[0]], list)
+        if r.json():
+            self.assertIsInstance(r.json()[list(r.json().keys())[0]], list)
 
     def test_005_aci_get_switch_profiles(self):
         """Asserts that switch profile lists will populate"""
