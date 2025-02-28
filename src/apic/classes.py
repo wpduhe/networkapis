@@ -122,10 +122,8 @@ class APICObject:
             return []  # TODO: Revisit this from time to time
         if isinstance(json_data, dict):
             pass
-        elif len(json_data) > 1:
+        elif isinstance(json_data, list):
             return [cls.load(_) for _ in json_data]
-        else:
-            json_data = json_data[0]
 
         class_name = list(json_data.keys())[0]
         _class_ = defined_classes.get(class_name)
