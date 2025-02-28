@@ -204,7 +204,8 @@ class APICCLassTests(unittest.TestCase):
                 self.assertRaises(TypeError, FabricNodeBlock, 103, 104, 105)
                 obj = FabricNodeBlock(103, 104)
 
-            if type(obj) in [Subnet, L3extPath, L3extIP, L3extSubnet]:
+            if isinstance(obj, Subnet) or isinstance(obj,L3extIP) or isinstance(obj, L3extSubnet) \
+                    or isinstance(obj, L3extPath):
                 logger.debug(f'Testing {obj}.network as IPv4Network')
                 self.assertIsInstance(obj.network, IPv4Network)
 
