@@ -1,4 +1,4 @@
-from typing import Tuple, List, Any
+from typing import Tuple
 from types import SimpleNamespace
 from base64 import b64encode
 from datetime import datetime
@@ -57,6 +57,9 @@ DIV_REMOVE = re.compile(r'[\W_](NTDV|GCDV|CWTD|CWDV|SADV|MADV|FWDV|CODC|CODV|MTD
 ACI_NAME = re.compile(r'[\W_]+')
 NODE_PORT_SEARCH = re.compile(r'node-(\d+).*\[eth(\d+/\d+)')
 PATH_SEARCH = re.compile(r'topology/pod-\d+/(?:paths|protpaths)-(\d+|\d+-\d+)/pathep-\[([^]]+)')
+
+
+logger = logging.getLogger(__name__)
 
 
 def format_mac_addresses(mac_addresses: list) -> List:
@@ -196,7 +199,7 @@ class APIC:
             self.pkey = None
             self.login(username=os.getenv('netmgmtuser'), password=os.getenv('netmgmtpass'))
 
-        self.version = GenericClass.load(json.loads(self.get('/api/class/firmwareCtrlrFwP.json').text)['imdata'][0])
+        self.version = APICObject.load(self.get('/api/class/firmwareCtrlrFwP.json').json()['imdata'][0])
         self.version = self.version.attributes.version.replace('apic-', '')
 
         if self.env:
@@ -221,9 +224,10 @@ class APIC:
         else:
             return self.ip
 
-    def login(self, username: str=None, password: str=None):
+    def login(self, username: str=None, password: str=None, trust_env: bool=False):
         self.session = requests.Session()
         self.session.verify = False
+        self.session.trust_env = trust_env
 
         self.url = f'https://{self.ip}'
         creds = {
@@ -270,6 +274,19 @@ class APIC:
             return requests.get(f'{self.url}{request}', headers={'Cookie': cookie}, verify=False)
         else:
             return self.session.get(f'{self.url}{request}')
+
+    def get_class(self, x: str):
+        return self.get(f'/api/class/{x}.json')
+
+    def get_class_config_only(self, x: str, full_config: bool=False) -> requests.Response:
+        return self.get(f'/api/class/{x}.json?{(FCCO if full_config else CO)}')
+
+    def get_class_by_name(self, **kwargs) -> requests.Response:
+        if len(kwargs) > 1:
+            raise ValueError(f'APIC.get_class_by_name only accepts 1 keyword argument, got {len(kwargs)}')
+
+        for k, v in kwargs.items():
+            return self.get(f'/api/class/{k}.json?query-target-filter=eq({k}.name,"{v}")&{FCCO}')
 
     def post(self, configuration: dict, uri: str='/api/mo/uni.json') -> requests.Response:
         if self.pkey:
@@ -426,7 +443,7 @@ class APIC:
             return aps
 
     def collect_tf_aps(self) -> list:
-        r = [APICObject.load(_) for _ in self.get(f'/api/class/fvAp.json').json()['imdata']]
+        r = APICObject.load(self.get(f'/api/class/fvAp.json').json()['imdata'])
         # Filter application profiles to include only production tenants
         r = [_ for _ in r if re.search(rf'/tn-({self.env.Tenant}|{self.env.ADMZTenant})/', _.attributes.dn)]
         r = [_.attributes.annotation.tfref for _ in r if _.attributes.annotation.__dict__.get('tfref')]
@@ -489,14 +506,14 @@ class APIC:
 
     def collect_subnets_new(self, ip: str='') -> List[Any]:
         """Returns a list of APICObjects that overlap with the specified IP address/prefix"""
-        bd_subnets = [APICObject.load(_) for _ in self.get('/api/class/fvSubnet.json').json()['imdata']]
-        ext_subnets = [APICObject.load(_) for _ in self.get('/api/class/l3extSubnet.json?query-target-filter=ne(l3extSubnet.ip,"0.0.0.0/0")').json()['imdata']]
+        bd_subnets = APICObject.load(self.get('/api/class/fvSubnet.json').json()['imdata'])
+        ext_subnets = APICObject.load(self.get('/api/class/l3extSubnet.json?query-target-filter=ne(l3extSubnet.ip,"0.0.0.0/0")').json()['imdata'])
         ext_subnets = [_ for _ in ext_subnets if _.attributes.ip != '0.0.0.0/0']
-        intf_subnets = [APICObject.load(_) for _ in self.get('/api/class/l3extRsPathL3OutAtt.json').json()['imdata']]
+        ext_subnets = [_ for _ in ext_subnets if Tenant.search(_.attributes.dn).group('name') != 'infra']
+        intf_subnets = APICObject.load(self.get('/api/class/l3extRsPathL3OutAtt.json').json()['imdata'])
         intf_subnets = [_ for _ in intf_subnets if _.attributes.addr != '0.0.0.0']
         # Also get these l3extIp (this accounts for L3Out SVIs)
-        l3_svis = [APICObject.load(_) for _ in self.get('/api/class/l3extIp.json').json()['imdata']]
-
+        l3_svis = APICObject.load(self.get('/api/class/l3extIp.json').json()['imdata'])
 
         for subnet in ext_subnets[:]:
             if 'import-security' not in subnet.attributes.scope:
@@ -514,6 +531,8 @@ class APIC:
         # Filter for overlapping l3extIp
         networks += [_ for _ in l3_svis
                      if IPv4Network(_.attributes.addr, strict=False).overlaps(IPv4Network((ip if ip else '0.0.0.0/0')))]
+
+        networks.sort(key=lambda x: x.network.prefixlen, reverse=True)
 
         return networks
 
@@ -726,15 +745,13 @@ class APIC:
     def collect_eps_by_subnet(self, cidr: str) -> List[GenericClass]:
         cidr = IPv4Network(cidr, strict=False)
 
-        eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
-        eps = [_ for _ in eps if _.attributes.ip if cidr.overlaps(IPv4Network(_.attributes.ip))]
+        eps = FvIp.load(self.get_class('fvIp').json()['imdata'])
+        eps = [_ for _ in eps if cidr.overlaps(_.network)]
 
         return eps
 
     def collect_nodes(self, node_id=None):
-        r = self.get('/api/class/fabricNode.json')
-        r = json.loads(r.text)
-
+        r = self.get_class('fabricNode').json()
         nodes = r['imdata']
 
         if node_id is not None:
@@ -857,7 +874,7 @@ class APIC:
                 f'{("&rsp-prop-include=config-only" if config_only is True else "")}' \
                 f'{("" if get_children is False else "&rsp-subtree=full")}'
 
-        return [APICObject.load(_) for _ in self.get(query).json()['imdata']]
+        return APICObject.load(self.get(query).json()['imdata'])
 
     def dn_exists(self, get: bool=False, **kwargs):
         def complete(exists, obj):
@@ -982,8 +999,8 @@ class APIC:
         :param dn:
         :return:
         """
-        if_conn = [APICObject.load(_) for _ in self.get('/api/class/fvIfConn.json').json()['imdata']]
-        func_to_epg = [APICObject.load(_) for _ in self.get('/api/class/infraRsFuncToEpg.json').json()['imdata']]
+        if_conn = APICObject.load(self.get('/api/class/fvIfConn.json').json()['imdata'])
+        func_to_epg = APICObject.load(self.get('/api/class/infraRsFuncToEpg.json').json()['imdata'])
 
         if_conn = [_ for _ in if_conn if re.search(r'vlan-\d+', _.attributes.encap)]
 
@@ -1014,8 +1031,8 @@ class APIC:
                 vlan_dict[record.encap]['AEPs'].add(record.aep.group(1))
 
         for key in vlan_dict:
-            vlan_dict[key]['Consumers'] = list(vlan_dict[key]['Consumers'])
-            vlan_dict[key]['AEPs'] = list(vlan_dict[key]['AEPs'])
+            vlan_dict[key]['Consumers'] = set(vlan_dict[key]['Consumers'])
+            vlan_dict[key]['AEPs'] = set(vlan_dict[key]['AEPs'])
 
         if vlan is not None:
             try:
@@ -1178,11 +1195,8 @@ class APIC:
         func_params = f'?query-target-filter=eq(infraRsFuncToEpg.encap,"vlan-{vlan_id}")&{CO}'
         static_params = f'?query-target-filter=eq(fvRsPathAtt.encap,"vlan-{vlan_id}")&{CO}'
 
-        functoepgs = [APICObject.load(_)
-                      for _ in self.get(f'/api/class/infraRsFuncToEpg.json{func_params}').json()['imdata']]
-
-        static_paths = [APICObject.load(_)
-                        for _ in self.get(f'/api/class/fvRsPathAtt.json{static_params}').json()['imdata']]
+        functoepgs = APICObject.load(self.get(f'/api/class/infraRsFuncToEpg.json{func_params}').json()['imdata'])
+        static_paths = APICObject.load(self.get(f'/api/class/fvRsPathAtt.json{static_params}').json()['imdata'])
 
         vlan_usages = functoepgs + static_paths
 
@@ -1202,8 +1216,8 @@ class APIC:
             return 400, {'error': f'The EPG distinguished name {epg_dn} is not valid. '
                                   f'Please ensure it matches the format "uni/tn-TENANT/ap-APPPROFILE/epg-EPGNAME"'}
 
-        functoepgs = [APICObject.load(_) for _ in self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata']]
-        static_paths = [APICObject.load(_) for _ in self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata']]
+        functoepgs = APICObject.load(self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata'])
+        static_paths = APICObject.load(self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata'])
 
         functoepgs = [_ for _ in functoepgs if _.attributes.tDn == epg_dn]
         static_paths = [_ for _ in static_paths if EPG_DN_SEARCH.search(_.attributes.dn).group() == epg_dn]
@@ -1225,8 +1239,8 @@ class APIC:
             return 400, {'error': f'The EPG distinguished name {epg_dn} is not valid. '
                                   f'Please ensure it matches the format "uni/tn-TENANT/ap-APPPROFILE/epg-EPGNAME"'}
 
-        functoepgs = [APICObject.load(_) for _ in self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata']]
-        static_paths = [APICObject.load(_) for _ in self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata']]
+        functoepgs = APICObject.load(self.get(f'/api/class/infraRsFuncToEpg.json?{CO}').json()['imdata'])
+        static_paths = APICObject.load(self.get(f'/api/class/fvRsPathAtt.json?{CO}').json()['imdata'])
 
         functoepgs = [_ for _ in functoepgs if _.attributes.tDn == epg_dn and _.attributes.encap == f'vlan-{vlan_id}']
         static_paths = [_ for _ in static_paths
@@ -1796,7 +1810,7 @@ class APIC:
                     bd.delete()
 
                     response = self.post(bd.json())
-                    logging.info(f'Deletion of {bd.attributes.dn}: {response.status_code} {response.json()}')
+                    logger.info(f'Deletion of {bd.attributes.dn}: {response.status_code} {response.json()}')
         return None
 
     def fault_cleanup(self):
@@ -1866,11 +1880,11 @@ class APIC:
     def clear_vlans_assigned_to_nonexistent_epgs(self) -> None:
         """Deletes VLANs assigned to AEPs for EPGs that do not exist"""
         faults = self.get('/api/class/faultInst.json?query-target-filter=eq(faultInst.code,"F0982")')
-        faults = [APICObject.load(_) for _ in faults.json()['imdata']]
+        faults = APICObject.load(faults.json()['imdata'])
 
         for fault in faults:
             subject = re.search(r'(.*)/fault-F0982', fault.attributes.dn).group(1)
-            subject = APICObject.load(self.get(f'/api/mo/{subject}.json?{CO}').json()['imdata'])
+            subject = APICObject.load(self.get(f'/api/mo/{subject}.json?{CO}').json()['imdata'][0])
             subject.delete()
             self.post(subject.json())
 
@@ -2187,7 +2201,7 @@ class APIC:
                 self.post(configuration=attach.json())
 
     def get_leaf_mgmt_addresses(self) -> Tuple[int, dict]:
-        tops = [APICObject.load(_) for _ in self.get('/api/class/topSystem.json').json()['imdata']]
+        tops = APICObject.load(self.get_class('topSystem').json()['imdata'])
         data = {int(re.search(r'node-(\d+)', top.attributes.dn).group(1)): top.attributes.oobMgmtAddr for top in tops}
         return 200, data
 
@@ -2256,47 +2270,47 @@ class APIC:
 
         return None
 
-    @classmethod
-    def get_bd_by_ip_old(cls, environment: str, ip: str):
-        with cls(env=environment) as apic:
-            subnet = apic.collect_subnets(ip=ip)
-
-            if isinstance(subnet, str):
-                return 404, {'message': 'No Subnet found matching the provided IP'}
-            else:
-                subnet = APICObject.load(subnet)
-
-            if not subnet:
-                return 404, {'message': 'No Subnet found matching the provided IP'}
-
-            if subnet.class_ == 'l3extRsPathL3OutAtt':
-                l3out = re.search('out-(.*)', subnet.attributes.dn.split('/')[2])[1]
-                intf_type = subnet.attributes.ifInstT
-                encap = subnet.attributes.encap
-                leaf = re.search('paths-(.*)', subnet.attributes.tDn.split('/')[2])[1]
-                subnet = str(IPv4Network(subnet.attributes.addr, strict=False))
-                return 200, {'environment': apic.env.Name, 'l3out': l3out, 'intf_type': intf_type, 'encap': encap,
-                             'leaf': leaf, 'subnet': subnet}
-            elif subnet.class_ == 'l3extSubnet':
-                print(subnet.json())
-                l3out = re.search('out-(.*)', subnet.attributes.dn.split('/')[2])[1]
-                external_epg = re.search('instP-(.*)', subnet.attributes.dn.split('/')[3])[1]
-                subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
-                return 200, {'environment': apic.env.Name, 'l3out': l3out, 'external_epg': external_epg,
-                             'subnet': subnet}
-            elif subnet.class_ == 'fvSubnet':
-                bridge_domain = BD_DN_SEARCH.search(subnet.attributes.dn)
-                bd = APICObject.load(apic.get(f'/api/mo/{bridge_domain.group()}.json?{FCCO}').json()['imdata'])
-                rsbds = [APICObject.load(_) for _ in apic.get(f'/api/class/fvRsBd.json').json()['imdata']]
-                epgs = [EPG_DN_SEARCH.search(_.attributes.dn).group()
-                        for _ in rsbds if _.attributes.tDn == bridge_domain.group()]
-
-                subnets = [str(IPv4Network(s.attributes.ip, strict=False)) for s in bd.children
-                           if s.class_ == Subnet.class_]
-                subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
-                return 200, {'environment': apic.env.Name, 'tenant': bridge_domain.group(1),
-                             'bridge_domain': bridge_domain.group(2), 'subnet': subnet, 'all_bd_subnets': subnets,
-                             'inuse_by': epgs}
+    # @classmethod
+    # def get_bd_by_ip_old(cls, environment: str, ip: str):
+    #     with cls(env=environment) as apic:
+    #         subnet = apic.collect_subnets(ip=ip)
+    #
+    #         if isinstance(subnet, str):
+    #             return 404, {'message': 'No Subnet found matching the provided IP'}
+    #         else:
+    #             subnet = APICObject.load(subnet)
+    #
+    #         if not subnet:
+    #             return 404, {'message': 'No Subnet found matching the provided IP'}
+    #
+    #         if subnet.class_ == 'l3extRsPathL3OutAtt':
+    #             l3out = re.search('out-(.*)', subnet.attributes.dn.split('/')[2])[1]
+    #             intf_type = subnet.attributes.ifInstT
+    #             encap = subnet.attributes.encap
+    #             leaf = re.search('paths-(.*)', subnet.attributes.tDn.split('/')[2])[1]
+    #             subnet = str(IPv4Network(subnet.attributes.addr, strict=False))
+    #             return 200, {'environment': apic.env.Name, 'l3out': l3out, 'intf_type': intf_type, 'encap': encap,
+    #                          'leaf': leaf, 'subnet': subnet}
+    #         elif subnet.class_ == 'l3extSubnet':
+    #             print(subnet.json())
+    #             l3out = re.search('out-(.*)', subnet.attributes.dn.split('/')[2])[1]
+    #             external_epg = re.search('instP-(.*)', subnet.attributes.dn.split('/')[3])[1]
+    #             subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
+    #             return 200, {'environment': apic.env.Name, 'l3out': l3out, 'external_epg': external_epg,
+    #                          'subnet': subnet}
+    #         elif subnet.class_ == 'fvSubnet':
+    #             bridge_domain = BD_DN_SEARCH.search(subnet.attributes.dn)
+    #             bd = APICObject.load(apic.get(f'/api/mo/{bridge_domain.group()}.json?{FCCO}').json()['imdata'])
+    #             rsbds = APICObject.load(apic.get(f'/api/class/fvRsBd.json').json()['imdata'])
+    #             epgs = [EPG_DN_SEARCH.search(_.attributes.dn).group()
+    #                     for _ in rsbds if _.attributes.tDn == bridge_domain.group()]
+    #
+    #             subnets = [str(IPv4Network(s.attributes.ip, strict=False)) for s in bd.children
+    #                        if s.class_ == Subnet.class_]
+    #             subnet = str(IPv4Network(subnet.attributes.ip, strict=False))
+    #             return 200, {'environment': apic.env.Name, 'tenant': bridge_domain.group(1),
+    #                          'bridge_domain': bridge_domain.group(2), 'subnet': subnet, 'all_bd_subnets': subnets,
+    #                          'inuse_by': epgs}
 
     @classmethod
     def get_bd_by_ip(cls, environment: str, ip: str):
@@ -2307,20 +2321,34 @@ class APIC:
         if not subnet_results:
             return 404, {'message': 'No Subnet found matching the provided IP'}
 
-        if {_.class_ for _ in subnet_results} == {Subnet.class_}:
-            tn_name, bd_name, ip = Subnet.search(subnet_results[0].attributes.dn).groups()
-            bd_dn = BD.search(subnet_results[0].attributes.dn).group()
-            bd = APICObject.load(apic.get(f'/api/mo/{bd_dn}.json?{FCCO}').json()['imdata'])
-            all_bd_subnets = [str(IPv4Network(_.attributes.ip, strict=False))
-                              for _ in bd.get_child_class_iter(Subnet.class_)]
+        if Subnet.class_ in {_.class_ for _ in subnet_results}:
+            subnet = next(_ for _ in subnet_results if isinstance(_, Subnet))
+            tn_name = Tenant.search(subnet.attributes.dn).group('name')
+            bd_search = BD.search(subnet.attributes.dn)
+            epg_search = EPG.search(subnet.attributes.dn)
+            epg_dn = (epg_search.group() if epg_search else None)
+            ip = subnet.attributes.ip
+            rsbds = APICObject.load(apic.get(f'/api/class/fvRsBd.json').json()['imdata'])
+
+            if bd_search:
+                bd_dn = BD.search(subnet.attributes.dn).group()
+                bd_name = BD.search(subnet.attributes.dn).group('name')
+                bd = APICObject.load(apic.get(f'/api/mo/{bd_dn}.json?{FCCO}').json()['imdata'][0])
+                all_bd_subnets = [str(IPv4Network(_.attributes.ip, strict=False))
+                                  for _ in bd.get_child_class_iter(Subnet.class_)]
+                epgs = [EPG.search(_.attributes.dn).group() for _ in rsbds if _.attributes.tDn == bd.attributes.dn]
+            else:
+                rsbd = APICObject.load(apic.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'][0])
+                bd_name = BD.search(rsbd.attributes.tDn).group('name')
+                bd = APICObject.load(apic.get(f'/api/mo/{rsbd.attributes.tDn}.json?{FCCO}').json()['imdata'][0])
+                epgs = [EPG.search(_.attributes.dn).group() for _ in rsbds if _.attributes.tDn == bd.attributes.dn]
+                all_bd_subnets = [str(IPv4Network(_.attributes.ip, strict=False))
+                                  for _ in bd.get_child_class_iter(Subnet.class_)]
             subnet = str(IPv4Network(ip, strict=False))
-            rsbds = [APICObject.load(_) for _ in apic.get(f'/api/class/fvRsBd.json').json()['imdata']]
-            epgs = [EPG.search(_.attributes.dn).group() for _ in rsbds if _.attributes.tDn == bd.attributes.dn]
 
             return 200, {'environment': apic.env.Name, 'tenant': tn_name,
                          'bridge_domain': bd_name, 'subnet': subnet, 'all_bd_subnets': all_bd_subnets,
-                         'inuse_by': epgs}
-
+                         'inuse_by': (epgs if bd_name else [epg_dn])}
         elif {_.class_ for _ in subnet_results} == {L3extPath.class_}:
             paths = []
             for result in subnet_results:
@@ -2346,7 +2374,7 @@ class APIC:
             l3_ips = []
             subnet_results = [_ for _ in subnet_results if isinstance(_, L3extIP)]
             for result in subnet_results:
-                path = APICObject.load(apic.get(f'/api/mo/{L3extPath.search(result.attributes.dn).group()}.json').json()['imdata'])
+                path = APICObject.load(apic.get(f'/api/mo/{L3extPath.search(result.attributes.dn).group()}.json').json()['imdata'][0])
                 l3_ips += [{
                     'l3out': L3Out.search(result.attributes.dn).group('name'),
                     'path': L3extPath.search(result.attributes.dn).group('path'),
@@ -2356,7 +2384,7 @@ class APIC:
                 }]
             return 200, {'environment': apic.env.Name, 'l3out_paths': l3_ips}
         else:
-            logging.info(f'Need to be accounting for this: {list(_.class_ for _ in subnet_results)}')
+            logger.info(f'Need to be accounting for this: {list(_.class_ for _ in subnet_results)}')
             return 400, {'error': 'I do not know what you want you want from me'}
 
     @classmethod
@@ -2448,7 +2476,7 @@ class APIC:
     def resolve_interface_policies(self, node: int, interface: str) -> Tuple[InterfaceProfile, InterfaceSelector, GenericClass]:
         node = int(node)
 
-        nodeblks = [APICObject.load(_) for _ in self.get(f'/api/class/infraNodeBlk.json').json()['imdata']]
+        nodeblks = APICObject.load(self.get_class('infraNodeBlk').json()['imdata'])
         nodeblks = [_ for _ in nodeblks if node in range(int(_.attributes.from_), int(_.attributes.to_) + 1)]
 
         nodeps = [SwitchProfile.search(_.attributes.dn).group() for _ in nodeblks]
@@ -2457,27 +2485,25 @@ class APIC:
 
         for nodep in nodeps:
             # Collect all Interface profiles assigned under the relevant Leaf Profiles
-            rs_profiles = [APICObject.load(_) for _ in self.get(f'/api/mo/{nodep}.json?query-target=subtree&'
-                                                                f'target-subtree-class=infraRsAccPortP').json()['imdata']]
+            rs_profiles = APICObject.load(self.get(f'/api/mo/{nodep}.json?query-target=subtree&target-subtree-class=infraRsAccPortP').json()['imdata'])
             # This generates a list of Interface Profile names
             intf_profiles += [InterfaceProfile.search(_.attributes.dn).group('name') for _ in rs_profiles]
 
         port_blocks = []
         for intf_profile in intf_profiles:
-            port_blocks += [APICObject.load(_) for _ in self.get(f'/api/mo/uni/infra/accportprof-{intf_profile}.json?'
-                                                                 f'query-target=subtree&target-subtree-class=infraPortBlk').json()['imdata']]
+            port_blocks += APICObject.load(self.get(f'/api/mo/uni/infra/accportprof-{intf_profile}.json?query-target=subtree&target-subtree-class=infraPortBlk').json()['imdata'])
 
         # Identify the one port block that pertains to the specified interface
         block = next(_ for _ in port_blocks if int(interface) in range(int(_.attributes.fromPort), int(_.attributes.toPort) + 1))
 
         intf_sel_dn = InterfaceSelector.search(block.attributes.dn).group()
-        profile = APICObject.load(self.get(f'/api/mo/{InterfaceProfile.search(intf_sel_dn).group()}.json').json()['imdata'])
-        selector = APICObject.load(self.get(f'/api/mo/{intf_sel_dn}.json').json()['imdata'])
+        profile = APICObject.load(self.get(f'/api/mo/{InterfaceProfile.search(intf_sel_dn).group()}.json').json()['imdata'][0])
+        selector = APICObject.load(self.get(f'/api/mo/{intf_sel_dn}.json').json()['imdata'][0])
 
         policy_group_ref = APICObject.load(self.get(f'/api/mo/{intf_sel_dn}.json?'
-                                                    f'query-target=subtree&target-subtree-class=infraRsAccBaseGrp').json()['imdata'])
+                                                    f'query-target=subtree&target-subtree-class=infraRsAccBaseGrp').json()['imdata'][0])
 
-        policy_group = GenericClass.load(self.get(f'/api/mo/{policy_group_ref.attributes.tDn}.json?{FCCO}').json()['imdata'])
+        policy_group = APICObject.load(self.get(f'/api/mo/{policy_group_ref.attributes.tDn}.json?{FCCO}').json()['imdata'][0])
 
         return profile, selector, policy_group
 
@@ -2489,8 +2515,8 @@ class APIC:
         # What is really needed to complete this function is the MAC address
         if ip:
             ip = APICObject.load(self.get(f'/api/class/fvIp.json?'
-                                          f'query-target-filter=eq(fvIp.addr,"{ip}")').json()['imdata'])
-            if not ip:
+                                          f'query-target-filter=eq(fvIp.addr,"{ip}")').json()['imdata'][0])
+            if isinstance(ip, GenericClass):
                 return 404, {'error': 'Endpoint IP address was not found'}
 
             mac = MAC_IP_SEARCH.search(ip.attributes.dn).group(1)
@@ -2498,25 +2524,25 @@ class APIC:
         mac = format_mac_addresses([mac])[0]
 
         path = APICObject.load(self.get(f'/api/class/fvRsCEpToPathEp.json?'
-                                        f'query-target-filter=wcard(fvRsCEpToPathEp.dn,"{mac}")').json()['imdata'])
+                                        f'query-target-filter=wcard(fvRsCEpToPathEp.dn,"{mac}")').json()['imdata'][0])
 
-        if not path:
+        if not isinstance(path, GenericClass):
             return 404, {'error': f'No fabric path was found for mac address {mac}'}
 
         nodes, intf = PATH_SEARCH.search(path.attributes.dn).groups()
 
         if not re.match(r'eth\d+/\d+', intf):
-            pg = GenericClass.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}.json?{FCCO}').json()['imdata'])
+            pg = APICObject.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}.json?{FCCO}').json()['imdata'][0])
 
-            base_grp = APICObject.load(self.get(f'/api/class/infraRsAccBaseGrp.json?query-target-filter=eq(infraRsAccBaseGrp.tDn,"{pg.attributes.dn}")').json()['imdata'])
+            base_grp = APICObject.load(self.get(f'/api/class/infraRsAccBaseGrp.json?query-target-filter=eq(infraRsAccBaseGrp.tDn,"{pg.attributes.dn}")').json()['imdata'][0])
             profile_name, selector_name = InterfaceSelector.search(base_grp.attributes.dn).groups()
 
-            profile = APICObject.load(self.get(f'/api/mo/uni/infra/accportprof-{profile_name}.json?{FCCO}').json()['imdata'])
+            profile = APICObject.load(self.get(f'/api/mo/uni/infra/accportprof-{profile_name}.json?{FCCO}').json()['imdata'][0])
 
             selector = next(sel for sel in profile.get_child_class_iter(class_='infraHPortS') if sel.attributes.name == selector_name)
 
             # This means we have an interface policy group name already, easy
-            aep_ref = GenericClass.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}/rsattEntP.json').json()['imdata'])
+            aep_ref = APICObject.load(self.get(f'/api/mo/uni/infra/funcprof/accbundle-{intf}/rsattEntP.json').json()['imdata'][0])
         else:
             intf_int = re.search(r'eth\d+/(\d+)', intf).group(1)
             # Retrieves the interface policy group used by the interface
@@ -2612,8 +2638,8 @@ class APIC:
 
     def remove_maintenance_policies(self):
         # Just delete all maintenance groups and policies
-        groups = [APICObject.load(_) for _ in self.collect(maintMaintGrp='')]
-        policies = [APICObject.load(_) for _ in self.collect(maintMaintP='')]
+        groups = APICObject.load(self.get_class(MaintenanceGroup.class_).json()['imdata'])
+        policies = APICObject.load(self.get_class(MaintenancePolicy.class_).json()['imdata'])
 
         for _ in groups + policies:
             _.delete()
@@ -2691,13 +2717,13 @@ class APIC:
         self.verify_maintenance_policies_and_groups()
 
         # # Delete all existing node blocks in maintenance groups
-        # blocks = [APICObject.load(_) for _ in self.collect(fabricNodeBlk='')]
+        # blocks = APICObject.load(self.collect(fabricNodeBlk=''))
         # for block in blocks:
         #     block.delete()
         #     self.post(block.json())
         #
         # Collect all nodes
-        nodes = [APICObject.load(_) for _ in self.collect_nodes()]
+        nodes = APICObject.load(self.collect_nodes())
 
         data_leaf_nodes = [_ for _ in nodes if 100 < int(_.attributes.id) < 200] + \
                           [_ for _ in nodes if 500 < int(_.attributes.id) < 600] + \
@@ -2751,7 +2777,7 @@ class APIC:
             node_blocks += self.get('/api/mo/uni/infra/nprof-%s.json?query-target=subtree&'
                                     'target-subtree-class=infraNodeBlk' % name).json()['imdata']
 
-        node_blocks = [APICObject.load(_) for _ in node_blocks]
+        node_blocks = APICObject.load(node_blocks)
 
         nodes = set()
         for node in node_blocks:
@@ -2881,7 +2907,7 @@ class APIC:
         all_epgs = set(epg.attributes.dn for epg in epgs)
 
         # Collect all endpoints, fvCEp
-        endpoints = [APICObject.load(_) for _ in self.collect_eps()]
+        endpoints = APICObject.load(self.collect_eps())
         # Filter to endpoints known via EPGs
         endpoints = [_ for _ in endpoints if EPG_DN_SEARCH.match(_.attributes.dn)]
 
@@ -2889,7 +2915,7 @@ class APIC:
                           if bool(int(IPv4Address(_.attributes.ip))))
 
         # Collect all subnets, fvSubnet
-        subnets = [APICObject.load(_) for _ in self.collect_subnets()]
+        subnets = APICObject.load(self.collect_subnets())
         subnets = [_ for _ in subnets if re.search(r'tn-([^/]+)', _.attributes.dn).group(1) in [self.env.Tenant,
                                                                                                 self.env.ADMZTenant]]
         # Filter out L3Out based networks
@@ -2913,8 +2939,7 @@ class APIC:
         # Remove EPGs that were created less than 30 days ago
         for _ in list(unused_epgs):
             mod = APICObject.load(self.get(
-                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()[
-                                      'imdata'])
+                '/api/class/aaaModLR.json?query-target-filter=eq(aaaModLR.affected,"%s")' % _).json()['imdata'][0])
             if mod:
                 creation = datetime.fromisoformat(mod.attributes.created)
                 delta = datetime.now(creation.tzinfo) - creation
@@ -2924,7 +2949,7 @@ class APIC:
                 continue
 
         # Collect all bridge domains from production and ADMZ tenants
-        bds = [APICObject.load(_) for _ in self.get('/api/class/fvBD.json').json()['imdata']]
+        bds = APICObject.load(self.get_class_config_only(BD.class_).json()['imdata'])
         bds = [bd for bd in bds if re.search(r'tn-([^/]+)', bd.attributes.dn).group(1) in [self.env.Tenant,
                                                                                            self.env.ADMZTenant]]
         all_bds = set(bd.attributes.dn for bd in bds)
@@ -3157,10 +3182,10 @@ class APIC:
         # Collect subnets
         subnets = self.get(f'/api/mo/uni/tn-{self.env.Tenant}.json'
                            f'?query-target=subtree&target-subtree-class={Subnet.class_}').json()['imdata']
-        subnets = [APICObject.load(_) for _ in subnets]
+        subnets = APICObject.load(subnets)
 
         # Get all EPs and filter out EPs without IP addresses and non-EPG EPs
-        all_eps = [APICObject.load(_) for _ in self.get('/api/class/fvCEp.json').json()['imdata']]
+        all_eps = APICObject.load(self.get_class('fvCEp').json()['imdata'])
         all_eps = [_ for _ in all_eps if _.attributes.ip and '/epg-' in _.attributes.dn]
 
         gh = GithubAPI()
@@ -3183,7 +3208,7 @@ class APIC:
                 application = AppInstance.format_name(epg_ap)
 
                 # Collect bridge domain settings
-                rsbd = APICObject.load(self.get(f'/api/mo/{orig_dn}/rsbd.json').json()['imdata'])
+                rsbd = APICObject.load(self.get(f'/api/mo/{orig_dn}/rsbd.json').json()['imdata'][0])
                 bd = APICObject.load(self.collect_bds(tn=self.env.Tenant, bd=rsbd.attributes.tnFvBDName))
 
                 subnet.remove_admin_props()
@@ -3214,7 +3239,7 @@ class APIC:
     def find_lldp_neighbors(self, mac_addresses: str) -> Tuple[int, list]:
         mac_addresses = format_mac_addresses(mac_addresses.lower().split(','))
 
-        lldp_neigh = [APICObject.load(_) for _ in self.get('/api/class/lldpAdjEp.json').json()['imdata']]
+        lldp_neigh = APICObject.load(self.get_class('lldpAdjEp').json()['imdata'])
         lldp_neigh = [neigh for neigh in lldp_neigh if neigh.attributes.portIdV in mac_addresses]
 
         lldp_neigh = [{
@@ -3240,12 +3265,10 @@ class APIC:
                 return f'AsssertionError: {e}'
 
         with cls(env=src) as src, cls(env=dst) as dst:
-            subnets = [APICObject.load(_) for _ in src.get(f'/api/class/l3extSubnet.json?{CONFIG_ONLY}&'
-                                                           f'query-target-filter='
-                                                           f'eq(l3extSubnet.ip,"{network}")').json()['imdata']]
-            routes = [APICObject.load(_) for _ in src.get(f'/api/class/ipRouteP.json?{FCCO}&'
-                                                          f'query-target-filter='
-                                                          f'eq(ipRouteP.ip,"{network}")').json()['imdata']]
+            subnets = APICObject.load(src.get(f'/api/class/l3extSubnet.json?{CONFIG_ONLY}&'
+                                              f'query-target-filter=eq(l3extSubnet.ip,"{network}")').json()['imdata'])
+            routes = APICObject.load(src.get(f'/api/class/ipRouteP.json?{FCCO}&query-target-filter='
+                                             f'eq(ipRouteP.ip,"{network}")').json()['imdata'])
 
             for subnet in subnets:
                 subnet.attributes.status = 'deleted'
@@ -3277,7 +3300,7 @@ class APIC:
                     return f'Failed to create static route: \n{response.json()}\n{response.json()}'
 
             ext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_l3out}/'
-                                              f'instP-{external_epg}.json?{CONFIG_ONLY}').json()['imdata'])
+                                              f'instP-{external_epg}.json?{CONFIG_ONLY}').json()['imdata'][0])
 
             subnet.create_modify()
             subnet.remove_admin_props()
@@ -3290,7 +3313,7 @@ class APIC:
 
             if dst_admz_l3out and admz_external_epg:
                 aext_epg = APICObject.load(dst.get(f'/api/mo/uni/tn-tn-HCA/out-{dst_admz_l3out}/'
-                                                   f'instP-{admz_external_epg}.json?{CONFIG_ONLY}').json()['imdata'])
+                                                   f'instP-{admz_external_epg}.json?{CONFIG_ONLY}').json()['imdata'][0])
 
                 subnet.attributes.dn = f'{aext_epg.attributes.dn}/extsubnet-[{network}]'
                 subnet.attributes.scope = 'import-security'
@@ -3305,7 +3328,7 @@ class APIC:
         supernet = IPv4Network('10.0.0.0/8')
 
         # Collect all endpoints
-        ep_objs = [APICObject.load(_) for _ in self.get('/api/class/fvIp.json').json()['imdata']]
+        ep_objs = APICObject.load(self.get_class('fvIp').json()['imdata'])
         eps = []
         for ep in ep_objs:
             mac, ip = MAC_IP_SEARCH.search(ep.attributes.dn).groups()
@@ -3363,7 +3386,7 @@ class APIC:
         # Attempt to get the EPG
         resp = self.get(f'/api/mo/{epg_dn}.json?{FCCO}')
         if resp.ok:
-            epg = APICObject.load(resp.json()['imdata'])
+            epg = APICObject.load(resp.json()['imdata'][0])
         else:
             return resp.status_code, resp.json()
 
@@ -3816,7 +3839,7 @@ class AppInstance:
             for network, settings in inst.networks.items():
                 r = inst.currentAZ.get(f'/api/mo/{inst.subnet_dn(network)}.json')
                 if int(r.json()['totalCount']):
-                    subnet = APICObject.load(r.json()['imdata'])
+                    subnet = APICObject.load(r.json()['imdata'][0])
                     subnet.delete()
                     subnet.remove_admin_props()
                     deletions.append(subnet)
@@ -3836,7 +3859,7 @@ class AppInstance:
             # Determine usage of BD and whether it should be deleted
             r = inst.currentAZ.get(f'/api/class/fvRsBd.json?query-target-filter=eq(fvRsBd.tDn,"{inst.bd_dn()}")')
             if int(r.json()['totalCount']) == 1:
-                rsbd = APICObject.load(r.json()['imdata'])
+                rsbd = APICObject.load(r.json()['imdata'][0])
                 if epg.attributes.dn == EPG_DN_SEARCH.search(rsbd.attributes.dn).group():
                     bd = BD(dn=inst.bd_dn())
                     bd.delete()
@@ -3916,7 +3939,7 @@ class AppInstance:
         inst = cls.load(app_inst_path=inst_path)
 
         # Delete EPG
-        epg = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json').json()['imdata'])
+        epg = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json').json()['imdata'][0])
         epg.attributes.remove_admin_props()
         epg.delete()
 
@@ -3928,7 +3951,7 @@ class AppInstance:
 
             subnet = APICObject.load(
                 inst.currentAZ.get(f'/api/mo/fvSubnet.json?'
-                                   f'query-target-filter=eq(fvSubnet.ip,"{network}")').json()['imdata']
+                                   f'query-target-filter=eq(fvSubnet.ip,"{network}")').json()['imdata'][0]
             )
             subnet.attributes.remove_admin_props()
             subnet.delete()
@@ -3945,7 +3968,7 @@ class AppInstance:
                 ipam.update_network(data=dict(network=ip4network.range, keyvalues=dict(name=ip4network.name)))
 
         # Delete Bridge Domain; if not used elsewhere
-        bd = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.bd_dn()}.json').json()['imdata'])
+        bd = APICObject.load(inst.currentAZ.get(f'/api/mo/{inst.bd_dn()}.json').json()['imdata'][0])
 
         bd_used = inst.currentAZ.get(f'/api/class/fvRsBd.json?'
                                      f'query-target-filter=eq(fvRsBd.tDn,"{inst.bd_dn()}")').json()
@@ -4079,12 +4102,12 @@ class AppInstance:
         tenant, app_name, epg_name = EPG_DN_SEARCH.search(epg_dn).groups()
 
         # Retrieve bridge domain name from fvRsBd
-        fvrsbd = APICObject.load(apic.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'])
+        fvrsbd = APICObject.load(apic.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'][0])
 
         if not fvrsbd:
             return 404, {'error': 'EPG distinguished name does not exist'}
 
-        bd = APICObject.load(apic.get(f'/api/mo/{fvrsbd.attributes.tDn}.json?{FCCO}').json()['imdata'])
+        bd = APICObject.load(apic.get(f'/api/mo/{fvrsbd.attributes.tDn}.json?{FCCO}').json()['imdata'][0])
 
         # Get subnets from the bridge domain
         subnets = [_ for _ in bd.get_child_class_iter(Subnet.class_)]
@@ -4154,300 +4177,6 @@ class AppInstance:
 #         return 500, [f'VLAN spreadsheet Not Updated.  The file is most likely open:  {e}']
 
 
-def create_dr_env(src_env, dst_env):
-    with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
-        if env.snapshot(descr='Auto createDRenv') is False:
-            return 500, ['Automated Snapshot Failed.  Task Aborted.']
-        if drenv.snapshot(descr='Auto createDrenv') is False:
-            return 500, ['Automated Snapshot Failed.  Task Aborted.']
-
-        dr_list = []
-
-        # Collect DR Tags for creating placeholder VLANs
-        tags = env.collect_tags('dr')
-
-        for tag in tags:
-            dn = tag['tagInst']['attributes']['dn'].split('/')
-            dr_list.append(dn[3][4:])
-
-        config = {
-            'fvTenant': {
-                'attributes': {
-                    'name': 'tn-' + env.env.Name,
-                    'status': 'created,modified'
-                },
-                'children': [{
-                    'fvCtx': {
-                        'attributes': {
-                            'name': 'vrf-drtest',
-                            'status': 'created,modified'
-                            },
-                        'children': [{
-                            'vzAny': {
-                                'attributes': {
-                                    'name': ''
-                                },
-                                'children': [{
-                                    'vzRsAnyToProv': {
-                                        'attributes': {
-                                            'tnVzBrCPName': 'c-drtest-advertise'
-                                        }
-                                    }
-                                }
-                                ]
-                            }
-                        }]
-                        }
-                    }, {
-                    'vzBrCP': {
-                        'attributes': {
-                            'name': 'c-drtest-advertise',
-                            'scope': 'global'
-                        },
-                        'children': [{
-                            'vzSubj': {
-                                'attributes': {
-                                    'name': 's-drtest-advertise',
-                                    'revFltPorts': 'yes'
-                                },
-                                'children': [{
-                                    'vzRsSubjFiltAtt': {
-                                        'attributes': {
-                                            'tnVzFilterName': 'default'
-                                        }
-                                    }
-                                }]
-                            }
-                        }]
-                    }
-                }, {
-                    'vzBrCP': {
-                        'attributes': {
-                            'name': 'c-hca-advertise',
-                            'scope': 'global'
-                        },
-                        'children': [{
-                            'vzSubj': {
-                                'attributes': {
-                                    'name': 's-hca-advertise',
-                                    'revFltPorts': 'yes'
-                                },
-                                'children': [{
-                                    'vzRsSubjFiltAtt': {
-                                        'attributes': {
-                                            'tnVzFilterName': 'default'
-                                        }
-                                    }
-                                }]
-                            }
-                        }]
-                    }
-                }
-                ]
-            }
-        }
-        admz_config = {
-            'fvTenant': {
-                'attributes': {
-                    'name': 'tn-' + env.env.Name + '-ADMZ',
-                    'status': 'created,modified'
-                },
-                'children': []
-            }
-        }
-        aep_placeholders = {
-            'infraAttEntityP': {
-                'attributes': {
-                    'name': 'aep-Placeholders',
-                    'status': 'created,modified'
-                },
-                'children': [{
-                    'infraRsDomP': {
-                        'attributes': {
-                            'tDn': 'uni/phys-' + drenv.env.PhysicalDomain,
-                            'status': 'created,modified'
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-
-        # Collect and add VRFs from the source environment to the configuration
-        vrfs = env.collect_vrfs(tn='tn-HCA')
-        admz_vrfs = env.collect_vrfs(tn='tn-ADMZ')
-
-        for vrf in vrfs:
-            del vrf['fvCtx']['attributes']['dn']
-            vrf['fvCtx']['attributes']['status'] = 'created,modified'
-            vrf['fvCtx']['children'] = [{
-                'vzAny': {
-                    'attributes': {
-                        'name': ''
-                    },
-                    'children': [{
-                        'vzRsAnyToProv': {
-                            'attributes': {
-                                'tnVzBrCPName': 'c-hca-advertise'
-                            }
-                        }
-                    }]
-                }
-            }]
-            config['fvTenant']['children'].append(vrf)
-
-        for vrf in admz_vrfs:
-            del vrf['fvCtx']['attributes']['dn']
-            vrf['fvCtx']['attributes']['status'] = 'created,modified'
-            admz_config['fvTenant']['children'].append(vrf)
-
-        # Collect and add bridge domains from the source environment to the configuration
-        bds = env.collect_bds(tn='tn-HCA')
-        admz_bds = env.collect_bds(tn='tn-ADMZ')
-
-        for bd in bds:
-            del bd['fvBD']['attributes']['dn']
-            bd['fvBD']['attributes']['status'] = 'created,modified'
-            for child in bd['fvBD']['children']:
-                if 'fvRsCtx' in child.keys():
-                    child['fvRsCtx']['attributes']['tnFvCtxName'] = 'vrf-drtest'
-                elif 'fvRsBDToOut' in child.keys():
-                    bd['fvBD']['children'].remove(child)
-                elif 'fvSubnet' in child.keys():
-                    child['fvSubnet']['attributes']['scope'] = 'public,shared'
-
-            config['fvTenant']['children'].append(bd)
-
-        for bd in admz_bds:
-            del bd['fvBD']['attributes']['dn']
-            bd['fvBD']['attributes']['status'] = 'created,modified'
-            admz_config['fvTenant']['children'].append(bd)
-
-        # Collect and add application profiles and from the source environment to the configuration
-        aps = env.collect_aps(tn='tn-HCA')
-        admz_aps = env.collect_aps(tn='tn-ADMZ')
-
-        for ap in aps:
-            del ap['fvAp']['attributes']['dn']
-            ap['fvAp']['attributes']['status'] = 'created,modified'
-
-            if ap['fvAp'].get('children'):
-                for epg in ap['fvAp']['children']:
-                    if 'fvAEPg' in epg.keys():
-                        epg['fvAEPg']['attributes']['status'] = 'created,modified'
-                        epg['fvAEPg']['children'] = [next(x for x in epg['fvAEPg']['children'] if 'fvRsBd' in x.keys())]
-                        epg['fvAEPg']['children'].append({
-                            'fvRsDomAtt': {
-                                'attributes': {
-                                    'tDn': 'uni/phys-' + drenv.env.PhysicalDomain
-                                }
-                            }
-                        })
-                        if epg['fvAEPg']['attributes']['name'] in dr_list:
-                            epg['fvAEPg']['children'].append({
-                                'fvRsCons': {
-                                    'attributes': {
-                                        'tnVzBrCPName': 'c-drtest-advertise'
-                                    }
-                                }
-                            })
-                config['fvTenant']['children'].append(ap)
-
-        for ap in admz_aps:
-            del ap['fvAp']['attributes']['dn']
-            ap['fvAp']['attributes']['status'] = 'created,modified'
-
-            for epg in ap['fvAp']['children']:
-                if 'fvAEPg' in epg.keys():
-                    epg['fvAEPg']['attributes']['status'] = 'created,modified'
-                    epg['fvAEPg']['children'] = [next(x for x in epg['fvAEPg']['children'] if 'fvRsBd' in x.keys())]
-                    epg['fvAEPg']['children'].append({
-                        'fvRsDomAtt': {
-                            'attributes': {
-                                'tDn': 'uni/phys-' + drenv.env.PhysicalDomain
-                            }
-                        }
-                    })
-            admz_config['fvTenant']['children'].append(ap)
-
-        # Create snapshot prior to making any changes to the DR fabric
-        drenv.snapshot('pre-DR Environment Changes - Automated')
-
-        # If DR environment already exists, delete bridge domains and application profiles to recreate with updated
-        # configuration
-        if drenv.exists(fvTenant='tn-{}'.format(env.env.Name)) is True:
-            dr_aps = drenv.collect_aps(tn='tn-{}'.format(env.env.Name))
-            dr_bds = drenv.collect_bds(tn='tn-{}'.format(env.env.Name))
-
-            dr_del = {
-                'fvTenant': {
-                    'attributes': {
-                        'dn': 'uni/tn-tn-' + env.env.Name
-                    },
-                    'children': []
-                }
-            }
-
-            for ap in dr_aps:
-                ap['fvAp']['attributes']['status'] = 'deleted'
-                dr_del['fvTenant']['children'].append(ap)
-            for bd in dr_bds:
-                bd['fvBD']['attributes']['status'] = 'deleted'
-                dr_del['fvTenant']['children'].append(bd)
-
-            # print(json.dumps(dr_del))
-            if drenv.post(configuration=dr_del) is False:
-                return 500, ['DR Environment exists: Failed to Delete APs and BDs']
-
-        if drenv.post(configuration=config) is False:
-            return 500, ['Failed to load tn-{}'.format(env.env.Name)]
-        if drenv.post(configuration=admz_config) is False:
-            return 500, ['Failed to load tn-{}-ADMZ'.format(env.env.Name)]
-
-        # Check for existence of aep-Placeholders.  If it doesn't exist, create it.
-        if drenv.exists(infraAttEntityP='aep-Placeholders') is False:
-            if drenv.post(configuration=aep_placeholders) is False:
-                return 500, ['aep-Placeholders creation failed.']
-
-        mappings = []
-
-        for tag in tags:
-            map_info = tag['tagInst']['attributes']['dn'].split('/')
-            if str(map_info[3]).startswith('epg-'):
-                if 'ADMZ' in map_info[1]:
-                    map_info[1] = f'tn-tn-{env.env.Name}-ADMZ'
-                else:
-                    map_info[1] = f'tn-tn-{env.env.Name}'
-
-                # Check to see if the DR EPG is already assigned a VLAN
-                if drenv.get(f'/api/mo/uni/infra/attentp-aep-Placeholders/gen-default/'
-                             f'rsfuncToEpg-[{"/".join(map_info[:-1])}].json').json()['imdata']:
-                    continue
-                else:
-                    aep_map = {
-                                'Tenant': map_info[1][3:],
-                                'AP': map_info[2][3:],
-                                'EPG': map_info[3][4:],
-                                'AEP': 'aep-Placeholders'
-                            }
-                    mappings.append(aep_map)
-            else:
-                continue
-
-        if mappings:
-            for mapping in mappings:
-                status, data = APIC.assign_epg_to_aep(drenv.env.Name, mapping)
-                if 200 <= status < 300:
-                    pass
-                else:
-                    logging.warning(f'Mapping failed: {mapping}')
-
-        logging.info(f'DR Environment creation completed in {drenv.env.Name}')
-        # requests.get('https://pyapis.ocp.app.medcity.net/apis/aci/updateVlanSpreadsheets', verify=False)
-
-        return 200, [f'DR Environment creation completed']
-
-
 def create_dr_env_v2(src_env: str, dst_env: str):
     starttime = time.perf_counter()
 
@@ -4456,7 +4185,7 @@ def create_dr_env_v2(src_env: str, dst_env: str):
             return 500, ['Automated Snapshot Failed.  Task Aborted.']
 
         # Collect DR Tags for creating placeholder VLANs
-        tags = [APICObject.load(_) for _ in env.collect_tags('dr')]
+        tags = APICObject.load(env.collect_tags('dr'))
 
         # Get list of EPGs
         dr_epg_list = [EPG_DN_SEARCH.search(_.attributes.dn) for _ in tags]
@@ -4565,8 +4294,8 @@ def create_dr_env_v2(src_env: str, dst_env: str):
         # Get infraRsFuncToEpg for Placeholders
         mappings = []
 
-        ifes = [APICObject.load(_) for _ in drenv.get('/api/class/infraRsFuncToEpg.json?query-target-filter='
-                                                      'wcard(infraRsFuncToEpg.dn,"aep-Placeholders")').json()['imdata']]
+        ifes = APICObject.load(drenv.get('/api/class/infraRsFuncToEpg.json?query-target-filter='
+                                         'wcard(infraRsFuncToEpg.dn,"aep-Placeholders")').json()['imdata'])
         ifes = [(EPG_DN_SEARCH.search(ife.attributes.dn), ife) for ife in ifes]
 
         for epg in epgs:
@@ -4590,135 +4319,6 @@ def create_dr_env_v2(src_env: str, dst_env: str):
                              verify=False)
 
     return 200, [f'DR Environment creation completed in {round(time.perf_counter() - starttime, 3)} seconds']
-
-
-def create_dr_targeted(src_env: str, dst_env: str, tenant: str, app_profile: str, epg_name: str):
-    starttime = time.perf_counter()
-
-    with APIC(env=src_env) as env, APIC(env=dst_env) as drenv:
-        # Collect DR Tags for creating placeholder VLANs
-        tags = [APICObject.load(_) for _ in env.collect_tags('dr')]
-
-        # Get list of EPGs
-        dr_epg_list = [EPG_DN_SEARCH.search(_.attributes.dn) for _ in tags]
-
-        if epg_dn := f'uni/tn-{tenant}/ap-{app_profile}/epg-{epg_name}' in [_.group() for _ in dr_epg_list]:
-            if drenv.snapshot(descr='Auto targeted_dr') is False:
-                return 500, ['Automated Snapshot Failed.  Task Aborted.']
-
-            if tenant == 'tn-HCA':
-                dr_tn = f'tn-{env.env.Name}'
-            elif tenant == 'tn-ADMZ':
-                dr_tn = f'tn-{env.env.Name}-ADMZ'
-            else:
-                raise Exception(f'Unexpected Tenant name: {tenant}')
-
-            # Define DR based EPG dn
-            dr_dn = f'uni/tn-{dr_tn}/ap-{app_profile}/epg-{epg_name}'
-
-            # Get bridge domain
-            rsbd = APICObject.load(env.get(f'/api/mo/{epg_dn}/rsbd.json').json()['imdata'])
-            bd = APICObject.load(env.get(f'/api/mo/{rsbd.attributes.tDn}.json?{FCCO}'))
-
-            # Modify BD for DR environment
-            bd.attributes.__delattr__('dn')
-            bd.create_modify()
-
-            subnets = bd.get_child_class_iter(Subnet.class_)
-            for subnet in subnets:
-                subnet.attributes.scope = 'public,shared'
-                subnet.attributes.preferred = 'no'
-                subnet.attributes.virtual = 'no'
-
-            bd.children = subnets
-            bd.use_vrf('vrf-drtest')
-
-            resp = drenv.post(bd.json(empty_fields=True), uri=f'/api/mo/uni/tn-{dr_tn}.json')
-            if not resp.ok:
-                raise Exception(f'Failure to create bridge domain: uni/tn-{dr_tn}/BD-{bd.attributes.name} : '
-                                f'{json.dumps(resp.json())}')
-
-            # Get EPG
-            epg = APICObject.load(env.get(f'/api/mo/{epg_dn}.json?{FCCO}').json()['imdata'])
-
-            # Modify EPG for DR environment
-            epg.attributes.__delattr__('dn')
-
-            _ = epg.pop_child_class(FvRsDomAtt.class_)
-            epg.domain(drenv.env.PhysicalDomain)
-
-            # Remove unneeded children (contracts, tags, static paths)
-            while True:
-                a = epg.pop_child_class('fvRsCons')
-                b = epg.pop_child_class('fvRsProv')
-                c = epg.pop_child_class('tagInst')
-                d = epg.pop_child_class('tagAnnotation')
-                e = epg.pop_child_class('fvRsPathAtt')
-
-                if a or b or c or d or e:
-                    continue
-                else:
-                    break
-
-            # Generate AP config
-            ap = AP(name=app_profile)
-            ap.create_modify()
-            ap.children = [epg]
-
-            resp = drenv.post(ap.json(empty_fields=True), uri=f'/api/mo/tn-{dr_tn}.json')
-            if not resp.ok:
-                return 400, [f'Targeted DR creation failed for {dr_dn}']
-
-            # Conditionally assign VLAN
-            ife = jsonload(drenv.get(f'/api/mo/uni/infra/attentp-aep-Placeholders/gen-default/'
-                                     f'rsfuncToEpg-[{dr_dn}].json'))
-            if int(ife.totalCount):
-                pass
-            else:
-                mapping = {
-                    'Tenant': dr_tn,
-                    'AP': app_profile,
-                    'EPG': epg_name,
-                    'AEP': 'aep-Placeholders'
-                }
-
-                req_data = {
-                    'APIKey': os.getenv('localapikey'),
-                    'AvailabilityZone': drenv.env.Name,
-                    'AEPMappings': [mapping]
-                }
-
-                _ = requests.post('https://pyapis.ocp.app.medcity.net/apis/aci/assign_epg_to_aep', json=req_data,
-                                  verify=False)
-
-            return 200, [f'Targeted DR creation for {dr_dn} completed in {round(time.perf_counter() - starttime, 3)} '
-                         f'seconds']
-        else:
-            return 400, [f'{epg_dn} is not flagged for DR']
-
-
-# def tag_epgs_v2(env, epgs: list):
-#     apic = APIC(env)
-#
-#     response_data = {}
-#
-#     for epg in epgs:
-#         epg_resp = apic.collect_epgs(epg=epg['epg_name'])
-#
-#         if epg_resp == 'EPG does not exist':
-#             response_data[epg['epg_name']] = epg_resp
-#             continue
-#
-#         tag = GenericClass('tagInst')
-#         tag.attributes.dn = f'{epg_resp["fvAEPg"]["attributes"]["dn"]}/tag-{epg["tag"]}'
-#         tag.attributes.status = 'created'
-#         r = apic.post(configuration=tag.json())
-#
-#         response_data[epg['epg_name']] = r.reason
-#
-#     apic.logout()
-#
-#     return 200, response_data
 
 
 def migrate_to_admz(env: dict or str, epg: str, subnet: str, next_hop: str, fw_vlan: int or str, tenant: str='tn-HCA'):
@@ -5016,60 +4616,6 @@ def find_subnet(req_data):
             return str(resp)
     else:
         return resp
-
-
-# def fabric_inventory():
-#     try:
-#         envs = json.load(open('data/ACIEnvironments.json', 'r'))
-#         data = []
-#
-#         for env in envs['Environments']:
-#             with APIC(env=env['Name']) as apic:
-#                 invs = apic.collect_inventory()
-#
-#             for inv in invs:
-#                 if 'error' not in inv.keys():
-#                     data.append(inv)
-#
-#         fabrics = list(set((x['topSystem']['attributes']['fabricDomain'] for x in data)))
-#         fabrics = {each: [] for each in fabrics}
-#
-#         for inv in data:
-#             assignment = inv['topSystem']['attributes']['fabricDomain']
-#             fabrics[assignment].append(inv['topSystem']['attributes'])
-#
-#         wb = openpyxl.Workbook()
-#
-#         for fabric in fabrics:
-#             xl_data = [['SwitchID', 'Serial Number', 'Name', 'OOB IP']]
-#             for node in fabrics[fabric]:
-#                 xl_data.append([
-#                     int(re.search('[0-9]+', re.search('node-[0-9]+', node['dn']).group()).group()),
-#                     node['serial'],
-#                     node['name'],
-#                     node['oobMgmtAddr']
-#                 ])
-#
-#             sheet = wb.create_sheet(fabric)
-#
-#             for item in xl_data:
-#                 for entry in item:
-#                     sheet.cell(xl_data.index(item) + 1, item.index(entry) + 1, entry)
-#
-#         wb.remove_sheet(wb['Sheet'])
-#
-#         smb = SMBConnection(os.getenv('netmgmtuser'), os.getenv('netmgmtpass'), socket.gethostname(),
-#                             remote_name='corpdpt01.hca.corpad.net', is_direct_tcp=True)
-#         smb.connect(socket.gethostbyname('corpdpt01.hca.corpad.net'), port=445)
-#         temp_file = io.BytesIO(save_virtual_workbook(wb))
-#         smb.storeFile('TELShare',
-#                       '/Network_Engineering/ACI/ACI_Serial_Numbers/Py_ACI_Serials.xlsx',
-#                       temp_file)
-#         del temp_file
-#         return 200, fabrics
-#
-#     except OperationFailure as e:
-#         return 500, [f'Inventory Not Updated.  The file is most likely open:  {e}']
 
 
 def configure_interfaces(env: str, req_data: dict):
@@ -5810,33 +5356,34 @@ def add_new_leaf_pair(env: str, rack1: str, serial1: str, rack2: str, serial2: s
 
 
 def get_epg_data(environment: str, epg: str):
+    # TODO: Revisit and maybe improve this
     subnets = set()
 
     apic = APIC(environment)
 
     apic_subnets = apic.get('/api/class/fvSubnet.json').json()['imdata']
-    apic_subnets = list(IPv4Network(subnet['fvSubnet']['attributes']['ip'], strict=False)
-                        for subnet in apic_subnets)
+    apic_subnets = [IPv4Network(subnet['fvSubnet']['attributes']['ip'], strict=False) for subnet in apic_subnets]
 
-    epg_obj = APICObject.load(apic.get(f'/api/class/fvAEPg.json?'
-                                       f'query-target-filter=eq(fvAEPg.name,"{epg}")&{FULL_CONFIG}').json()['imdata'])
+    epg_obj = APICObject.load(apic.get_class_by_name(fvAEPg=epg).json()['imdata'][0])
 
-    if not epg_obj:
+    if not isinstance(epg_obj, EPG):
         return 404, {'error': f'EPG {epg} does not exist in {environment.upper()}'}
 
     endpoints = apic.get(f'/api/mo/{epg_obj.attributes.dn}.json?query-target=subtree&target-subtree-class=fvCEp')
     endpoints = [APICObject.load(ep) for ep in endpoints.json()['imdata']]
+    ips = apic.get(f'/api/mo/{epg_obj.attributes.dn}.json?query-target=subtree&target-subtree-class=fvIp')
+    ips = [FvIp.load(ip) for ip in ips.json()['imdata']]
 
     endpoint_count = len(endpoints)
     vlans = set(int(re.search(r'\d+', endpoint.attributes.encap).group()) for endpoint in endpoints)
-    endpoints = set(endpoint.attributes.ip for endpoint in endpoints if endpoint.attributes.ip != '0.0.0.0')
 
     bd = epg_obj.get_child_class('fvRsBd')
 
-    for endpoint in endpoints:
-        for subnet in apic_subnets:
-            if subnet.overlaps(IPv4Network(endpoint)):
-                subnets.add(subnet.with_prefixlen)
+    if ips:
+        for ip in ips:
+            for subnet in apic_subnets:
+                if subnet.overlaps(ip.network):
+                    subnets.add(subnet.with_prefixlen)
 
     response = {
         'epg_name': epg_obj.attributes.name,
@@ -5873,7 +5420,7 @@ def get_aci_subnet_data(environment, ip: str):
 
     if subnet.class_ == Subnet.class_:
         network = IPv4Network(subnet.attributes.ip, strict=False)
-        eps = [APICObject.load(_) for _ in apic.collect_eps()]
+        eps = APICObject.load(apic.collect_eps())
         eps = [_ for _ in eps if network.overlaps(IPv4Network(_.attributes.ip))]
 
         vlans = list(set(int(re.search(r'\d+', _.attributes.encap).group()) for _ in eps))
