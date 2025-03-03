@@ -1242,6 +1242,24 @@ class L3extInstP(APICObject):
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/instP-(?P<name>[^/]+)').search
 
 
+class FvIp(APICObject):
+    class_ = 'fvIp'
+    attrs = {}
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/ap-(?P<fvAp>[^/]+)/epg-(?P<fvAEPg>[^/]+)/cep-(?P<fvCEp>[^/]+)/ip-\[(?P<addr>[^]]+)]').search
+
+    def _customize_(self, *args, **kwargs):
+        self.network = IPv4Network(self.attributes.addr, strict=False)
+
+
+class FvCEp(APICObject):
+    class_ = 'fvCEp'
+    attrs = {}
+
+    search = re.compile(
+        r'uni/tn-(?P<fvTenant>[^/]+)/ap-(?P<fvAp>[^/]+)/epg-(?P<fvAEPg>[^/]+)/cep-(?P<name>[^/]+)').search
+
+
 defined_classes = {
     'infraAttEntityP': AEP,
     'infraGeneric': InfraGeneric,
@@ -1287,5 +1305,7 @@ defined_classes = {
     'l3extRsPathL3OutAtt': L3extPath,
     'l3extSubnet': L3extSubnet,
     'l3extLNodeP': L3extLNodeP,
-    'l3extLIfP': L3extLIfP
+    'l3extLIfP': L3extLIfP,
+    'fvIp': FvIp,
+    'fvCEp': FvCEp
 }
