@@ -116,7 +116,7 @@ class APICObject:
         pass
 
     @classmethod
-    def load(cls, json_data: dict or list) -> Any | List[Any]:
+    def load(cls, json_data: dict or list):
         """Returns list of APICObjects if given a list of objects, otherwise returns a single APICObject"""
         if not json_data:
             return []  # TODO: Revisit this from time to time
@@ -1085,7 +1085,9 @@ class InterfaceBlock(APICObject):
     _dn_template = 'uni/infra/accportprof-{profile}/hports-{selector}/portblk-{name}'
 
     def _customize_(self, **kwargs):
-        self.attributes.name = 'block%s' % ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        # Auto-name interface block
+        if not self.attributes.name:
+            self.attributes.name = 'block%s' % ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
 
 
 class SNMPClientP(APICObject):
