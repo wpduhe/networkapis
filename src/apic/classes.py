@@ -1260,6 +1260,31 @@ class FvCEp(APICObject):
         r'uni/tn-(?P<fvTenant>[^/]+)/ap-(?P<fvAp>[^/]+)/epg-(?P<fvAEPg>[^/]+)/cep-(?P<name>[^/]+)').search
 
 
+class IPRoute(APICObject):
+    class_ = 'ipRouteP'
+    attrs = {
+        'ip': ''
+    }
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/rsnodeL3OutAtt-\[(?P<l3extRsNodeL3OutAtt>[^]]+)]/rt-\[(?P<ip>[^]]+)]').search
+
+    def _customize_(self, *args, **kwargs):
+        if self.attributes.ip:
+            self.network = IPv4Network(self.attributes.ip, strict=False)
+
+
+class IPNexthop(APICObject):
+    class_ = 'ipNexthopP'
+    attrs = {
+        'nhAddr': ''
+    }
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/rsnodeL3OutAtt-\[(?P<l3extRsNodeL3OutAtt>[^]]+)]/rt-\[(?P<ipRouteP>[^]]+)]/nh-\[(?P<nhaddr>[^]]+)]').search
+
+    def _customize_(self, *args, **kwargs):
+        if self.attributes.nhAddr:
+            self.nexthop = IPv4Network(self.attributes.nhAddr, strict=False)
+            self.network = IPv4Network(self.search(self.attributes.dn).group('ipRouteP'), strict=False)
+
+
 defined_classes = {
     'infraAttEntityP': AEP,
     'infraGeneric': InfraGeneric,
@@ -1307,5 +1332,7 @@ defined_classes = {
     'l3extLNodeP': L3extLNodeP,
     'l3extLIfP': L3extLIfP,
     'fvIp': FvIp,
-    'fvCEp': FvCEp
+    'fvCEp': FvCEp,
+    'ipRouteP': IPRoute,
+    'ipNexthopP': IPNexthop
 }
