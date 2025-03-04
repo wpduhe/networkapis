@@ -2316,6 +2316,8 @@ class APIC:
     def get_bd_by_ip(cls, environment: str, ip: str):
         apic = cls(env=environment)
 
+        ip_net = IPv4Network(ip)
+
         subnet_results = apic.collect_subnets_new(ip)
 
         if not subnet_results:
@@ -2363,11 +2365,18 @@ class APIC:
         elif {_.class_ for _ in subnet_results} == {L3extSubnet.class_}:
             ext_subnets = []
             for result in subnet_results:
-                # TODO: Maybe find the next hop address for the static route?  Yes
+                routes = APICObject.load(apic.get_class('ipNexthopP').json()['imdata'])
+                routes = [nexthop for nexthop in routes if nexthop.network.overlaps(ip_net)]
                 ext_subnets += [{
                     'l3out': L3Out.search(result.attributes.dn).group('name'),
                     'external_epg': L3extSubnet.search(result.attributes.dn).group('l3extInstP'),
-                    'subnet': str(IPv4Network(result.attributes.ip))
+                    'subnet': str(IPv4Network(result.attributes.ip)),
+                    'routes': [
+                        {'node': _.search(_.attributes.dn).group('l3extRsNodeL3OutAtt'),
+                         'prefix': f'{_.network}',
+                         'nexthop': f'{_.nexthop.network_address}'}
+                        for _ in routes
+                    ]
                 }]
             return 200, {'environment': apic.env.Name, 'external_networks': ext_subnets}
         elif L3extIP.class_ in {_.class_ for _ in subnet_results}:
