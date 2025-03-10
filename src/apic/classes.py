@@ -1,4 +1,4 @@
-from ipaddress import IPv4Network
+from ipaddress import IPv4Network, IPv4Address
 from typing import List, Any
 import string
 import random
@@ -656,10 +656,11 @@ class Subnet(APICObject):
     network: IPv4Network
 
     def _customize_(self, ip: str='', **kwargs):
-        assert IPv4Network(ip, strict=False), 'Invalid subnet was provided'
-        self.attributes.ip = ip
+        if ip:
+            assert IPv4Network(ip, strict=False), 'Invalid subnet was provided'
+            self.attributes.ip = ip
+            self.network = IPv4Network(ip, strict=False)
         self.attributes.scope = 'public'
-        self.network = IPv4Network(ip, strict=False)
         self.create()
 
 class Domain(APICObject):
@@ -1263,13 +1264,19 @@ class FvCEp(APICObject):
 class IPRoute(APICObject):
     class_ = 'ipRouteP'
     attrs = {
-        'ip': ''
+        'ip': '',
+        'type': 'rt-static'
     }
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/rsnodeL3OutAtt-\[(?P<l3extRsNodeL3OutAtt>[^]]+)]/rt-\[(?P<ip>[^]]+)]').search
 
     def _customize_(self, *args, **kwargs):
         if self.attributes.ip:
             self.network = IPv4Network(self.attributes.ip, strict=False)
+
+    def set_next_hop(self, nhaddr: str):
+        nhaddr = IPv4Address(nhaddr)
+        nh = IPNexthop(nhaddr=f'{nhaddr}')
+        self.children += [nh]
 
 
 class IPNexthop(APICObject):
