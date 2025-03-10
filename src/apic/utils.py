@@ -3659,9 +3659,8 @@ class AppInstance:
             epg.create_modify()
 
         for prefix, settings in self.networks.items():
-            subnet = Subnet()
+            subnet = Subnet(ip=prefix)
             subnet.attributes = (Attributes(**settings) if settings else Attributes(**subnet.attributes.json()))
-            subnet.attributes.ip = prefix
             if drt:
                 subnet.attributes.__setattr__('scope', 'public,shared')
             if delete:
