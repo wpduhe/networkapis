@@ -1,5 +1,5 @@
 from apic.classes import *
-from apic.utils import APIC
+from apic.utils import APIC, AppInstance
 import unittest
 import requests
 import urllib3
@@ -8,6 +8,7 @@ import logging
 import time
 import os
 import sys
+import json
 
 
 urllib3.disable_warnings()
@@ -32,12 +33,11 @@ logging.getLogger('botocore').level = logging.WARNING
 logging.getLogger('boto3').level = logging.WARNING
 logging.getLogger('github').level = logging.WARNING
 logging.getLogger('zeep').level = logging.WARNING
-logger.debug('Logging initialized.')
 
 
 # Development URL
-# URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
-URL = 'http://127.0.0.1:8080'
+URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
+# URL = 'http://127.0.0.1:8080'
 
 # Sandbox URL
 # URL = 'http://py-ap-is-duhes-stuff-snd.apps.ops2.paas.medcity.net'
@@ -224,6 +224,131 @@ class APICCLassTests(unittest.TestCase):
             # TODO: Create test for L3Out
             if isinstance(obj, L3Out):
                 pass
+
+
+class AppInstanceTests(unittest.TestCase):
+
+    def setUp(self):
+        """This verifies that the loading process works"""
+        apps = session.get(URL + '/apis/appinst/applications', verify=False).json()
+        self.assertIsInstance(apps, list)
+        logger.info(apps)
+        self.app = apps[random.randint(0, len(apps) - 1)]
+        logger.info(f'Application selected: {self.app}')
+
+        insts = session.get(URL + f'/apis/appinst/applications/{self.app}', verify=False).json()
+        logger.info(insts)
+        self.inst = insts[random.randint(0, len(insts) - 1)]
+        logger.info(f'Instance selected: {self.inst}')
+
+        self.instance = AppInstance.load(f'{self.app}/{self.inst}')
+
+    def test_002_app_instance_json(self):
+        self.assertIsInstance(self.instance.json(), dict)
+
+    def test_003_app_instance_path(self):
+        self.assertEqual(self.instance.path(), f'applications/{self.app}/{self.inst}')
+
+    def test_004_app_instance_content(self):
+        """Test that instance.content() returns valid JSON as string"""
+        self.assertIsInstance(json.loads(self.instance.content()), dict)
+
+    def test_005_app_instance_format_name(self):
+        """Test name formatting for AppInstance"""
+        r = 'test_this'
+        t = 'epg-Test-This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+        t = 'epg_Test-This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+        t = 'epg|Test|This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+        t = 'epgTest-This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+        t = 'bd-Test-This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+        t = 'ap-Test-This'
+        logger.info(f'Testing format_name for {t}: {self.instance.format_name(t)}')
+        self.assertEqual(self.instance.format_name(t), r)
+
+    def test_006_app_instance_generate_config(self):
+        """Test generating configuration from application instance data"""
+        logger.info(f'Testing AppInstance.generate_config()')
+        r = self.instance.generate_config()
+        self.assertIsInstance(r, Tenant)
+
+    def test_007_app_instance_generate_config_drt(self):
+        """Test generating DRT configuration from application instance data"""
+        logger.info(f'Testing AppInstance.generate_config(drt=True)')
+        r = self.instance.generate_config(drt=True)
+        self.assertIsInstance(r, Tenant)
+        self.assertEqual(r.attributes.name.lower()[3:].replace('-', '_'),
+                         str(self.instance)[:len(r.attributes.name) - 3])
+
+    def test_008_app_instance_epg_dn(self):
+        """Test EPG distinguished name from application instance data"""
+        logger.info(f'Testing AppInstance.epg_dn()')
+        self.assertEqual(self.instance.epg_dn(),
+                         f'uni/tn-{self.instance.currentAZ.env.__getattribute__(self.instance.tenant)}/ap-{self.instance.apName}/epg-{self.instance.epgName}')
+
+    def test_009_app_instance_epg_dn_override(self):
+        """Test EPG distinguished name override from application instance data"""
+        logger.info(f'Testing AppInstance.epg_dn(override=True)')
+        self.assertEqual(self.instance.epg_dn(override=True),
+                         f'uni/tn-{self.instance.currentAZ.env.__getattribute__(self.instance.tenant)}/ap-{self.instance.application}/epg-{self.instance}')
+
+    def test_010_app_instance_epg_dn_override_drt(self):
+        """Test EPG distinguished name override and drt from application instance data"""
+        logger.info(f'Testing AppInstance.epg_dn(override=True, drt=True)')
+        self.assertEqual(self.instance.epg_dn(override=True, drt=True),
+                         f'uni/tn-tn-{self.instance.originAZ}/ap-{self.instance.application}/epg-{self.instance}')
+
+    def test_011_app_instance_epg_dn_drt(self):
+        """Test EPG distinguished name override and drt from application instance data"""
+        logger.info(f'Testing AppInstance.epg_dn(drt=True)')
+        self.assertEqual(self.instance.epg_dn(drt=True),
+                         f'uni/tn-tn-{self.instance.originAZ}/ap-{self.instance.ap_name()}/epg-{self.instance.epg_name()}')
+
+    def test_012_app_instance_placeholder_mapping(self):
+        """Test AppInstance.placeholder_mapping()"""
+        logger.info(f'Testing AppInstance.placeholder_mapping()')
+        test_result = {
+            'AEP': 'aep-Placeholders',
+            'Tenant': self.instance.tenant_name(),
+            'AP': self.instance.ap_name(),
+            'EPG': self.instance.epg_name()
+        }
+
+        self.assertEqual(self.instance.placeholder_mapping(), test_result)
+
+    def test_013_app_instance_placeholder_mapping(self):
+        """Test AppInstance.placeholder_mapping(override=True)"""
+        logger.info(f'Testing AppInstance.placeholder_mapping(override=True)')
+        test_result = {
+            'AEP': 'aep-Placeholders',
+            'Tenant': self.instance.tenant_name(),
+            'AP': self.instance.application,
+            'EPG': f'{self.instance}'
+        }
+
+        self.assertEqual(self.instance.placeholder_mapping(override=True), test_result)
+
+    def test_014_app_instance_placeholder_mapping(self):
+        """Test AppInstance.placeholder_mapping(drt=True)"""
+        logger.info(f'Testing AppInstance.placeholder_mapping(drt=True)')
+        test_result = {
+            'AEP': 'aep-Placeholders',
+            'Tenant': self.instance.tenant_name(drt=True),
+            'AP': self.instance.ap_name(),
+            'EPG': self.instance.epg_name()
+        }
+
+        self.assertEqual(self.instance.placeholder_mapping(drt=True), test_result)
+
 
 
 class ACIAPITests(unittest.TestCase):
