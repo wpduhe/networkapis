@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from base64 import b64encode
 from datetime import datetime
 from copy import deepcopy
-from ipaddress import IPv4Address, AddressValueError
+from ipaddress import AddressValueError
 from apic.classes import *
 from ipam.utils import ManagementJob, NetworkAPIIPAM
 from data.environments import ACIEnvironment
@@ -3576,25 +3576,16 @@ class AppInstance:
     def epg_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
-        if drt and override:
-            return f'uni/tn-{self.drt_tenant()}/ap-{self.application}/epg-{self}'
-        elif drt:
-            return f'uni/tn-{self.drt_tenant()}/ap-{self.ap_name()}/epg-{self.epg_name()}'
-        elif not override:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.ap_name()}/' \
-                   f'epg-{self.epg_name()}'
+        if override:
+            return f'uni/tn-{self.tenant_name(drt=drt)}/ap-{self.application}/epg-{self}'
         else:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.application}/epg-{self}'
+            return f'uni/tn-{self.tenant_name(drt=drt)}/ap-{self.ap_name()}/' \
+                   f'epg-{self.epg_name()}'
 
     def bd_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
-        if drt:
-            return f'uni/tn-{self.drt_tenant}/BD-{self.bd_name()}'
-        elif override:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self}'
-        else:
-            return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/BD-{self.bd_name()}'
+        return f'uni/tn-{self.tenant_name(drt=drt)}/BD-{(self if override else self.bd_name())}'
 
     @staticmethod
     def path_from_dn(az: str, epg_dn: str) -> str:
@@ -3613,6 +3604,12 @@ class AppInstance:
     def ap_name(self):
         return self.apName if self.apName else self.application
 
+    def tenant_name(self, drt: bool=False):
+        if drt:
+            return f'tn-{self.originAZ}'
+        else:
+            return self.currentAZ.env.__getattribute__(self.tenant)
+
     def resolve_tenant(self):
         # Resolve tenant name if it is not an ACIEnvironment key
         if self.tenant not in [self.TENANT, self.ADMZTENANT]:
@@ -3623,10 +3620,10 @@ class AppInstance:
         return re.sub(f'(({self.format_name(self.originAZ.env.Name)}|{self.originAZ.env.DataCenter})_)+', '', self.name,
                       flags=re.IGNORECASE)
 
-    def placeholder_mapping(self, drt: bool=False) -> dict:
+    def placeholder_mapping(self, override: bool=False, drt: bool=False) -> dict:
         self.__activate()
-        t, a, e = EPG_DN_SEARCH.search(self.epg_dn()).groups()
-        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=(self.drt_tenant() if drt else t), AP=a, EPG=e)
+        t, a, e = EPG_DN_SEARCH.search(self.epg_dn(override=override, drt=drt)).groups()
+        mapping = dict(AEP=APIC.PLACEHOLDERS, Tenant=self.tenant_name(drt=drt), AP=a, EPG=e)
         return mapping
 
     def generate_config(self, origin_az: bool=False, defaults: bool=False, delete: bool=False, drt: bool=False,
