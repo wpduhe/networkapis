@@ -3566,7 +3566,7 @@ class AppInstance:
 
     @staticmethod
     def format_name(name: str) -> str:
-        name = re.sub(r'^(ap-|epg-|bd-)', '', name).lower()
+        name = re.sub(r'^(ap[\W_]*|epg[\W_]*|bd[\W_]*)', '', name).lower()
         name = re.sub(r'\W+', '_', name)
         return name
 
@@ -3576,8 +3576,10 @@ class AppInstance:
     def epg_dn(self, override: bool=False, drt: bool=False) -> str:
         self.__activate()
 
-        if drt:
-            return f'uni/tn-{self.drt_tenant}/ap-{self.ap_name()}/epg-{self.epg_name()}'
+        if drt and override:
+            return f'uni/tn-{self.drt_tenant()}/ap-{self.application}/epg-{self}'
+        elif drt:
+            return f'uni/tn-{self.drt_tenant()}/ap-{self.ap_name()}/epg-{self.epg_name()}'
         elif not override:
             return f'uni/tn-{self.currentAZ.env.__getattribute__(self.tenant)}/ap-{self.ap_name()}/' \
                    f'epg-{self.epg_name()}'
