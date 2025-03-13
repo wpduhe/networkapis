@@ -350,7 +350,6 @@ class AppInstanceTests(unittest.TestCase):
         self.assertEqual(self.instance.placeholder_mapping(drt=True), test_result)
 
 
-
 class ACIAPITests(unittest.TestCase):
 
     def test_002_aci_environment_list(self):
