@@ -1191,40 +1191,71 @@ class L3Out(APICObject):
 
 class L3extIP(APICObject):
     class_ = 'l3extIp'
-    attrs = {}
+    attrs = {
+        'addr': ''
+    }
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<l3extPath>[^]]+]])/mem-[.]/addr-\[(?P<addr>[^]]+)]').search
     network: IPv4Network
 
     def _customize_(self, *args, **kwargs):
-        self.network = IPv4Network(self.attributes.addr, strict=False)
+        if self.attributes.addr:
+            self.network = IPv4Network(self.attributes.addr, strict=False)
+            self.address = IPv4Network(re.search(r'[^/]+', self.attributes.addr).group()).network_address
+
+
+class L3extMember(APICObject):
+    class_ = 'l3extMember'
+    attrs = {
+        'addr': '',
+        'side': 'A'
+    }
+
+    search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<l3extPath>[^]]+]])/mem-[.]').search
+    network: IPv4Network
+
+    def _customize_(self, *args, **kwargs):
+        if self.attributes.addr:
+            self.network = IPv4Network(self.attributes.addr, strict=False)
+            self.address = IPv4Network(re.search(r'[^/]', self.attributes.addr).group()).network_address
 
 
 class L3extPath(APICObject):
     class_ = 'l3extRsPathL3OutAtt'
-    attrs = {}
+    attrs = {
+        'ifInstT': '',
+        'mode': 'regular',
+        'mtu': 'inherit'
+    }
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/lifp-(?P<l3extLIfP>[^/]+)/rspathL3OutAtt-\[(?P<path>[^]]+]])').search
     network: IPv4Network
 
     def _customize_(self, *args, **kwargs):
-        self.network = IPv4Network(self.attributes.addr, strict=False)
+        if self.attributes.addr and self.attributes.addr != '0.0.0.0':
+            self.network = IPv4Network(self.attributes.addr, strict=False)
+            self.address = IPv4Network(re.search(r'[^/]+', self.attributes.addr).group()).network_address
 
 
 class L3extSubnet(APICObject):
     class_ = 'l3extSubnet'
-    attrs = {}
+    attrs = {
+        'ip': ''
+    }
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/instP-(?P<l3extInstP>[^/]+)/extsubnet-\[(?P<ip>[^]]+)]').search
     network: IPv4Network
 
     def _customize_(self, *args, **kwargs):
-        self.network = IPv4Network(self.attributes.ip, strict=False)
+        if self.attributes.ip:
+            self.network = IPv4Network(self.attributes.ip, strict=False)
 
 
 class L3extLNodeP(APICObject):
     class_ = 'l3extLNodeP'
-    attrs = {'name': ''}
+    attrs = {
+        'name': ''
+    }
 
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<name>[^/\]]+)').search
 
@@ -1267,6 +1298,7 @@ class IPRoute(APICObject):
         'ip': '',
         'type': 'rt-static'
     }
+
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/rsnodeL3OutAtt-\[(?P<l3extRsNodeL3OutAtt>[^]]+)]/rt-\[(?P<ip>[^]]+)]').search
 
     def _customize_(self, *args, **kwargs):
@@ -1284,6 +1316,7 @@ class IPNexthop(APICObject):
     attrs = {
         'nhAddr': ''
     }
+
     search = re.compile(r'uni/tn-(?P<fvTenant>[^/]+)/out-(?P<l3extOut>[^/]+)/lnodep-(?P<l3extLNodeP>[^/]+)/rsnodeL3OutAtt-\[(?P<l3extRsNodeL3OutAtt>[^]]+)]/rt-\[(?P<ipRouteP>[^]]+)]/nh-\[(?P<nhaddr>[^]]+)]').search
 
     def _customize_(self, *args, **kwargs):
