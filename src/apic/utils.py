@@ -2894,7 +2894,7 @@ class APIC:
             if len(vlan_data[vlan]['Consumers']) > 1:
                 return 400, {'message': 'There is a VLAN conflict for this VLAN ID.  Contact a network engineer to '
                                         'resolve'}
-            tenant, ap, epg = re.search(r'tn-([^/]+)/ap-([^/]+)/epg-([^/]+)', vlan_data[vlan]['Consumers'][0]).groups()
+            tenant, ap, epg = re.search(r'tn-([^/]+)/ap-([^/]+)/epg-([^/]+)', list(vlan_data[vlan]['Consumers'])[0]).groups()
             func = InfraRsFuncToEpg()
             func.aep = aep
             func.tenant = tenant
