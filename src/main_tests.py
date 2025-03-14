@@ -349,6 +349,8 @@ class AppInstanceTests(unittest.TestCase):
 
         self.assertEqual(self.instance.placeholder_mapping(drt=True), test_result)
 
+    # TODO: Add test for deploy using PyUnittest instance
+
 
 class ACIAPITests(unittest.TestCase):
 
@@ -590,18 +592,100 @@ class ACIAPITests(unittest.TestCase):
         logger.debug(r.json())
         self.assertIsInstance(r.json()['aep'], str)
 
-    # def test_017_aci_create_custom_epg(self):
-    #     """
-    #     Asserts the following:
-    #       - create_custom_epg takes data
-    #       - expected data exists
-    #       - undo_create_custom_epg does what is expected
-    #     """
-    #     # TODO: Have to get this test working
-    #     r = requests.post(URL + f'/apis/aci/{DEV_ENV}/create_custom_epg', json=self.CREATE_CUSTOM_EPG_DATA,
-    #                       verify=False)
-    #     self.assertEqual(r.status_code, 200)
-    #     with APIC(DEV_ENV) as apic:
+    def test_018_assign_vlan_to_aep(self):
+        payload = {
+            'APIKey': os.getenv('localapikey'),
+            'assignments': [
+                {
+                    "vlan_ids": [
+                        2000
+                    ],
+                    "aep": "aep-Placeholders"
+                }
+            ]
+        }
+
+        r = session.post(URL + f'/apis/aci/{DEV_ENV}/assign_vlan_to_aep', json=payload, verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsInstance(r.json(), list)
+
+    def test_019_aci_create_custom_epg(self):
+        """
+        Asserts the following:
+          - create_custom_epg takes data
+          - expected data exists
+          - undo_create_custom_epg does what is expected
+        """
+        apic = APIC(env=DEV_ENV)
+
+        basename = 'PyUnittest'
+        ap_name = f'ap-{basename}'
+        bd_name = f'bd-{basename}'
+        epg_name = f'epg-{basename}'
+        network = '192.168.169.160/30'
+        payload = {
+            "APIKey": os.getenv('localapikey'),
+            "TenantName": apic.env.Tenant,
+            "VRFName": apic.env.VRF,
+            "AppProfileName": ap_name,
+            "BridgeDomainName": bd_name,
+            "EPGName": epg_name,
+            "Description": "Unittesting NetworkAPIs create_custom_epg_v2",
+            "Subnets": [
+                network
+            ],
+            "AEPs": []
+        }
+
+        # Send request to create custom EPG
+        r = requests.post(URL + f'/apis/v2/aci/{DEV_ENV}/create_custom_epg', json=payload, verify=False)
+        logger.debug(f'Test of {r.request.url} : HTTP {r.status_code} {r.reason}')
+        logger.debug(r.json())
+        self.assertEqual(r.status_code, 200)
+
+        # Verify results in APIC
+        ap = APICObject.load(apic.get_class_by_name(fvAp=ap_name).json()['imdata'][0])
+        bd = APICObject.load(apic.get_class_by_name(fvBD=bd_name).json()['imdata'][0])
+        epg = APICObject.load(apic.get_class_by_name(fvAEPg=epg_name).json()['imdata'][0])
+        ife = APICObject.load(apic.get_class('infraRsFuncToEpg').json()['imdata'])
+        ife = next(_ for _ in ife if _.attributes.tDn == epg.attributes.dn)
+        subnet = bd.pop_child_class('fvSubnet')
+
+        logger.debug(ap.json())
+        self.assertIsInstance(ap, AP)
+        logger.debug(bd.json())
+        self.assertIsInstance(bd, BD)
+        logger.debug(epg.json())
+        self.assertIsInstance(epg, EPG)
+        logger.debug(ife.json())
+        self.assertIsInstance(ife, InfraRsFuncToEpg)
+        logger.debug(subnet.json())
+        self.assertIsInstance(subnet, Subnet)
+
+        self.assertIn(apic.env.Tenant, bd.attributes.dn)
+        self.assertIn('fvRsCtx', [_.class_ for _ in bd.children])
+        self.assertEqual(bd.attributes.unicastRoute, 'yes')
+        self.assertEqual(bd.attributes.unkMacUcastAct, 'proxy')
+        self.assertEqual(bd.attributes.ipLearning, 'yes')
+        self.assertEqual(bd.attributes.arpFlood, 'no')
+
+        self.assertIn(apic.env.Tenant, ap.attributes.dn)
+        self.assertIn('fvAEPg', [_.class_ for _ in ap.children])
+
+        self.assertIn('fvRsDomAtt', [_.class_ for _ in epg.children])
+        self.assertIn('fvRsBd', [_.class_ for _ in epg.children])
+
+        self.assertEqual(subnet.attributes.ip, '192.168.169.161/30')
+        self.assertEqual(subnet.attributes.scope, 'public')
+
+        # Remove what was created
+        for o in [ap, bd, ife]:
+            o.remove_admin_props()
+            o.delete()
+            r = apic.post(configuration=o.json())
+            logger.debug(r.json())
+            self.assertEqual(r.status_code, 200)
 
 
 class PACFileTesting(unittest.TestCase):
