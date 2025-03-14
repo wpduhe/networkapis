@@ -77,7 +77,7 @@ class Attributes:
             'modTs', 'lcOwn', 'uid', 'monPolDn', 'extMngdBy', 'ownerKey', 'ownerTag', 'lastStateModTs', 'state',
             'unixUserId', 'rn', 'pwdChangeIntervalBegin', 'pwdChangedDate', 'expState', 'fingerprint',
             'certificateDecodeInformation', 'certdn', 'certValidUntil', 'rType', 'stateQual', 'tType', 'tCl',
-            'configSt', 'isSharedSrvMsiteEPg', 'pcTag', 'userdom'
+            'configSt', 'isSharedSrvMsiteEPg', 'pcTag', 'userdom', 'forceResolve'
         ]
         for _ in admin_props:
             try:
