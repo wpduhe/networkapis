@@ -44,6 +44,7 @@ URL = 'https://pyapisdev-netauto.apps.k8s.medcity.net'
 
 PROD_ENV = 'xrdc-az1'  # GETs only
 DEV_ENV = 'qol-az1'
+DEV_ENV2 = 'qol-az2'
 CREATE_CUSTOM_EPG_DATA = {
     'APIKey': os.getenv('localapikey'),
     'AppProfileName': 'ap-UnitTest',
@@ -90,6 +91,8 @@ NCM_DATA = {
     'APIKey': os.getenv('localapikey'),
     'Trusted': True
 }
+
+INST_PATH = 'pyunittest/qol_az1_pyunittest'
 
 session = requests.Session()
 session.trust_env = False
@@ -349,7 +352,117 @@ class AppInstanceTests(unittest.TestCase):
 
         self.assertEqual(self.instance.placeholder_mapping(drt=True), test_result)
 
-    # TODO: Add test for deploy using PyUnittest instance
+    def test_015_deploy(self):
+        logger.info(f'Testing AppInstance.deploy_instance({INST_PATH})')
+        instance = AppInstance.load(INST_PATH)
+
+        status, response = AppInstance.deploy_instance(inst_path=INST_PATH)
+        self.assertEqual(status, 200)
+
+        tenant = APICObject.load(response['configuration'])
+        self.assertIsInstance(tenant, Tenant)
+
+        config_bd = tenant.get_child_class(BD.class_)
+        config_ap = tenant.get_child_class(AP.class_)
+        config_epg = config_ap.get_child_class(EPG.class_)
+        config_subnet = config_bd.get_child_class(Subnet.class_)
+
+        bd = instance.originAZ.get(f'/api/mo/{instance.bd_dn()}.json?rsp-subtree=full&rsp-prop-include=config-only').json()['imdata'][0]
+        bd = APICObject.load(bd)
+        self.assertIsInstance(bd, BD)
+        self.assertEqual(bd.attributes.name, config_bd.attributes.name)
+        self.assertEqual(bd.attributes.dn, instance.bd_dn())
+        subnets = bd.get_child_class_iter(Subnet.class_)
+
+        epg = instance.originAZ.get(f'/api/mo/{instance.epg_dn()}.json?rsp-subtree=full&rsp-prop-include=config-only').json()['imdata'][0]
+        epg = APICObject.load(epg)
+        ap_dn = AP.search(epg.attributes.dn).group()
+        self.assertIsInstance(epg, EPG)
+        self.assertEqual(epg.attributes.dn, instance.epg_dn())
+        self.assertIn('fvRsDomAtt', [_.class_ for _ in epg.children])
+
+        ap = instance.originAZ.get(f'/api/mo/{ap_dn}.json?rsp-subtree=full').json()['imdata'][0]
+        ap = APICObject.load(ap)
+        self.assertIsInstance(ap, AP)
+        self.assertEqual(ap.attributes.name, config_ap.attributes.name)
+
+        ife = instance.originAZ.get(f'/api/mo/uni/infra/attentp-aep-Placeholders/gen-default/rsfuncToEpg-[{epg.attributes.dn}].json').json()['imdata'][0]
+        ife = APICObject.load(ife)
+        self.assertIsInstance(ife, InfraRsFuncToEpg)
+        self.assertEqual(ife.attributes.tDn, instance.epg_dn())
+
+        # Remove the instance configuration for now
+        # for o in [bd, epg, ife]:
+        #     o.remove_admin_props()
+        #     o.delete()
+        #     logger.info(o.self_json())
+        #     r = instance.originAZ.post(configuration=o.self_json())
+        #     logger.info(r.json())
+        #     self.assertEqual(r.status_code, 200)
+
+    # TODO: Add test for moving instance using PyUnittest instance
+    def test_016_move(self):
+        logger.info(f'Testing AppInstance.move_instance({INST_PATH})')
+        instance = AppInstance.load(INST_PATH)
+
+        start = instance.currentAZ
+        target = APIC(env=DEV_ENV2)
+
+        status, response = AppInstance.move_instance(inst_path=INST_PATH, az=DEV_ENV2)
+        self.assertEqual(status, 200)
+
+        tenant = APICObject.load(response['configuration'])
+        self.assertIsInstance(tenant, Tenant)
+
+        config_bd = tenant.get_child_class(BD.class_)
+        config_ap = tenant.get_child_class(AP.class_)
+        config_epg = config_ap.get_child_class(EPG.class_)
+        config_subnet = config_bd.get_child_class(Subnet.class_)
+
+        # Verify that objects exists in target AZ and not in start AZ
+        self.assertFalse(start.get(f'/api/mo/{instance.bd_dn(override=True)}.json').json()['imdata'])
+        bd = target.get(f'/api/mo/{instance.bd_dn(override=True)}.json?rsp-subtree=full').json()['imdata'][0]
+        bd = APICObject.load(bd)
+        self.assertIsInstance(bd, BD)
+        self.assertEqual(bd.attributes.name, config_bd.attributes.name)
+        self.assertEqual(bd.attributes.dn, instance.bd_dn(override=True))
+        subnets = bd.get_child_class_iter(Subnet.class_)
+
+        self.assertFalse(start.get(f'/api/mo/{instance.epg_dn(override=True)}.json').json()['imdata'])
+        epg = target.get(f'/api/mo/{instance.epg_dn(override=True)}.json?rsp-subtree=full').json()['imdata'][0]
+        epg = APICObject.load(epg)
+        ap_dn = AP.search(epg.attributes.dn).group()
+        self.assertIsInstance(epg, EPG)
+        self.assertEqual(epg.attributes.dn, instance.epg_dn(override=True))
+        self.assertIn('fvRsDomAtt', [_.class_ for _ in epg.children])
+
+        ap = target.get(f'/api/mo/{ap_dn}.json?rsp-subtree=full').json()['imdata'][0]
+        ap = APICObject.load(ap)
+        self.assertIsInstance(ap, AP)
+        self.assertEqual(ap.attributes.name, config_ap.attributes.name)
+
+        ife = target.get(f'/api/mo/uni/infra/attentp-aep-Placeholders/gen-default/rsfuncToEpg-[{epg.attributes.dn}].json').json()['imdata'][0]
+        ife = APICObject.load(ife)
+        self.assertIsInstance(ife, InfraRsFuncToEpg)
+        self.assertEqual(ife.attributes.tDn, instance.epg_dn(override=True))
+
+    def test_017_withdraw(self):
+        logger.info(f'Testing AppInstance.withdraw_instance({INST_PATH})')
+        instance = AppInstance.load(INST_PATH)
+
+        status, response = AppInstance.withdraw_instance(inst_path=INST_PATH)
+
+        # There should be 5 successful deletions: EPG, AP, Subnet, BD, and VLAN association
+        self.assertEqual(len( [_['response_code'] for _ in response['deletions'] if _['response_code'] == 200]), 5)
+
+        for network in instance.networks:
+            self.assertFalse(instance.currentAZ.get(f'/api/mo/{instance.bd_dn()}/subnet-[{network}].json').json()['imdata'])
+
+        self.assertFalse(instance.currentAZ.get(f'/api/mo/{instance.epg_dn()}.json').json()['imdata'])
+        self.assertFalse(instance.currentAZ.get(f'/api/mo/{instance.bd_dn()}.json').json()['imdata'])
+        self.assertFalse(instance.currentAZ.get(f'/api/mo/{AP.search(instance.epg_dn()).group()}.json').json()['imdata'])
+
+        # TODO: Test everything more thoroughly
 
 
 class ACIAPITests(unittest.TestCase):
