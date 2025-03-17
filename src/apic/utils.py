@@ -3793,7 +3793,7 @@ class AppInstance:
         """Deploy instance to originAZ assuming the instance does not exist elsewhere"""
         inst = cls.load(app_inst_path=inst_path)
 
-        tenant = inst.generate_config(origin_az=True, defaults=True)
+        tenant = inst.generate_config(origin_az=True)
 
         r = inst.originAZ.post(tenant.json())
 
@@ -3804,9 +3804,6 @@ class AppInstance:
 
         if r.ok:
             # Update instance settings
-            for attr in cls.__naming_attrs:
-                inst.__setattr__(attr, None)
-
             inst.currentAZ = inst.originAZ
 
             inst.update(**inst.json())
@@ -3819,8 +3816,8 @@ class AppInstance:
             return r.status_code, dict(message='Application instance deployment failed', **response)
 
     @classmethod
-    def move_instance(cls, app_inst_path: str, az: str) -> Tuple[int, dict]:
-        app_inst_path = re.sub(r'[^/\w]', '_', app_inst_path)
+    def move_instance(cls, inst_path: str, az: str) -> Tuple[int, dict]:
+        app_inst_path = re.sub(r'[^/\w]', '_', inst_path)
         inst = cls.load(app_inst_path=app_inst_path)
 
         src_az = APIC(env=inst.currentAZ.env.Name)
@@ -3882,7 +3879,7 @@ class AppInstance:
         # Change currentAZ to be the new AZ
         inst.currentAZ = dst_az
         dst_snapshot = inst.currentAZ.snapshot(descr=f'{inst}_move')
-        tenant = inst.generate_config(defaults=True)  # Because of this, naming attributes should be cleared
+        tenant = inst.generate_config()
 
         create_resp = dst_az.post(configuration=tenant.json())
 
@@ -3939,6 +3936,81 @@ class AppInstance:
             inst.store()
 
         return create_resp.status_code, return_data
+
+    @classmethod
+    def withdraw_instance(cls, inst_path: str):
+        """Removes instance components from the current AZ"""
+        # Delete the subnet and bridge domain if no fvRsBd
+        deletion_results = []
+        inst = cls.load(inst_path)
+        snapshot = inst.currentAZ.snapshot(descr=f'AppInstance {inst_path} withdraw')
+
+        # Delete the EPG and the ap if no EPGs left in Application Profile
+        epg = inst.currentAZ.get(f'/api/mo/{inst.epg_dn()}.json?{CONFIG_ONLY}').json()['imdata'][0]
+        epg = APICObject.load(epg)
+        # tenant, ap, epg_name = EPG.search(epg.attributes.dn)
+        ap_dn = AP.search(epg.attributes.dn).group()
+        epg.remove_admin_props()
+        epg.delete()
+        logger.debug(f'{inst.currentAZ}: {epg.self_json()}')
+        r = inst.currentAZ.post(epg.self_json())
+        deletion_results += [{'response_code': r.status_code, 'response_json': r.json(), 'request_json': epg.self_json()}]
+
+        ap = inst.currentAZ.get(f'/api/mo/{ap_dn}.json?{FCCO}').json()['imdata'][0]
+        ap = APICObject.load(ap)
+
+        if not len(ap.get_child_class_iter('fvAEPg')):
+            ap.remove_admin_props()
+            ap.delete()
+            logger.debug(f'{inst.currentAZ}: {ap.self_json()}')
+            r = inst.currentAZ.post(ap.self_json())
+            deletion_results += [{'response_code': r.status_code, 'response_json': r.json(), 'request_json': ap.self_json()}]
+
+        subnets = inst.currentAZ.get(f'/api/mo/uni/tn-{inst.tenant_name()}.json?query-target=subtree&target-subtree-class=fvSubnet&{CONFIG_ONLY}').json()['imdata']
+        subnets = APICObject.load(subnets)
+
+        for network in inst.networks:
+            subnet = next(_ for _ in subnets if _.attributes.ip == network)
+            tenant, bd , ip = Subnet.search(subnet.attributes.dn).groups()
+
+            subnet.remove_admin_props()
+            subnet.delete()
+            logger.debug(f'{inst.currentAZ}: {subnet.self_json()}')
+            r = inst.currentAZ.post(subnet.self_json())
+            deletion_results += [{'response_code': r.status_code, 'response_json': r.json(), 'request_json': subnet.self_json()}]
+
+            bd_usage = inst.currentAZ.get(f'/api/class/fvRsBd.json?query-target-filter=eq(fvRsBd.tDn,"{inst.bd_dn()}")').json()
+            if not int(bd_usage['totalCount']):
+                bd = inst.currentAZ.get(f'/api/mo/{inst.bd_dn()}.json?{CONFIG_ONLY}').json()['imdata'][0]
+                bd = APICObject.load(bd)
+                bd.remove_admin_props()
+                bd.delete()
+                logger.debug(f'{inst.currentAZ}: {bd.self_json()}')
+                r = inst.currentAZ.post(bd.self_json())
+                deletion_results += [
+                    {'response_code': r.status_code, 'response_json': r.json(), 'request_json': bd.self_json()}]
+
+        # Remove VLAN associations
+        ifes = inst.currentAZ.get(f'/api/class/infraRsFuncToEpg.json?query-target-filter=eq(infraRsFuncToEpg.tDn,"{epg.attributes.dn}")&{CONFIG_ONLY}').json()
+        if int(ifes['totalCount']):
+            ifes = APICObject.load(ifes['imdata'])
+            for ife in ifes:
+                ife.remove_admin_props()
+                ife.delete()
+                logger.debug(ife.self_json())
+                r = inst.currentAZ.post(ife.self_json())
+                deletion_results += [{'response_code': r.status_code, 'response_json': r.json(), 'request_json': ife.self_json()}]
+
+        return_data = {
+            'message': 'Withdraw Attempted',
+            'configuration': None,
+            'apic_json': None,
+            'apic_status': None,
+            'snapshot': snapshot,
+            'deletions': deletion_results
+        }
+
+        return 200, return_data
 
     @classmethod
     def delete_instance(cls, inst_path: str) -> Tuple[int, dict]:
